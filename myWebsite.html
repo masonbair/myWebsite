@@ -6,243 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mason Bair | Portfolio</title>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      /* Custom Color Palette */
-      --tropical-indigo: #8783d1ff;
-      --rose-quartz: #aa9abaff;
-      --rosy-brown: #bfa4a4ff;
-      --tea-rose-red: #d1abadff;
-      --tea-rose-red-2: #e3b9bcff;
-      /* Main theme colors mapped for design */
-      --primary: var(--tropical-indigo);
-      --accent: var(--rose-quartz);
-      --highlight: var(--rose-quartz);
-      --bg: #f7f6fd;
-      --white: #fff;
-      --shadow: 0 4px 24px rgba(135, 131, 209, 0.08);
-      --gradient-main: linear-gradient(120deg, var(--tropical-indigo) 0%, var(--rose-quartz) 60%, var(--white) 100%);
-      --pink-accent: var(--tea-rose-red);
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Montserrat', Arial, sans-serif;
-      background: var(--bg);
-      color: var(--primary);
-      min-height: 100vh;
-    }
-    nav {
-      width: 100%;
-      background: var(--white);
-      box-shadow: var(--shadow);
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1rem 2rem;
-      border-bottom: 3px solid var(--tropical-indigo);
-    }
-    .nav-logo {
-      font-weight: 700;
-      font-size: 1.5rem;
-      color: var(--tropical-indigo);
-      letter-spacing: 2px;
-      text-shadow: 1px 1px 0 var(--rose-quartz);
-    }
-    .nav-links {
-      display: flex;
-      gap: 2rem;
-    }
-    .nav-links a {
-      text-decoration: none;
-      color: var(--primary);
-      font-weight: 500;
-      transition: color 0.2s, background 0.2s;
-      padding: 0.3rem 1rem;
-      border-radius: 0.5rem;
-    }
-    .nav-links a:hover {
-      color: var(--white);
-      background: var(--tropical-indigo);
-    }
-    .hero {
-      min-height: 60vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: linear-gradient(120deg, var(--tropical-indigo) 0%, var(--rose-quartz) 80%, var(--white) 100%);
-      text-align: center;
-      padding: 4rem 1rem 2rem 1rem;
-    }
-    .hero h1 {
-      font-size: 3rem;
-      font-weight: 700;
-      color: var(--white);
-      margin-bottom: 1rem;
-      text-shadow: 1px 1px 8px var(--tropical-indigo), 0 2px 12px var(--rose-quartz);
-    }
-    .hero p {
-      font-size: 1.3rem;
-      color: var(--white);
-      margin-bottom: 2rem;
-      text-shadow: 1px 1px 6px var(--tropical-indigo), 0 2px 8px var(--rose-quartz);
-    }
-    .hero .hero-img {
-      width: 160px;
-      height: 160px;
-      border-radius: 50%;
-      object-fit: cover;
-      box-shadow: var(--shadow);
-      margin-bottom: 1.5rem;
-      border: 4px solid var(--tropical-indigo);
-      background: var(--white);
-    }
-    .section {
-      max-width: 1100px;
-      margin: 3rem auto;
-      background: var(--white);
-      border-radius: 1.5rem;
-      box-shadow: var(--shadow);
-      padding: 2.5rem 1.5rem;
-      border-left: 8px solid var(--tropical-indigo);
-    }
-    .section-title {
-      font-size: 2rem;
-      font-weight: 700;
-      color: var(--tropical-indigo);
-      margin-bottom: 1.5rem;
-      text-align: center;
-      letter-spacing: 1px;
-    }
-    .about-content {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1.5rem;
-    }
-    .about-content img {
-      width: 120px;
-      height: 120px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 3px solid var(--tropical-indigo);
-    }
-    .about-content p {
-      font-size: 1.1rem;
-      color: var(--primary);
-      max-width: 600px;
-      text-align: center;
-    }
-    .projects-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 2rem;
-      margin-top: 2rem;
-    }
-    .project-card {
-      background: var(--bg);
-      border-radius: 1rem;
-      box-shadow: var(--shadow);
-      padding: 1.5rem;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      transition: transform 0.2s, box-shadow 0.2s;
-      border: 2px solid var(--tropical-indigo);
-    }
-    .project-card:hover {
-      transform: translateY(-6px) scale(1.03);
-      box-shadow: 0 8px 32px rgba(135,131,209,0.18);
-      border-color: var(--rose-quartz);
-    }
-    .project-card img {
-      width: 100%;
-      max-width: 220px;
-      border-radius: 0.7rem;
-      margin-bottom: 1rem;
-      object-fit: cover;
-    }
-    .project-card h3 {
-      font-size: 1.2rem;
-      color: var(--tropical-indigo);
-      margin-bottom: 0.5rem;
-    }
-    .project-card p {
-      font-size: 1rem;
-      color: var(--primary);
-      margin-bottom: 0.5rem;
-      text-align: center;
-    }
-    .project-card a {
-      color: var(--rose-quartz);
-      text-decoration: underline;
-      font-size: 0.98rem;
-    }
-    .resume-section {
-      text-align: center;
-    }
-    .resume-section a {
-      display: inline-block;
-      margin-top: 1rem;
-      padding: 0.7rem 1.5rem;
-      background: var(--tropical-indigo);
-      color: var(--white);
-      border-radius: 0.5rem;
-      text-decoration: none;
-      font-weight: 600;
-      transition: background 0.2s, color 0.2s;
-      box-shadow: 0 2px 8px rgba(135,131,209,0.10);
-    }
-    .resume-section a:hover {
-      background: var(--rose-quartz);
-      color: var(--tropical-indigo);
-    }
-    footer {
-      text-align: center;
-      padding: 2rem 0 1rem 0;
-      color: var(--tropical-indigo);
-      font-size: 1rem;
-      background: none;
-    }
-    /* Parallax/scroll effect for images */
-    .parallax {
-      min-height: 300px;
-      background-attachment: fixed;
-      background-position: center;
-      background-repeat: no-repeat;
-      background-size: cover;
-      border-radius: 1.5rem;
-      margin: 2rem 0;
-      border: 3px solid var(--tropical-indigo);
-      box-shadow: 0 2px 16px rgba(135,131,209,0.10);
-      /* subtle pink overlay for accent */
-      position: relative;
-    }
-    .parallax::after {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: linear-gradient(90deg, transparent 70%, var(--tea-rose-red-2) 100%);
-      opacity: 0.18;
-      border-radius: 1.5rem;
-      pointer-events: none;
-    }
-    /* Responsive */
-    @media (max-width: 800px) {
-      .section { padding: 1.2rem 0.5rem; }
-      .hero h1 { font-size: 2.1rem; }
-      .about-content { flex-direction: column; }
-    }
-    @media (max-width: 500px) {
-      nav { flex-direction: column; gap: 0.7rem; padding: 0.7rem 0.5rem; }
-      .nav-links { gap: 1rem; }
-      .hero h1 { font-size: 1.3rem; }
-      .section-title { font-size: 1.2rem; }
-    }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <nav>
@@ -253,6 +17,7 @@
       <a href="#resume">Resume</a>
       <a href="https://github.com/masonbair" target="_blank">GitHub</a>
       <a href="https://www.linkedin.com/in/masonbair/" target="_blank">LinkedIn</a>
+      <div class="score-display">Score: <span id="score">0</span></div>
     </div>
   </nav>
   <section class="hero">
@@ -373,5 +138,32 @@
     &copy; 2025 Mason Bair &mdash; DevSecOps Engineer & World Traveler<br>
     <small style="opacity: 0.8;">Built with ❤️ and modern web technologies | 21 countries and counting 🌍</small>
   </footer>
+
+  <!-- Website Cat -->
+  <div class="website-cat" id="websiteCat" title="Click circles to make me grow!">
+    <div class="cat-container">
+      <div class="cat-body"></div>
+      <div class="cat-head">
+        <div class="cat-ears">
+          <div class="cat-ear-left"></div>
+          <div class="cat-ear-right"></div>
+        </div>
+        <div class="cat-eyes">
+          <div class="cat-eye-left"></div>
+          <div class="cat-eye-right"></div>
+        </div>
+        <div class="cat-nose"></div>
+        <div class="cat-whiskers">
+          <div class="whisker whisker-left-1"></div>
+          <div class="whisker whisker-left-2"></div>
+          <div class="whisker whisker-right-1"></div>
+          <div class="whisker whisker-right-2"></div>
+        </div>
+      </div>
+      <div class="cat-tail"></div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
 </body>
 </html>
