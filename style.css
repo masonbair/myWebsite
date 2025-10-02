@@ -619,6 +619,171 @@ footer {
 .cat-stage-2 .cat-eyes { opacity: 1; }
 .cat-stage-3 .cat-nose { opacity: 1; }
 .cat-stage-4 .cat-whiskers { opacity: 1; }
+.cat-stage-5 .cat-tail { opacity: 1; }
+
+/* New evolution stages */
+.cat-spots, .cat-crown, .cat-wings, .cat-sparkles, .cat-rainbow-aura {
+  position: absolute;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+/* Stage 6: Spots */
+.cat-spots {
+  top: 8px;
+  left: 12px;
+  width: 4px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+}
+
+.cat-spots::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 8px;
+  width: 3px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+}
+
+.cat-spots::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: -8px;
+  width: 2px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+}
+
+.cat-stage-6 .cat-spots { opacity: 1; }
+
+/* Stage 7: Crown */
+.cat-crown {
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 8px solid #ffd700;
+}
+
+.cat-crown::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: -3px;
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-bottom: 4px solid #ffd700;
+}
+
+.cat-crown::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: -9px;
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-bottom: 4px solid #ffd700;
+}
+
+.cat-stage-7 .cat-crown { opacity: 1; }
+
+/* Stage 8: Wings */
+.cat-wings {
+  top: 12px;
+  left: -12px;
+  width: 8px;
+  height: 12px;
+  background: linear-gradient(45deg, #ff9ff3, #f368e0);
+  border-radius: 50% 20% 50% 20%;
+  transform: rotate(-20deg);
+}
+
+.cat-wings::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 35px;
+  width: 8px;
+  height: 12px;
+  background: linear-gradient(45deg, #ff9ff3, #f368e0);
+  border-radius: 20% 50% 20% 50%;
+  transform: rotate(20deg);
+}
+
+.cat-stage-8 .cat-wings { 
+  opacity: 1; 
+  animation: wing-flap 2s infinite;
+}
+
+@keyframes wing-flap {
+  0%, 100% { transform: rotate(-20deg) translateY(0px); }
+  50% { transform: rotate(-25deg) translateY(-2px); }
+}
+
+/* Stage 9: Sparkles */
+.cat-sparkles {
+  top: -5px;
+  left: -10px;
+  width: 4px;
+  height: 4px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 
+    15px 5px 0 #ffd700,
+    25px -3px 0 #ff69b4,
+    35px 8px 0 #00ffff,
+    45px 2px 0 #ff1493;
+}
+
+.cat-stage-9 .cat-sparkles { 
+  opacity: 1;
+  animation: sparkle 3s infinite;
+}
+
+@keyframes sparkle {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.2) rotate(90deg); }
+  50% { transform: scale(0.8) rotate(180deg); }
+  75% { transform: scale(1.1) rotate(270deg); }
+}
+
+/* Stage 10: Rainbow Aura */
+.cat-rainbow-aura {
+  top: -8px;
+  left: -8px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: conic-gradient(
+    #ff0000, #ff8000, #ffff00, #80ff00, 
+    #00ff00, #00ff80, #00ffff, #0080ff, 
+    #0000ff, #8000ff, #ff00ff, #ff0080, #ff0000
+  );
+  filter: blur(1px);
+}
+
+.cat-stage-10 .cat-rainbow-aura { 
+  opacity: 0.7;
+  animation: rainbow-pulse 2s infinite;
+}
+
+@keyframes rainbow-pulse {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.7; }
+  50% { transform: scale(1.1) rotate(180deg); opacity: 0.9; }
+}
 
 /* Mobile adjustments */
 @media (max-width: 500px) {
