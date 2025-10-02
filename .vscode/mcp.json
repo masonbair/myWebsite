@@ -1,0 +1,13 @@
+{
+    "servers": {
+        "my-mcp-server-26c916b3": {
+            "type": "stdio",
+            "command": "docker",
+            "args": [
+                "mcp",
+                "gateway",
+                "run"
+            ]
+        }
+    }
+}
