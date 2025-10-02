@@ -31,7 +31,7 @@ on:
     branches: [ "main" ]
 
 env:
-  AWS_REGION: us_east_2                   # set this to your preferred AWS region, e.g. us-west-1
+  AWS_REGION: us-east-2                   # set this to your preferred AWS region, e.g. us-west-1
   ECR_REPOSITORY: mason_bair_webserver           # set this to your Amazon ECR repository name
   ECS_SERVICE: Running_A_Webserver-service-740curms                 # set this to your Amazon ECS service name
   ECS_CLUSTER: mason_bair_cluster_webserver                 # set this to your Amazon ECS cluster name
