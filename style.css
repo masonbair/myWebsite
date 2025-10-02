@@ -22,11 +22,22 @@
   padding: 0; 
 }
 
+/* Prevent any element from causing horizontal overflow */
+* {
+  max-width: 100%;
+}
+
+/* Allow specific elements to exceed if needed */
+.game-circle, .website-cat {
+  max-width: none;
+}
+
 body {
   font-family: 'Montserrat', Arial, sans-serif;
   background: var(--bg);
   color: var(--primary);
   min-height: 100vh;
+  overflow-x: hidden; /* Prevent horizontal scrolling */
 }
 
 nav {
@@ -41,6 +52,8 @@ nav {
   align-items: center;
   padding: 1rem 2rem;
   border-bottom: 3px solid var(--tropical-indigo);
+  overflow-x: auto; /* Allow horizontal scrolling only on nav if needed */
+  min-height: fit-content;
 }
 
 .nav-logo {
@@ -48,12 +61,15 @@ nav {
   font-size: 1.5rem;
   color: var(--tropical-indigo);
   letter-spacing: 2px;
+  flex-shrink: 0; /* Prevent logo from shrinking */
   text-shadow: 1px 1px 0 var(--rose-quartz);
 }
 
 .nav-links {
   display: flex;
   gap: 2rem;
+  flex-wrap: wrap; /* Allow wrapping on smaller screens */
+  align-items: center;
 }
 
 .nav-links a {
@@ -107,6 +123,47 @@ nav {
   background: var(--white);
 }
 
+.hero-buttons {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+}
+
+.hero-btn {
+  padding: 0.7rem 1.5rem;
+  border-radius: 0.5rem;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  display: inline-block;
+  text-align: center;
+  min-width: 120px;
+  white-space: nowrap;
+}
+
+.hero-btn.primary {
+  background: var(--accent);
+  color: var(--white);
+}
+
+.hero-btn.secondary {
+  background: var(--tropical-indigo);
+  color: var(--white);
+}
+
+.hero-btn.tertiary {
+  background: var(--rose-quartz);
+  color: var(--white);
+}
+
+.hero-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(135, 131, 209, 0.3);
+}
+
 .section {
   max-width: 1100px;
   margin: 3rem auto;
@@ -115,6 +172,8 @@ nav {
   box-shadow: var(--shadow);
   padding: 2.5rem 1.5rem;
   border-left: 8px solid var(--tropical-indigo);
+  width: calc(100% - 2rem); /* Ensure sections don't exceed viewport width */
+  box-sizing: border-box;
 }
 
 .section-title {
@@ -238,11 +297,13 @@ footer {
   background-repeat: no-repeat;
   background-size: cover;
   border-radius: 1.5rem;
-  margin: 2rem 0;
+  margin: 2rem auto;
   border: 3px solid var(--tropical-indigo);
   box-shadow: 0 2px 16px rgba(135,131,209,0.10);
   /* subtle pink overlay for accent */
   position: relative;
+  width: calc(100% - 2rem);
+  max-width: 1100px;
 }
 
 .parallax::after {
@@ -257,16 +318,114 @@ footer {
 
 /* Responsive */
 @media (max-width: 800px) {
-  .section { padding: 1.2rem 0.5rem; }
+  .section { 
+    padding: 1.2rem 0.5rem; 
+    margin: 2rem 1rem; /* Add side margins for mobile */
+    width: calc(100% - 2rem);
+  }
   .hero h1 { font-size: 2.1rem; }
+  .hero {
+    padding: 3rem 1rem 2rem 1rem;
+  }
   .about-content { flex-direction: column; }
+  .nav-links {
+    gap: 1rem;
+    font-size: 0.9rem;
+  }
+  
+  /* Make hero buttons more mobile-friendly */
+  .hero-buttons {
+    gap: 0.8rem;
+    flex-direction: column;
+    width: 100%;
+    max-width: 300px;
+  }
+  
+  .hero-btn {
+    width: 100%;
+    max-width: 280px;
+  }
 }
 
 @media (max-width: 500px) {
-  nav { flex-direction: column; gap: 0.7rem; padding: 0.7rem 0.5rem; }
-  .nav-links { gap: 1rem; }
-  .hero h1 { font-size: 1.3rem; }
-  .section-title { font-size: 1.2rem; }
+  nav { 
+    flex-direction: column; 
+    gap: 0.7rem; 
+    padding: 0.7rem 0.5rem;
+    overflow-x: hidden; /* Prevent nav overflow on very small screens */
+  }
+  .nav-links { 
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+  }
+  .nav-links a {
+    padding: 0.25rem 0.7rem;
+    font-size: 0.85rem;
+  }
+  .score-display {
+    padding: 0.25rem 0.7rem;
+    font-size: 0.85rem;
+  }
+  .hero h1 { font-size: 1.8rem; }
+  .hero p { font-size: 1.1rem; }
+  .section-title { font-size: 1.4rem; }
+  .section {
+    margin: 1.5rem 0.5rem;
+    padding: 1rem 0.7rem;
+    width: calc(100% - 1rem);
+  }
+  
+  /* Hero buttons for small screens */
+  .hero-buttons {
+    gap: 0.6rem;
+    max-width: 250px;
+  }
+  
+  .hero-btn {
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+    min-width: 100px;
+  }
+  
+  .parallax {
+    margin: 1.5rem auto;
+    min-height: 180px;
+    width: calc(100% - 1rem);
+    background-attachment: scroll;
+  }
+}
+
+@media (max-width: 350px) {
+  .nav-logo {
+    font-size: 1.2rem;
+    letter-spacing: 1px;
+  }
+  .hero h1 { font-size: 1.5rem; }
+  .hero p { font-size: 1rem; }
+  .section {
+    margin: 1rem 0.25rem;
+    padding: 0.8rem 0.5rem;
+    width: calc(100% - 0.5rem);
+  }
+  
+  .hero-buttons {
+    max-width: 200px;
+  }
+  
+  .hero-btn {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.85rem;
+    min-width: 80px;
+  }
+  
+  .parallax {
+    margin: 1rem auto;
+    min-height: 200px;
+    width: calc(100% - 1rem);
+    background-attachment: scroll; /* Fixed attachment can cause issues on mobile */
+  }
 }
 
 /* Game Elements */
