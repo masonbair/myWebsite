@@ -1,6 +1,19 @@
 let score = 0;
 let activeCircle = null;
 let catColor = generateRandomCatColor(); // Generate random color on page load
+let playerName = generateRandomPlayerName(); // Generate random name on page load
+
+// Fun random name generator
+function generateRandomPlayerName() {
+  const adjectives = ['Swift', 'Mighty', 'Clever', 'Brave', 'Silent', 'Golden', 'Epic', 'Cosmic', 'Cyber', 'Mystic', 'Thunder', 'Shadow', 'Frost', 'Blaze', 'Storm', 'Stellar', 'Quantum', 'Neon', 'Turbo', 'Ultra'];
+  const nouns = ['Cat', 'Tiger', 'Dragon', 'Phoenix', 'Ninja', 'Knight', 'Wizard', 'Hunter', 'Warrior', 'Legend', 'Hero', 'Champion', 'Master', 'Ace', 'Star', 'Coder', 'Hacker', 'Gamer', 'Pro', 'Boss'];
+  const numbers = Math.floor(Math.random() * 999) + 1;
+  
+  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  
+  return `${adj}${noun}${numbers}`;
+}
 
 function generateRandomCatColor() {
   const colors = [
@@ -216,4 +229,188 @@ document.addEventListener('DOMContentLoaded', function() {
     const stage = Math.min(Math.floor(score / 2), 11);
     console.log(messages[stage]);
   });
+  
+  // Initialize leaderboard
+  initializeLeaderboard();
 });
+
+// ===== LEADERBOARD FUNCTIONALITY =====
+
+function initializeLeaderboard() {
+  const scoreDisplay = document.getElementById('scoreDisplay');
+  const leaderboardDropdown = document.getElementById('leaderboardDropdown');
+  const closeLeaderboard = document.getElementById('closeLeaderboard');
+  const saveScoreBtn = document.getElementById('saveScore');
+  const playerNameInput = document.getElementById('playerName');
+  
+  // Set random name as placeholder
+  playerNameInput.placeholder = `e.g., ${playerName}`;
+  
+  // Toggle leaderboard on score click
+  scoreDisplay.addEventListener('click', function(e) {
+    e.stopPropagation();
+    leaderboardDropdown.classList.toggle('active');
+    loadLeaderboard();
+  });
+  
+  // Close leaderboard
+  closeLeaderboard.addEventListener('click', function(e) {
+    e.stopPropagation();
+    leaderboardDropdown.classList.remove('active');
+  });
+  
+  // Close when clicking outside
+  document.addEventListener('click', function(e) {
+    if (!leaderboardDropdown.contains(e.target) && !scoreDisplay.contains(e.target)) {
+      leaderboardDropdown.classList.remove('active');
+    }
+  });
+  
+  // Save score
+  saveScoreBtn.addEventListener('click', function() {
+    savePlayerScore();
+  });
+  
+  // Allow Enter key to save
+  playerNameInput.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      savePlayerScore();
+    }
+  });
+}
+
+function savePlayerScore() {
+  const playerNameInput = document.getElementById('playerName');
+  let name = playerNameInput.value.trim();
+  
+  // Use random name if empty
+  if (!name) {
+    name = playerName;
+  }
+  
+  // Validate name length
+  if (name.length > 20) {
+    name = name.substring(0, 20);
+  }
+  
+  if (score === 0) {
+    showToast('Score some points first! Click the circles! 🎯', 'warning');
+    return;
+  }
+  
+  // Get existing leaderboard from localStorage
+  let leaderboard = JSON.parse(localStorage.getItem('catGameLeaderboard') || '[]');
+  
+  // Add new entry
+  leaderboard.push({
+    name: name,
+    score: score,
+    date: new Date().toISOString()
+  });
+  
+  // Sort by score descending
+  leaderboard.sort((a, b) => b.score - a.score);
+  
+  // Keep top 50 scores
+  leaderboard = leaderboard.slice(0, 50);
+  
+  // Save to localStorage
+  localStorage.setItem('catGameLeaderboard', JSON.stringify(leaderboard));
+  
+  // Show success message
+  showToast(`🎉 Score saved! ${name}: ${score} points`, 'success');
+  
+  // Reload leaderboard display
+  loadLeaderboard();
+  
+  // Clear input
+  playerNameInput.value = '';
+  
+  // Generate new random name for next time
+  playerName = generateRandomPlayerName();
+  playerNameInput.placeholder = `e.g., ${playerName}`;
+}
+
+function loadLeaderboard() {
+  const leaderboardList = document.getElementById('leaderboardList');
+  const leaderboard = JSON.parse(localStorage.getItem('catGameLeaderboard') || '[]');
+  
+  if (leaderboard.length === 0) {
+    leaderboardList.innerHTML = '<p class="no-scores">No scores yet. Be the first!</p>';
+    return;
+  }
+  
+  // Create HTML for leaderboard entries
+  let html = '';
+  leaderboard.forEach((entry, index) => {
+    const rank = index + 1;
+    let topClass = '';
+    let medal = '';
+    
+    if (rank === 1) {
+      topClass = 'top-1';
+      medal = '🥇 ';
+    } else if (rank === 2) {
+      topClass = 'top-2';
+      medal = '🥈 ';
+    } else if (rank === 3) {
+      topClass = 'top-3';
+      medal = '🥉 ';
+    }
+    
+    html += `
+      <div class="leaderboard-entry ${topClass}">
+        <span class="entry-rank">${medal}${rank}</span>
+        <span class="entry-name">${escapeHtml(entry.name)}</span>
+        <span class="entry-score">${entry.score}</span>
+      </div>
+    `;
+  });
+  
+  leaderboardList.innerHTML = html;
+}
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+// Toast notification function
+function showToast(message, type = 'success') {
+  // Create toast container if it doesn't exist
+  let toastContainer = document.getElementById('toastContainer');
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    toastContainer.id = 'toastContainer';
+    toastContainer.className = 'toast-container';
+    document.body.appendChild(toastContainer);
+  }
+  
+  // Create toast element
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  
+  // Add to container
+  toastContainer.appendChild(toast);
+  
+  // Trigger animation
+  setTimeout(() => {
+    toast.classList.add('toast-show');
+  }, 10);
+  
+  // Remove after 3 seconds
+  setTimeout(() => {
+    toast.classList.remove('toast-show');
+    setTimeout(() => {
+      toast.remove();
+    }, 300);
+  }, 3000);
+}
