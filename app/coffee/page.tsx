@@ -47,8 +47,7 @@ const elsewhere = [
 
 export default function CoffeePage() {
   return (
-    // The tall bottom padding keeps the last section clear of the corner cat.
-    <main className="mx-auto w-full max-w-[1400px] px-4 pt-24 pb-48 md:px-8">
+    <main className="mx-auto w-full max-w-[1400px] px-4 pt-24 pb-24 md:px-8">
       <JsonLd data={coffeeJsonLd()} />
 
       <div className="grid gap-4 lg:grid-cols-12">

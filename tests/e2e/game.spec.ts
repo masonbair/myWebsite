@@ -190,3 +190,19 @@ test("a failed game download retries on the next click", async ({ page, request 
   await expect(page.getByRole("dialog", { name: "Leaderboard" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Start the cat game" })).toBeVisible();
 });
+
+test("the game is home only: /coffee has no cat, no score pill, and no nav gap", async ({ page }, testInfo) => {
+  await page.goto("/coffee");
+  await page.waitForLoadState("load");
+  // Past the 4 s fallback, so a game that loads late would be on the page by now.
+  await page.waitForTimeout(4500);
+  await expect(page.getByRole("button", { name: "Start the cat game" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /leaderboard/i })).toHaveCount(0);
+  await expect(page.getByTestId("score")).toHaveCount(0);
+  if (testInfo.project.name === "desktop") {
+    const nav = page.getByRole("navigation", { name: "Main" });
+    const gap = await nav.evaluate((el) => el.getBoundingClientRect().right - el.querySelector("ul")!.getBoundingClientRect().right);
+    // Only the nav's own 8 px right padding, no empty slot where the pill was.
+    expect(gap).toBeLessThanOrEqual(9);
+  }
+});

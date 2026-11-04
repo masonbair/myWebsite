@@ -1,6 +1,6 @@
 import { ArrowUpRight } from "@phosphor-icons/react/dist/ssr";
-import { LazyScorePill } from "./game/LazyGame";
-import { NavMenu, type NavLink } from "./NavMenu";
+import { NavActions } from "./NavActions";
+import type { NavLink } from "./NavMenu";
 
 // Root-relative so the section links also work from /coffee; on / they stay same-page jumps.
 const links: NavLink[] = [
@@ -45,10 +45,7 @@ export function Nav() {
             </li>
           ))}
         </ul>
-        <div className="relative flex items-center gap-2">
-          <LazyScorePill />
-          <NavMenu links={links} />
-        </div>
+        <NavActions links={links} />
       </nav>
     </header>
   );

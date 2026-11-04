@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { Nav } from "@/components/Nav";
-import { LazyCatGame } from "@/components/game/LazyGame";
 import now from "@/content/now.json";
 import { siteUrl } from "@/content/site";
 import "./globals.css";
@@ -27,7 +26,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="font-sans antialiased">
         <Nav />
         {children}
-        <LazyCatGame />
       </body>
     </html>
   );

@@ -21,7 +21,7 @@ for (const colorScheme of ["light", "dark"] as const) {
 
     test("coffee page has no serious a11y violations", async ({ page }) => {
       await page.goto("/coffee");
-      await expect(page.getByRole("button", { name: "Start the cat game" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       expect(await serious(page)).toEqual([]);
     });
 
