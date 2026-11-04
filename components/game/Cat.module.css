@@ -48,10 +48,15 @@
   top: -10px;
   left: 0;
   width: 100%;
+  /* Outline, so the ears stay visible when the cat passes over a tile of its own color. */
+  filter: drop-shadow(0 -1px 0 var(--line)) drop-shadow(1px 0 0 var(--line)) drop-shadow(-1px 0 0 var(--line));
 }
 
 .ear {
   position: absolute;
+  transform: scale(0.6);
+  transform-origin: bottom center;
+  transition: transform 500ms var(--ease-spring);
   width: 0;
   height: 0;
   border-left: 8px solid transparent;
@@ -65,6 +70,44 @@
 
 .ear:last-child {
   right: 1px;
+}
+
+/* Stage 0 is a sleeping cat: nub ears and closed eyes, so it reads as a cat before any feature is earned. */
+.ears,
+.sleepy {
+  opacity: 1;
+}
+
+.sleepy {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  width: 100%;
+  transition: opacity 400ms var(--ease-spring);
+}
+
+.lid {
+  position: absolute;
+  width: 7px;
+  height: 4px;
+  border-bottom: 1.5px solid var(--face);
+  border-radius: 0 0 50% 50%;
+}
+
+.lid:first-child {
+  left: 6px;
+}
+
+.lid:last-child {
+  right: 6px;
+}
+
+.s1 .ear {
+  transform: none;
+}
+
+.s2 .sleepy {
+  opacity: 0;
 }
 
 .eyes {

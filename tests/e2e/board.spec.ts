@@ -90,3 +90,26 @@ test("github tile shows the total and never ships a private repo name", async ({
   const html = await (await request.get(fixtureUrl("github"))).text();
   expect(html).not.toContain("secret-client-repo");
 });
+
+test("github count never clips", async ({ page }) => {
+  await page.goto(fixtureUrl("github"));
+  await expect(page.getByText("12", { exact: true })).toBeVisible();
+  // A handle, because the locator stops matching once the text is swapped.
+  const count = (await page.getByText("12", { exact: true }).elementHandle())!;
+  for (const width of [1280, 1024, 768, 375]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const [n, label] of [["1,330", "contributions"], ["1", "contribution"]]) {
+      const clipped = await count.evaluate(
+        (el: HTMLElement, [n, label]) => {
+          el.textContent = n;
+          el.nextElementSibling!.textContent = label;
+          const core = el.closest(".overflow-hidden")!.getBoundingClientRect();
+          const pad = parseFloat(getComputedStyle(el.closest(".overflow-hidden")!).paddingRight);
+          return [el, el.nextElementSibling!].some((e) => e.getBoundingClientRect().right > core.right - pad + 0.5);
+        },
+        [n, label],
+      );
+      expect(clipped, `${n} ${label} at ${width}px`).toBe(false);
+    }
+  }
+});

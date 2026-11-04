@@ -18,21 +18,41 @@ const overlaps = (s: Spot, r: DOMRect) =>
 
 const inflate = (r: DOMRect, by: number) => new DOMRect(r.x - by, r.y - by, r.width + by * 2, r.height + by * 2);
 
-// Random spot fully inside the viewport, below the nav pill and away from the cat corner.
-function randomSpot(avoid: DOMRect[]): Spot {
-  const vw = document.documentElement.clientWidth;
-  const vh = document.documentElement.clientHeight;
-  const size = vw <= 500 ? 48 : vw <= 800 ? 56 : 64;
+// Uses the visual viewport so pinch-zoom and mobile toolbars count; fixed elements are placed in layout-viewport pixels.
+function playArea() {
+  const vv = window.visualViewport;
+  const left = vv?.offsetLeft ?? 0;
+  const top = vv?.offsetTop ?? 0;
+  const width = vv?.width ?? document.documentElement.clientWidth;
+  const height = vv?.height ?? document.documentElement.clientHeight;
+  const size = width <= 500 ? 48 : width <= 800 ? 56 : 64;
   const navBottom = document.querySelector('nav[aria-label="Main"]')?.getBoundingClientRect().bottom ?? 72;
-  const minY = navBottom + EDGE;
-  const maxX = vw - size - EDGE;
-  const maxY = Math.max(minY, vh - size - EDGE);
-  let spot: Spot = { x: EDGE, y: minY, size };
+  const minX = left + EDGE;
+  const maxX = Math.max(minX, left + width - size - EDGE);
+  // On a very short viewport staying on screen wins over clearing the nav.
+  const maxY = Math.max(top, top + height - size - EDGE);
+  const minY = Math.min(Math.max(top + EDGE, navBottom + EDGE), maxY);
+  return { minX, maxX, minY, maxY, size };
+}
+
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+/** Random spot fully inside the viewport, below the nav pill and away from `avoid`. */
+function randomSpot(avoid: DOMRect[]): Spot {
+  const { minX, maxX, minY, maxY, size } = playArea();
+  let spot: Spot = { x: minX, y: minY, size };
   for (let i = 0; i < 30; i++) {
-    spot = { x: EDGE + Math.random() * (maxX - EDGE), y: minY + Math.random() * (maxY - minY), size };
+    spot = { x: minX + Math.random() * (maxX - minX), y: minY + Math.random() * (maxY - minY), size };
     if (!avoid.some((r) => overlaps(spot, r))) break;
   }
   return spot;
+}
+
+/** Keeps a live circle where it is when it still fits, otherwise clamps or re-places it. */
+function refit(spot: Spot, avoid: DOMRect[]): Spot {
+  const { minX, maxX, minY, maxY, size } = playArea();
+  const next = { x: clamp(spot.x, minX, maxX), y: clamp(spot.y, minY, maxY), size };
+  return avoid.some((r) => overlaps(next, r)) ? randomSpot(avoid) : next;
 }
 
 /** The cat-builder game: the corner cat toggles play, each caught circle scores a point. */
@@ -45,7 +65,10 @@ export function CatGame() {
   const [burst, setBurst] = useState(0);
   const [catScope, animateCat] = useAnimate<HTMLButtonElement>();
   const nextDelay = useRef(350);
+  const focusNext = useRef(false);
+  const circleRef = useRef<HTMLButtonElement>(null);
   const stage = catStage(score);
+  const circleId = circle?.id;
 
   useEffect(() => {
     game.init();
@@ -53,15 +76,24 @@ export function CatGame() {
 
   useEffect(() => {
     if (!playing || circle) return;
-    const avoid = () => [inflate(catScope.current!.getBoundingClientRect(), 24)];
-    const t = setTimeout(() => setCircle({ id: Date.now(), ...randomSpot(avoid()) }), nextDelay.current);
-    const onResize = () => setCircle((c) => c && { ...c, ...randomSpot(avoid()) });
-    window.addEventListener("resize", onResize);
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener("resize", onResize);
-    };
+    const avoid = [inflate(catScope.current!.getBoundingClientRect(), 24)];
+    const t = setTimeout(() => setCircle({ id: Date.now(), ...randomSpot(avoid) }), nextDelay.current);
+    return () => clearTimeout(t);
   }, [playing, circle, catScope]);
+
+  useEffect(() => {
+    if (circleId === undefined) return;
+    if (focusNext.current) circleRef.current?.focus();
+    const onResize = () =>
+      setCircle((c) => c && { ...c, ...refit(c, [inflate(catScope.current!.getBoundingClientRect(), 24)]) });
+    const vv = window.visualViewport;
+    window.addEventListener("resize", onResize);
+    vv?.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      vv?.removeEventListener("resize", onResize);
+    };
+  }, [circleId, catScope]);
 
   useEffect(() => {
     if (!toast) return;
@@ -69,16 +101,18 @@ export function CatGame() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  function togglePlay() {
+  function togglePlay(fromKeyboard: boolean) {
     if (playing) setCircle(null);
     else {
       nextDelay.current = 350;
+      focusNext.current = fromKeyboard;
       if (score === 0) setToast({ id: Date.now(), text: CAT_STAGE_LINES[0] });
     }
     game.togglePlay();
   }
 
-  function catchCircle(c: Circle) {
+  function catchCircle(c: Circle, fromKeyboard: boolean) {
+    focusNext.current = fromKeyboard;
     setCircle(null);
     if (!reduce) setPops((p) => [...p, c]);
     nextDelay.current = 500 + Math.random() * 900;
@@ -97,10 +131,12 @@ export function CatGame() {
     <>
       {circle && (
           <motion.button
+            ref={circleRef}
             key={circle.id}
             type="button"
             aria-label="Catch the circle"
-            onClick={() => catchCircle(circle)}
+            // detail is 0 for Enter/Space, so keyboard players keep focus on the next circle.
+            onClick={(e) => catchCircle(circle, e.detail === 0)}
             initial={reduce ? false : { scale: 0.4, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: "spring", stiffness: 260, damping: 18 }}
@@ -139,15 +175,15 @@ export function CatGame() {
           </AnimatePresence>
         </div>
 
-        <div className="relative flex items-end gap-2">
+        <div className="relative flex flex-col items-end gap-1.5 min-[501px]:flex-row min-[501px]:gap-2">
           <AnimatePresence>
             {color && !playing && score === 0 && (
               <motion.span
                 aria-hidden
-                initial={reduce ? false : { opacity: 0, x: 8 }}
-                animate={{ opacity: 1, x: 0, transition: { delay: reduce ? 0 : 1.2, duration: 0.5, ease } }}
+                initial={reduce ? false : { opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1, transition: { delay: reduce ? 0 : 1.2, duration: 0.5, ease } }}
                 exit={{ opacity: 0, transition: { duration: 0.15 } }}
-                className="mb-3 rounded-full bg-surface px-3.5 py-2 text-xs font-semibold whitespace-nowrap text-ink shadow-tile ring-1 ring-ink/5"
+                className="rounded-full bg-surface px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap text-ink shadow-tile ring-1 ring-ink/5 min-[501px]:mb-3 min-[501px]:px-3.5 min-[501px]:py-2 min-[501px]:text-xs"
               >
                 Play with me
               </motion.span>
@@ -158,7 +194,7 @@ export function CatGame() {
             ref={catScope}
             type="button"
             aria-label={playing ? "Pause the cat game" : "Start the cat game"}
-            onClick={togglePlay}
+            onClick={(e) => togglePlay(e.detail === 0)}
             initial={false}
             animate={{ opacity: color ? 1 : 0 }}
             transition={{ duration: reduce ? 0 : 0.5, ease }}

@@ -52,7 +52,8 @@ describe("local leaderboard", () => {
     const many = Array.from({ length: 60 }, (_, i) => ({ name: `p${i}`, score: i + 100, date: "x" }));
     const storage = fakeStorage({ catGameLeaderboard: JSON.stringify(many) });
     vi.stubGlobal("localStorage", storage);
-    const list = saveScore("  a name that is far too long  ", 500);
+    const { entry, list } = saveScore("  a name that is far too long  ", 500);
+    expect(list[0]).toBe(entry);
     expect(list).toHaveLength(50);
     expect(list[0]).toMatchObject({ name: "a name that is far t", score: 500 });
     expect(list.at(-1)!.score).toBe(111);
@@ -65,6 +66,6 @@ describe("local leaderboard", () => {
         throw new Error("quota");
       },
     });
-    expect(saveScore("Tester", 2)).toEqual([{ name: "Tester", score: 2, date: "2026-11-04T12:00:00.000Z" }]);
+    expect(saveScore("Tester", 2).list).toEqual([{ name: "Tester", score: 2, date: "2026-11-04T12:00:00.000Z" }]);
   });
 });

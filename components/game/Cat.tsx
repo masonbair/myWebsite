@@ -13,6 +13,10 @@ export function Cat({ stage, color }: { stage: number; color: string }) {
           <div className={styles.ear} />
           <div className={styles.ear} />
         </div>
+        <div className={styles.sleepy}>
+          <div className={styles.lid} />
+          <div className={styles.lid} />
+        </div>
         <div className={`${styles.feature} ${styles.eyes}`}>
           <div className={styles.eye} />
           <div className={styles.eye} />

@@ -11,11 +11,19 @@ export function ScorePill() {
   const { score, leaderboardOpen } = useGame();
   const reduce = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
-  const close = () => game.setLeaderboardOpen(false);
+  const pillRef = useRef<HTMLButtonElement>(null);
+  const close = () => {
+    game.setLeaderboardOpen(false);
+    pillRef.current?.focus();
+  };
 
   useEffect(() => {
     if (!leaderboardOpen) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && game.setLeaderboardOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      game.setLeaderboardOpen(false);
+      pillRef.current?.focus();
+    };
     const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && game.setLeaderboardOpen(false);
     window.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onDown);
@@ -28,6 +36,7 @@ export function ScorePill() {
   return (
     <div ref={ref} className="relative">
       <button
+        ref={pillRef}
         type="button"
         aria-label={`Score ${score}, leaderboard`}
         aria-expanded={leaderboardOpen}

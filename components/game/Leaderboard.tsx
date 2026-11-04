@@ -2,7 +2,7 @@
 
 import { X } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "motion/react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { MAX_NAME, loadScores, saveScore, type ScoreEntry } from "@/lib/leaderboard";
 import { game, useGame } from "./store";
 
@@ -15,7 +15,13 @@ export function Leaderboard({ onClose }: { onClose: () => void }) {
   const reduce = useReducedMotion();
   const [scores, setScores] = useState<ScoreEntry[]>(loadScores);
   const [name, setName] = useState("");
-  const [savedDate, setSavedDate] = useState<string | null>(null);
+  const [saved, setSaved] = useState<ScoreEntry | null>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // Close, not the input, gets focus so a tap on a phone does not pop the keyboard.
+  useEffect(() => {
+    closeRef.current?.focus({ preventScroll: true });
+  }, []);
   const [message, setMessage] = useState("");
 
   function save(e: FormEvent) {
@@ -25,10 +31,10 @@ export function Leaderboard({ onClose }: { onClose: () => void }) {
       return;
     }
     const finalName = name.trim() || playerName;
-    const list = saveScore(finalName, score);
+    const { entry, list } = saveScore(finalName, score);
     setScores(list);
-    setSavedDate(list.find((s) => s.name === finalName.slice(0, MAX_NAME) && s.score === score)?.date ?? null);
-    setMessage(`Saved ${finalName.slice(0, MAX_NAME)} with ${score} points.`);
+    setSaved(entry);
+    setMessage(`Saved ${entry.name} with ${score} points.`);
     setName("");
     game.newPlayerName();
   }
@@ -50,6 +56,7 @@ export function Leaderboard({ onClose }: { onClose: () => void }) {
             Leaderboard
           </h2>
           <button
+            ref={closeRef}
             type="button"
             aria-label="Close leaderboard"
             onClick={onClose}
@@ -98,7 +105,7 @@ export function Leaderboard({ onClose }: { onClose: () => void }) {
             {scores.slice(0, SHOWN).map((s, i) => (
               <li
                 key={`${s.date}-${i}`}
-                className={`flex items-center gap-3 rounded-full px-3 py-2 text-sm ${s.date === savedDate ? "bg-accent/15" : i < 3 ? "bg-ink/[0.03]" : ""}`}
+                className={`flex items-center gap-3 rounded-full px-3 py-2 text-sm ${s === saved ? "bg-accent/15" : i < 3 ? "bg-ink/[0.03]" : ""}`}
               >
                 <span className={`w-5 text-right font-mono ${i < 3 ? "font-semibold text-accent-ink" : "text-mute"}`}>{i + 1}</span>
                 <span className="min-w-0 flex-1 truncate font-medium text-ink">{s.name}</span>

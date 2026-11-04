@@ -5,6 +5,7 @@ import { Tile } from "../Tile";
 const PROFILE = "https://github.com/masonbair";
 const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 const plural = (n: number, word: string) => `${word}${n === 1 ? "" : "s"}`;
+const formatCount = new Intl.NumberFormat("en-US").format;
 
 export function GithubTile({ github }: { github: GithubActivity | null }) {
   if (!github) {
@@ -33,8 +34,8 @@ export function GithubTile({ github }: { github: GithubActivity | null }) {
         <a href={PROFILE} target="_blank" rel="noopener noreferrer" className={`inline-flex rounded-full ${focusRing}`}>
           <GithubLogo weight="light" size={28} className="text-ink" aria-label="GitHub profile" />
         </a>
-        <p className="mt-4 flex items-baseline gap-2">
-          <span className="font-mono text-6xl leading-none font-medium tracking-tighter text-accent-ink">{total30d}</span>
+        <p className="mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="font-mono text-6xl leading-none font-medium tracking-tighter text-accent-ink lg:text-5xl xl:text-6xl">{formatCount(total30d)}</span>
           <span className="text-xl font-semibold text-ink">{plural(total30d, "contribution")}</span>
         </p>
         <p className="mt-1 text-sm text-mute">last 30 days</p>

@@ -54,3 +54,49 @@ test("game can be paused", async ({ page }) => {
   await page.getByRole("button", { name: "Pause the cat game" }).click();
   await expect(circle(page)).toHaveCount(0);
 });
+
+test("live circle stays on screen after a resize", async ({ page }) => {
+  await startGame(page);
+  // Catch until a circle sits low enough that the smaller viewport would cut it off.
+  const size = { width: 340, height: 320 };
+  for (let i = 0; i < 15; i++) {
+    await expect(circle(page)).toBeVisible();
+    await expect.poll(async () => (await circle(page).boundingBox())!.width).toBeGreaterThanOrEqual(44);
+    const box = (await circle(page).boundingBox())!;
+    if (box.y + box.height > size.height + 20) break;
+    await circle(page).click();
+  }
+  await page.setViewportSize(size);
+  const nav = (await page.getByRole("navigation", { name: "Main" }).boundingBox())!;
+  await expect
+    .poll(async () => {
+      const box = (await circle(page).boundingBox())!;
+      return (
+        box.x >= 0 &&
+        box.y > nav.y + nav.height &&
+        box.x + box.width <= size.width &&
+        box.y + box.height <= size.height
+      );
+    })
+    .toBe(true);
+});
+
+test("keyboard play keeps focus on the circles", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start the cat game" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(circle(page)).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("score")).toHaveText("1");
+  await expect(circle(page)).toBeFocused();
+});
+
+test("leaderboard moves focus in and back", async ({ page }) => {
+  await page.goto("/");
+  const pill = page.getByRole("button", { name: /^Score \d+, leaderboard$/ });
+  await pill.click();
+  await expect(page.getByRole("button", { name: "Close leaderboard" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Leaderboard" })).toHaveCount(0);
+  await expect(pill).toBeFocused();
+});
