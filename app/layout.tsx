@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { LazyCatGame } from "@/components/game/LazyGame";
+import now from "@/content/now.json";
 import { siteUrl } from "@/content/site";
 import "./globals.css";
 
@@ -9,7 +10,7 @@ const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakart
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
 
 const description =
-  "I'm Mason Bair, a software engineer, baker, and traveler who has been to 23 countries and graduated from Kent State in May 2026.";
+  `I'm Mason Bair, a software engineer, baker, and traveler who has been to ${now.countriesVisited} countries and graduated from Kent State in May 2026.`;
 
 // Share images come from the opengraph-image files, so none are listed here.
 export const metadata: Metadata = {

@@ -35,7 +35,7 @@ export const work: Work[] = [
     tech: ["Ubuntu Server", "Ansible", "SSSD", "LDAP", "Docker", "Lambda AI Stack"],
     image: {
       src: "/misc/Mason_at_RSM_office.webp",
-      alt: "Mason in a dark coat taking a selfie at a front desk under an RSM sign",
+      alt: "Mason in a dark coat taking a selfie at an office front desk",
       width: 3000,
       height: 4000,
     },
@@ -49,7 +49,7 @@ export const work: Work[] = [
     tech: ["Python", "GitHub Actions", "SonarQube", "CI/CD", "Docker"],
     image: {
       src: "/misc/Mason_at_RSM_office_2.webp",
-      alt: "Mason smiling in a dark coat next to a wood wall with a large RSM logo",
+      alt: "Mason smiling in a dark coat next to a wood paneled office wall",
       width: 3000,
       height: 4000,
     },

@@ -1,3 +1,4 @@
+import now from "./now.json";
 import { contact } from "./site";
 
 // Draft copy; Mason will edit. The booking URL lives only here.
@@ -38,7 +39,7 @@ export const coffee: {
     { icon: "shield", label: "DevSecOps", detail: "CI/CD, security checks, and the tools I built at Nationwide." },
     { icon: "trophy", label: "Hackathons", detail: "Running Kent Hack Enough, and how my teams placed at NexHacks." },
     { icon: "compass", label: "CS careers", detail: "Internships, first jobs, and finding your way in tech." },
-    { icon: "plane", label: "Nomad life", detail: "Working remotely from the road, 23 countries in." },
+    { icon: "plane", label: "Nomad life", detail: `Working remotely from the road, ${now.countriesVisited} countries in.` },
   ],
   audience: "For students, new grads, and anyone curious about tech. No agenda needed.",
   timeZoneHeading: "Time zones",
