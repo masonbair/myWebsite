@@ -12,14 +12,14 @@
 
 ---
 
-## Open questions for Mason
+## Decisions
 
-Answer these before the builder reaches the task named in brackets. Each has a default the plan is written around; the builder stops and asks if it is still unanswered at that task.
-
-1. **[Task 3] How do you sign in?** Default: "Sign in with GitHub" (one tap, no email needed; email for the domain doesn't exist until project 4). Alternatives: email magic link, or a passkey.
-2. **[Task 9] Where must agents reach your data?** Default: Claude Code and the cloud worker only, using a secret token. Using the connector inside claude.ai chats or the Claude phone app needs a full login flow for the connector (one extra task, added at the end if you want it).
-3. **[Task 5] Start using it now, or keep it a test bed until the Todoist switch?** Default: test bed. Todoist stays your only live hub; the private side gets real data at the cutover (project 5). If you want to start capturing into it now, items captured there will not show up in Todoist.
-4. **[Task 5] Voice button on the capture screen.** Default: a mic button that uses Chrome's built-in speech recognition, which sends the audio to Google (the same as Gboard voice typing). The alternative is no button; you use the keyboard's mic instead.
+1. **Sign-in: GitHub, one allowed user, `masonbair`. (Mason)** The owner check compares GitHub's numeric user id (looked up once from the `masonbair` login and stored in `HUB_OWNER_GITHUB_ID`), because a username can be renamed.
+2. **Agents: Claude Code and the cloud worker only, by secret token. (Mason)** No claude.ai connector login flow; there is no Task 12.
+3. **Live as soon as it ships, not a test bed. (Mason)** The private side holds real data from its first production deploy. Todoist keeps running in parallel until project 5, so items captured in one do not appear in the other. Because the database is live: tests, seeds and resets run only against local Supabase; the live project only ever receives migrations through `supabase db push` after they pass locally; and a daily backup runs (Task 8).
+4. **Voice: a mic button using Chrome's speech recognition, with a one-line note on screen that the audio goes to Google. (Mason)**
+5. **The phone collector app (project 3) signs in with GitHub too and lives in this repo under `apps/collector`. (Coordinator's call)** Task 3 therefore supports a mobile sign-in redirect as well as the web one.
+6. **Until the worker moves over (project 5), nothing in the cloud works on hub items. (Claude's call)** The Approve button is hidden unless `HUB_WORKER_LIVE=true`, so an approved item can't sit unnoticed.
 
 ---
 
@@ -32,7 +32,8 @@ Answer these before the builder reaches the task named in brackets. Each has a d
 - Exact coordinates never reach the server, the database or a page.
 - Labels carried over exactly: `todo`, `idea`, `thought`, `claude`, `claude-working`, `claude-done`, `claude-question`, `laptop`, `hidock`, `hidock-memo`, `to-schedule`, `suggested`, plus project labels (keys of `worker/projects.json`).
 - Task states: `open`, `done`, `archived`. `archived` is only for merged duplicates and split HiDock memos, and always carries a note pointing at the surviving item.
-- Todoist keeps running untouched. No live capture path, routine, or installed skill is switched in this project (that is project 5).
+- Todoist keeps running untouched. No existing capture path (memo uploads, Granola sweep, the installed todo-hub skill, the cloud routine) is switched in this project; that is project 5. The private side's own capture screen is live from the first production deploy.
+- The live Supabase project gets migrations only (`supabase db push`, after local tests pass). Never run `supabase db reset`, seed scripts, or test suites against it.
 - Secrets live only in `.env.local` (gitignored) and Vercel env vars. Mason adds Vercel env vars himself; the builder never writes them.
 - Copy has no em dashes. Plain words. Same palette and type as the public site.
 
@@ -43,6 +44,7 @@ Answer these before the builder reaches the task named in brackets. Each has a d
 3. **Two worker runs claim the same approved item at once.** Expected: exactly one wins. Test in Task 6.
 4. **Someone else signs in with GitHub.** Expected: they see nothing and can change nothing. Tests in Tasks 1 and 3.
 5. **The same HiDock memo is uploaded twice** (phone and Mac, or a retry). Expected: one inbox item. Test in Task 7.
+6. **The live database loses data** (a bad migration or a mistaken write). Expected: yesterday's snapshot exists and restores. Test in Task 8.
 
 ---
 
@@ -148,11 +150,12 @@ Rules table (the whole policy):
 
 **Interfaces:**
 - Consumes: `sessionClient()` (Task 2), `hub_owner` (Task 1).
-- Produces: `requireOwner(): Promise<{ userId: string }>` (redirects to `/hub/login` when signed out, renders 404 for a signed-in non-owner); env `HUB_OWNER_GITHUB_ID` (Mason's numeric GitHub id).
+- Produces: `requireOwner(): Promise<{ userId: string }>` (redirects to `/hub/login` when signed out, renders 404 for a signed-in non-owner); env `HUB_OWNER_GITHUB_ID` (numeric id of GitHub user `masonbair`, from `gh api users/masonbair --jq .id`); `isOwnerIdentity(identity): boolean`, shared with the mobile app in project 3.
+- Mobile sign-in: the Supabase redirect allowlist includes the web callback and the collector's deep link `masonbair-collector://auth/callback`. The mobile app signs in with Supabase's GitHub provider (PKCE) and gets the same Supabase user as the web, so `is_owner()` and RLS cover it with no extra code.
 
-- [ ] **Step 1: Write failing tests.** `owner.test.ts`: `isOwnerIdentity({ provider: "github", providerId: "<HUB_OWNER_GITHUB_ID>" })` is true; any other id false; missing env var false (fail closed). `hub-auth.spec.ts`: signed out, `/hub` redirects to `/hub/login`; `/api/hub/worker/inbox` without a token returns 401; `/hub` and `/hub/login` send `X-Robots-Tag: noindex` and are not in the sitemap.
+- [ ] **Step 1: Write failing tests.** `owner.test.ts`: `isOwnerIdentity({ provider: "github", providerId: "<HUB_OWNER_GITHUB_ID>" })` is true; any other id false; a non-GitHub provider false; missing env var false (fail closed). An integration case on local Supabase: a session for the owner user made through the mobile-style PKCE exchange can read `items`; a session for another GitHub user reads 0 rows. `hub-auth.spec.ts`: signed out, `/hub` redirects to `/hub/login`; `/api/hub/worker/inbox` without a token returns 401; `/hub` and `/hub/login` send `X-Robots-Tag: noindex` and are not in the sitemap.
 - [ ] **Step 2: Run** them. Expected: FAIL.
-- [ ] **Step 3: Implement.** Supabase GitHub provider (Open question 1). On the first callback whose GitHub id matches `HUB_OWNER_GITHUB_ID`, insert the user into `hub_owner` with the service client. `proxy.ts` refreshes the Supabase session cookie and gates `/hub/:path*` (except `/hub/login`, `/hub/auth/callback`, `/hub/manifest.webmanifest`). After Mason's first sign-in, the builder asks Mason to turn off new signups in the Supabase dashboard (Auth settings) and confirms it.
+- [ ] **Step 3: Implement.** Supabase GitHub provider (Decision 1). Add both redirect URLs to the allowlist (Decision 5) and write the exact dashboard steps for Mason. On the first callback whose GitHub id matches `HUB_OWNER_GITHUB_ID`, insert the user into `hub_owner` with the service client. `proxy.ts` refreshes the Supabase session cookie and gates `/hub/:path*` (except `/hub/login`, `/hub/auth/callback`, `/hub/manifest.webmanifest`). After Mason's first sign-in, the builder asks Mason to turn off new signups in the Supabase dashboard (Auth settings) and confirms it.
 - [ ] **Step 4: Run** the tests, then sign in once on a preview deploy with Mason. Expected: PASS; Mason lands on `/hub`.
 - [ ] **Step 5: Commit** `feat(hub): github sign-in and owner gate`.
 
@@ -166,9 +169,9 @@ Rules table (the whole policy):
 - Consumes: `requireOwner()`, `createHubStore(sessionClient(), { kind: "mason" })`.
 - Produces server actions: `completeItem(id)`, `reopenItem(id)`, `approveItem(id)` (adds `claude`), `updateItemAction(id, patch: ItemPatch)`, `addCommentAction(id, body)`.
 
-Pages: inbox (unsorted items first, then items with `claude-question` or `claude-done` as "needs you"), Todo and Ideas lists, item detail with comments thread (worker results show here, first line bold), labels, due date, Done button, Approve button. Archived items are hidden from lists and reachable from the surviving item ("merged from"). Mobile first; same tokens as the public site.
+Pages: inbox (unsorted items first, then items with `claude-question` or `claude-done` as "needs you"), Todo and Ideas lists, item detail with comments thread (worker results show here, first line bold), labels, due date, Done button, Approve button (rendered only when `HUB_WORKER_LIVE=true`, Decision 6). Archived items are hidden from lists and reachable from the surviving item ("merged from"). Mobile first; same tokens as the public site.
 
-- [ ] **Step 1: Write failing e2e tests:** seeded inbox shows its items; Done moves an item out of the list and sets `state='done'`; Approve adds `claude`; a worker comment appears on the item page; an archived item is not listed and is linked from its `merged_into` item.
+- [ ] **Step 1: Write failing e2e tests** (local Supabase only): seeded inbox shows its items; Done moves an item out of the list and sets `state='done'`; with `HUB_WORKER_LIVE=true` Approve adds `claude`, and without it the button is absent; a worker comment appears on the item page; an archived item is not listed and is linked from its `merged_into` item.
 - [ ] **Step 2: Run** `npx playwright test tests/e2e/hub-pages.spec.ts`. Expected: FAIL.
 - [ ] **Step 3: Implement** the pages and actions. Load and follow the design-taste-frontend skill for layout and copy.
 - [ ] **Step 4: Run** the e2e tests and the axe check from `tests/e2e/a11y.spec.ts` on `/hub`. Expected: PASS.
@@ -184,12 +187,12 @@ Pages: inbox (unsorted items first, then items with `claude-question` or `claude
 - Consumes: `addItem` with `clientKey` (Task 2).
 - Produces: `POST /api/hub/capture` body `{ title: string; description?: string; clientKey: string }` → `201 { id }` (or `200 { id }` for a repeated `clientKey`); `outbox.enqueue(entry)`, `outbox.flush(send): Promise<number>` (localStorage-backed queue; entries removed only after a 2xx).
 
-Manifest: `name` "Mason's hub", `start_url` `/hub/capture`, `scope` `/hub/`, `display` `standalone`, `share_target` `{ action: "/hub/share", method: "POST", enctype: "multipart/form-data", params: { title: "title", text: "text", url: "url" } }`. Shared text and links become one inbox item (`source` = `share`). Capture screen: one large text field focused on open, Save, a mic button per Open question 4 (Web Speech API, hidden when unsupported), a small "saved" confirmation, and a count of items still waiting to send.
+Manifest: `name` "Mason's hub", `start_url` `/hub/capture`, `scope` `/hub/`, `display` `standalone`, `share_target` `{ action: "/hub/share", method: "POST", enctype: "multipart/form-data", params: { title: "title", text: "text", url: "url" } }`. Shared text and links become one inbox item (`source` = `share`). Capture screen: one large text field focused on open, Save, a mic button (Decision 4: Web Speech API, hidden when unsupported) with the line "Voice is turned into text by Google." under it, a small "saved" confirmation, and a count of items still waiting to send.
 
 - [ ] **Step 1: Write failing tests.** `outbox.test.ts`: a failed send keeps the entry; a 2xx removes it; flushing twice after one success sends once. `hub-capture.spec.ts`: with the network offline, Save shows "1 waiting"; back online, the item appears in the inbox exactly once; double-clicking Save creates one item; posting the share form creates an inbox item with the shared URL in its description.
 - [ ] **Step 2: Run** them. Expected: FAIL.
 - [ ] **Step 3: Implement.** `clientKey` = `crypto.randomUUID()` made once per Save. Flush on load, on `online`, and after each Save.
-- [ ] **Step 4: Run** the tests; then on Mason's phone (preview deploy) install to home screen and share a link from Chrome into it. Expected: PASS; the item lands in the inbox.
+- [ ] **Step 4: Run** the tests (local Supabase); then on Mason's phone (preview deploy) install to home screen and share a link from Chrome into it. Expected: PASS; the item lands in the inbox. That shared item is real data from here on; don't clean it up with a reset.
 - [ ] **Step 5: Commit** `feat(hub): installable quick capture with share target`.
 
 ### Task 6: Worker API and the ported `hub` CLI
@@ -228,22 +231,23 @@ Manifest: `name` "Mason's hub", `start_url` `/hub/capture`, `scope` `/hub/`, `di
 - [ ] **Step 4: Run.** Expected: PASS.
 - [ ] **Step 5: Commit** `feat(hub): memo relay on supabase`.
 
-### Task 8: Reminders and approval fire
+### Task 8: Reminders, approval fire and daily backup
 
 **Files:**
-- Create: `supabase/migrations/0003_hub_events.sql`, `app/api/hub/events/[event]/route.ts`, `lib/hub/events.ts`
-- Test: `tests/unit/hub/events.test.ts`
+- Create: `supabase/migrations/0003_hub_events.sql`, `app/api/hub/events/[event]/route.ts`, `lib/hub/events.ts`, `lib/hub/backup.ts`, `scripts/hub-restore.ts`
+- Test: `tests/unit/hub/events.test.ts`, `tests/unit/hub/backup.test.ts`
 
 **Interfaces:**
 - Consumes: `notify()` (Task 6), `items.due_date/due_time`, `hub_state`.
 - Produces: `POST /api/hub/events/reminders` and `POST /api/hub/events/approved` (bearer `HUB_EVENTS_TOKEN`). `dueReminders(items: Item[], now: Date, windowMin = 5): Item[]` (open items whose due time falls in the last `windowMin` minutes and not yet reminded, tracked in `hub_state` key `reminded:<id>`). `approved` receives `{ id }`, rechecks that the item has `claude` and no `claude-working`, then calls `ROUTINE_FIRE_URL` with `ROUTINE_FIRE_TOKEN` exactly as todo-hub's relay does.
 - Migration: `pg_cron` job every 5 minutes calling `/api/hub/events/reminders` through `pg_net`; an `after update` trigger on `items` that, when `claude` is newly added, calls `/api/hub/events/approved` through `pg_net`. The URL and token come from Supabase Vault secrets (`hub_events_url`, `hub_events_token`), which Mason sets in the dashboard; the builder writes the exact steps for him.
+- Backup (Decision 3; the free Supabase plan has no automatic backups): `POST /api/hub/events/backup`, called by a daily `pg_cron` job at 03:00 UTC. `snapshot(store): Promise<{ items: Item[]; comments: Comment[]; hubState: Record<string, unknown>; nowPlace: unknown[]; nowBake: unknown[]; takenAt: string }>` written as JSON to a **private** Vercel Blob at `hub-backups/YYYY-MM-DD.json`; keep the newest 30 and delete older backup files only. `scripts/hub-restore.ts <file> --target <db-url>` restores a snapshot into an empty database (it refuses a non-empty `items` table).
 
-- [ ] **Step 1: Write failing tests:** `dueReminders` returns an item due 3 minutes ago, skips one due 10 minutes ago, skips one already reminded, skips done and archived items; `approved` ignores an item without `claude` and one already `claude-working`; ROUTINE env vars missing → 503, nothing fired.
+- [ ] **Step 1: Write failing tests:** `dueReminders` returns an item due 3 minutes ago, skips one due 10 minutes ago, skips one already reminded, skips done and archived items; `approved` ignores an item without `claude` and one already `claude-working`; ROUTINE env vars missing → 503, nothing fired. `backup.test.ts`: a snapshot of a seeded store round-trips through `hub-restore` into an empty local database with equal row counts and ids; restore into a non-empty database exits non-zero; pruning keeps exactly the newest 30 files and never deletes a file outside `hub-backups/`.
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement.** Do not wire the live routine URL in this project (the cutover does); local test uses a stub URL.
-- [ ] **Step 4: Run** tests; on local Supabase, add `claude` to a seeded item and see the stub receive one call. Expected: PASS.
-- [ ] **Step 5: Commit** `feat(hub): reminders and approval fire via pg_cron`.
+- [ ] **Step 4: Run** tests; on local Supabase, add `claude` to a seeded item and see the stub receive one call. After the first production deploy, trigger one backup by hand and confirm the file exists in Blob. Expected: PASS.
+- [ ] **Step 5: Commit** `feat(hub): reminders, approval fire and daily backup`.
 
 ### Task 9: The agent connector
 
@@ -264,7 +268,7 @@ Manifest: `name` "Mason's hub", `start_url` `/hub/capture`, `scope` `/hub/`, `di
 
 - [ ] **Step 1: Write failing tests:** the registered tool names equal exactly the list above; `update_item` adding `claude` returns a tool error and leaves labels unchanged; `merge_duplicate` with `older == newer` errors; every write creates an `audit_log` row with the client name; no token → 401; e2e: connect with the MCP SDK client to `next dev`, call `add_item`, see it in `/hub`.
 - [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement.** If Open question 2 says claude.ai too, add Task 12 (OAuth for the connector) after Task 11; do not mix it into this task.
+- [ ] **Step 3: Implement.** Bearer token only (Decision 2); no OAuth flow.
 - [ ] **Step 4: Run** tests; then `claude mcp add --transport http hub-local http://localhost:3000/api/mcp/mcp --header "Authorization: Bearer $HUB_AGENT_TOKEN"` and ask Claude Code to "add a test item to my hub". Expected: PASS; item in the inbox.
 - [ ] **Step 5: Commit** `feat(hub): mcp agent connector with enforced rules`.
 
@@ -295,7 +299,7 @@ Manifest: `name` "Mason's hub", `start_url` `/hub/capture`, `scope` `/hub/`, `di
 - Consumes: the `bin/hub` CLI (Task 6) and the connector tools (Task 9).
 - Produces: a worker prompt that keeps todo-hub's sections 1 to 9 and their safety rules word for word where they still apply, replacing every Todoist connector step with the `hub` CLI command that now does it (`inbox`, `sort`, `merge`, `comments`), and "complete the newer task" with `hub merge`. A skill with todo-hub's behavior ("add that to my list", laptop tasks) using the `hub` connector tools. `docs/hub-cutover-notes.md`: the env vars, Vault secrets and routine changes project 5 must make. None of these are installed or activated.
 
-- [ ] **Step 1: Write the dry run:** seed 6 inbox items (a clear to-do, an idea, an unclear note, a duplicate pair, one `hidock-memo` with a transcript, one approved item); run the CLI steps the prompt calls for with canned decisions; assert: unclear note still in inbox untouched; duplicate pair → one open, one archived `merged` pointing at it; memo → pieces filed, memo archived `memo-split`; approved item → `claude-done` with a comment and one ntfy call to a stub; nothing deleted (row count only grows); no item is `done`.
+- [ ] **Step 1: Write the dry run** (local Supabase only, never the live project): seed 6 inbox items (a clear to-do, an idea, an unclear note, a duplicate pair, one `hidock-memo` with a transcript, one approved item); run the CLI steps the prompt calls for with canned decisions; assert: unclear note still in inbox untouched; duplicate pair → one open, one archived `merged` pointing at it; memo → pieces filed, memo archived `memo-split`; approved item → `claude-done` with a comment and one ntfy call to a stub; nothing deleted (row count only grows); no item is `done`.
 - [ ] **Step 2: Run.** Expected: FAIL until prompt-driven commands exist.
 - [ ] **Step 3: Write** the prompt, skill and notes. Diff the new prompt's safety section against todo-hub's and keep every rule.
 - [ ] **Step 4: Run** the dry run, the full unit and e2e suites, `npm run build`, and a Vercel preview deploy (preview only). Expected: all green; `/hub` works signed in on the preview.
@@ -308,8 +312,8 @@ Manifest: `name` "Mason's hub", `start_url` `/hub/capture`, `scope` `/hub/`, `di
 1. Database first (Task 1), then the rules and store everything shares (Task 2).
 2. Mason's way in: sign-in, pages, phone capture (Tasks 3 to 5).
 3. Machines' way in: worker API and CLI, memo relay, triggers, agent connector (Tasks 6 to 9).
-4. Board reads live data (Task 10), then the worker prompt, skill and an end-to-end dry run (Task 11). Nothing live switches until project 5.
+4. Board reads live data (Task 10), then the worker prompt, skill and an end-to-end dry run (Task 11). The private side goes live with Mason's production deploy; the existing todo-hub paths switch in project 5.
 
 ## Env vars this project adds (Mason sets them in Vercel; values in `.env.local` locally)
 
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `HUB_OWNER_GITHUB_ID`, `HUB_WORKER_TOKEN`, `HUB_AGENT_TOKEN`, `HUB_EVENTS_TOKEN`, `MEMO_UPLOAD_TOKEN`, `NTFY_TOPIC`, and (at cutover) `ROUTINE_FIRE_URL`, `ROUTINE_FIRE_TOKEN`. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` already exist from the leaderboard.
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `HUB_OWNER_GITHUB_ID`, `HUB_WORKER_TOKEN`, `HUB_AGENT_TOKEN`, `HUB_EVENTS_TOKEN`, `MEMO_UPLOAD_TOKEN`, `NTFY_TOPIC`, `BLOB_READ_WRITE_TOKEN` (private store for backups), `HUB_WORKER_LIVE` (`false` until project 5), and (at cutover) `ROUTINE_FIRE_URL`, `ROUTINE_FIRE_TOKEN`. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` already exist from the leaderboard.
