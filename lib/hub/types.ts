@@ -32,6 +32,7 @@ export type ItemQuery = {
   withLabels?: string[];
   withoutLabels?: string[];
   updatedBefore?: string;
+  mergedInto?: string;
   limit?: number;
 };
 

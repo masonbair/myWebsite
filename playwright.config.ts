@@ -1,15 +1,15 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
 import { FIXTURES, fixturePort, type Fixture } from "./tests/e2e/fixture-servers";
+import { HUB_LIVE_PORT, HUB_PORT } from "./tests/e2e/hub-ports";
 import { localSupabaseEnv } from "./tests/e2e/local-supabase";
 
 const PORT = 3100;
-const HUB_PORT = 3110;
 const HUB_SPECS = /hub-.*\.spec\.ts/;
 
 // Next rewrites the tsconfig it is given to include its distDir, so each fixture
 // server gets a throwaway tsconfig in .next instead of dirtying the real one.
-function fixtureTsconfig(f: Fixture | "hub"): string {
+function fixtureTsconfig(f: Fixture | "hub" | "hub-live"): string {
   mkdirSync(".next/e2e-tsconfig", { recursive: true });
   const file = `.next/e2e-tsconfig/${f}.json`;
   // Workers reload this config; rewriting while a server runs would make it restart.
@@ -39,22 +39,26 @@ const fixtureServers = FIXTURES.map((f) => ({
 // Hub specs need a real Supabase, so their server gets the local stack, never the live one.
 const localSupabase = localSupabaseEnv();
 
-const hubServer = {
-  command: `npx next dev -p ${HUB_PORT}`,
-  url: `http://localhost:${HUB_PORT}`,
-  reuseExistingServer: false,
-  timeout: 120_000,
-  env: {
-    GITHUB_TOKEN: "",
-    NEXT_PUBLIC_SUPABASE_URL: localSupabase.url,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: localSupabase.anonKey,
-    SUPABASE_URL: localSupabase.url,
-    SUPABASE_SERVICE_ROLE_KEY: localSupabase.serviceKey,
-    HUB_OWNER_GITHUB_ID: "77211262",
-    NEXT_DIST_DIR: ".next/e2e-hub",
-    NEXT_TSCONFIG: fixtureTsconfig("hub"),
-  },
-};
+function hubServer(port: number, name: "hub" | "hub-live", workerLive: boolean) {
+  return {
+    command: `npx next dev -p ${port}`,
+    url: `http://localhost:${port}`,
+    reuseExistingServer: false,
+    timeout: 120_000,
+    env: {
+      GITHUB_TOKEN: "",
+      NEXT_PUBLIC_SUPABASE_URL: localSupabase.url,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: localSupabase.anonKey,
+      SUPABASE_URL: localSupabase.url,
+      SUPABASE_SERVICE_ROLE_KEY: localSupabase.serviceKey,
+      HUB_OWNER_GITHUB_ID: "77211262",
+      // Set explicitly so a value in .env.local can never decide which state a test sees.
+      HUB_WORKER_LIVE: workerLive ? "true" : "false",
+      NEXT_DIST_DIR: `.next/e2e-${name}`,
+      NEXT_TSCONFIG: fixtureTsconfig(name),
+    },
+  };
+}
 
 export default defineConfig({
   testDir: "tests/e2e",
@@ -94,6 +98,7 @@ export default defineConfig({
       env: { GITHUB_TOKEN: "", SUPABASE_URL: "" },
     },
     ...fixtureServers,
-    hubServer,
+    hubServer(HUB_PORT, "hub", false),
+    hubServer(HUB_LIVE_PORT, "hub-live", true),
   ],
 });

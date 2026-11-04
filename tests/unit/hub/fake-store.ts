@@ -52,6 +52,7 @@ export function createFakeStore(actor: Actor, rows?: Rows): FakeStore {
         .filter((i) => (q.withLabels ?? []).every((l) => i.labels.includes(l)))
         .filter((i) => (q.withoutLabels ?? []).every((l) => !i.labels.includes(l)))
         .filter((i) => (q.updatedBefore ? i.updatedAt < q.updatedBefore : true))
+        .filter((i) => (q.mergedInto ? i.mergedInto === q.mergedInto : true))
         .slice(0, q.limit ?? 200);
     },
     async addItem(input) {

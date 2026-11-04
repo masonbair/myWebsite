@@ -81,6 +81,7 @@ describe.skipIf(!enabled)("hub store against local Supabase", () => {
     const dupe = await store.addItem({ title: "integration dupe", source: "test", clientKey: randomUUID() });
     const archived = await store.archive(dupe.id, "merged", keep.id, "Merged into the kept item");
     expect(archived.state).toBe("archived");
+    expect((await store.listItems({ mergedInto: keep.id })).map((i) => i.id)).toEqual([dupe.id]);
     expect((await store.listComments(dupe.id)).map((c) => c.body)).toEqual(["Merged into the kept item"]);
     expect(await store.claim(keep.id)).toBe(true);
     expect(await store.claim(keep.id)).toBe(false);

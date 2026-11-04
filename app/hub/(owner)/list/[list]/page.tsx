@@ -1,0 +1,40 @@
+import { notFound } from "next/navigation";
+import { ItemSection } from "@/components/hub/ItemRow";
+import { requireOwner } from "@/lib/auth/require-owner";
+import { LIST_NAMES } from "@/lib/hub/format";
+import { masonStore } from "@/lib/hub/mason-store";
+import type { Item } from "@/lib/hub/types";
+
+const LISTS = ["todo", "ideas"] as const;
+
+function isList(value: string): value is (typeof LISTS)[number] {
+  return (LISTS as readonly string[]).includes(value);
+}
+
+// Dated items first, soonest at the top; the rest stay newest first.
+function byDue(a: Item, b: Item): number {
+  if (a.due && b.due) return `${a.due.date}${a.due.time ?? ""}`.localeCompare(`${b.due.date}${b.due.time ?? ""}`);
+  if (a.due) return -1;
+  if (b.due) return 1;
+  return 0;
+}
+
+export async function generateMetadata({ params }: PageProps<"/hub/list/[list]">) {
+  const { list } = await params;
+  return { title: isList(list) ? LIST_NAMES[list] : "Hub" };
+}
+
+export default async function ListPage({ params }: PageProps<"/hub/list/[list]">) {
+  await requireOwner();
+  const { list } = await params;
+  if (!isList(list)) notFound();
+  const items = (await (await masonStore()).listItems({ list, state: "open" })).sort(byDue);
+  const name = LIST_NAMES[list];
+
+  return (
+    <main>
+      <h1 className="mb-8 text-3xl font-semibold tracking-tight">{name}</h1>
+      <ItemSection id="open-items" title="Open" items={items} empty={`Nothing in ${name}.`} />
+    </main>
+  );
+}

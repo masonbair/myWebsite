@@ -124,4 +124,13 @@ describe("fake store rules", () => {
     expect((await store.getItem(first.id))?.labels).toEqual(["claude-done"]);
     expect((await store.listItems({})).map((i) => i.id)).toEqual([second.id, first.id]);
   });
+
+  it("lists the items merged into a given item", async () => {
+    const store = createFakeStore(worker);
+    const keep = await store.addItem({ title: "keep", source: "test" });
+    const dupe = await store.addItem({ title: "dupe", source: "test" });
+    await store.addItem({ title: "other", source: "test" });
+    await store.archive(dupe.id, "merged", keep.id, "Merged into keep");
+    expect((await store.listItems({ mergedInto: keep.id })).map((i) => i.id)).toEqual([dupe.id]);
+  });
 });
