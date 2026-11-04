@@ -5,7 +5,20 @@ import { Tile } from "../Tile";
 const PROFILE = "https://github.com/masonbair";
 const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 const plural = (n: number, word: string) => `${word}${n === 1 ? "" : "s"}`;
-const formatCount = new Intl.NumberFormat("en-US").format;
+const countFormat = new Intl.NumberFormat("en-US");
+
+// Geist Mono gives the comma a full digit slot, so separators use the sans font to keep "1,331" tight.
+function Count({ n }: { n: number }) {
+  return countFormat.formatToParts(n).map((p, i) =>
+    p.type === "group" ? (
+      <span key={i} className="-ml-[0.04em] font-sans tracking-[-0.12em]">
+        {p.value}
+      </span>
+    ) : (
+      p.value
+    ),
+  );
+}
 
 export function GithubTile({ github }: { github: GithubActivity | null }) {
   if (!github) {
@@ -35,7 +48,9 @@ export function GithubTile({ github }: { github: GithubActivity | null }) {
           <GithubLogo weight="light" size={28} className="text-ink" aria-label="GitHub profile" />
         </a>
         <p className="mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="font-mono text-6xl leading-none font-medium tracking-tighter text-accent-ink lg:text-5xl xl:text-6xl">{formatCount(total30d)}</span>
+          <span className="font-mono text-6xl leading-none font-medium tracking-tighter text-accent-ink lg:text-5xl xl:text-6xl">
+            <Count n={total30d} />
+          </span>
           <span className="text-xl font-semibold text-ink">{plural(total30d, "contribution")}</span>
         </p>
         <p className="mt-1 text-sm text-mute">last 30 days</p>
