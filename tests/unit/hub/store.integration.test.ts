@@ -5,16 +5,15 @@ import { ForbiddenError } from "@/lib/hub/rules";
 import { createHubStore } from "@/lib/hub/store";
 
 // Run with: HUB_TEST_DB_URL=1 HUB_TEST_SUPABASE_URL=http://127.0.0.1:54321 HUB_TEST_SERVICE_KEY=<local key from `supabase status -o env`>
+// HUB_TEST_DB_URL is the gate flag; the suite also refuses to load unless the API URL is local, because test rows can never be deleted.
 const enabled = Boolean(process.env.HUB_TEST_DB_URL);
 const apiUrl = process.env.HUB_TEST_SUPABASE_URL ?? "";
 const serviceKey = process.env.HUB_TEST_SERVICE_KEY ?? "";
+if (enabled && !/^(127\.0\.0\.1|localhost)$/.test(new URL(apiUrl || "http://invalid").hostname)) {
+  throw new Error("HUB_TEST_SUPABASE_URL must be a local Supabase (127.0.0.1 or localhost)");
+}
 
 describe.skipIf(!enabled)("hub store against local Supabase", () => {
-  it("only talks to a local database", () => {
-    expect(new URL(apiUrl).hostname).toMatch(/^(127\.0\.0\.1|localhost)$/);
-    expect(serviceKey).not.toBe("");
-  });
-
   const client = () => createClient(apiUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const agent = { kind: "agent", client: "integration" } as const;
   const worker = { kind: "worker", runId: "integration" } as const;
@@ -33,6 +32,21 @@ describe.skipIf(!enabled)("hub store against local Supabase", () => {
     expect(second.id).toBe(first.id);
   });
 
+  it("refuses an empty archive note and a protected label on add, leaving no rows", async () => {
+    const store = createHubStore(client(), worker);
+    const item = await store.addItem({ title: "integration note", source: "test", clientKey: randomUUID() });
+    await expect(store.archive(item.id, "memo-split", null, " ")).rejects.toThrow(ForbiddenError);
+    expect((await store.getItem(item.id))?.state).toBe("open");
+    await expect(store.addItem({ title: "integration claude", labels: ["claude"], source: "test" })).rejects.toThrow(ForbiddenError);
+  });
+
+  it("limits hub state to the worker", async () => {
+    await expect(createHubStore(client(), agent).getHubState("x")).rejects.toThrow(ForbiddenError);
+    const key = `integration-${randomUUID()}`;
+    await createHubStore(client(), worker).setHubState(key, { ok: true });
+    expect(await createHubStore(client(), worker).getHubState(key)).toEqual({ ok: true });
+  });
+
   it("backstops completion in the database even for the service role", async () => {
     const store = createHubStore(client(), agent);
     const item = await store.addItem({ title: "integration backstop", source: "test", clientKey: randomUUID() });
@@ -42,7 +56,12 @@ describe.skipIf(!enabled)("hub store against local Supabase", () => {
 
   it("archives with a note, claims once and writes audit rows", async () => {
     const store = createHubStore(client(), worker);
-    const keep = await store.addItem({ title: "integration keep", labels: ["claude"], source: "test", clientKey: randomUUID() });
+    const keep = await createHubStore(client(), { kind: "mason" }).addItem({
+      title: "integration keep",
+      labels: ["claude"],
+      source: "test",
+      clientKey: randomUUID(),
+    });
     const dupe = await store.addItem({ title: "integration dupe", source: "test", clientKey: randomUUID() });
     const archived = await store.archive(dupe.id, "merged", keep.id, "Merged into the kept item");
     expect(archived.state).toBe("archived");
@@ -53,6 +72,6 @@ describe.skipIf(!enabled)("hub store against local Supabase", () => {
     expect((await store.getItem(keep.id))?.labels.sort()).toEqual(["claude", "claude-done"]);
     const { data } = await client().from("audit_log").select("actor, action").eq("item_id", keep.id);
     expect(data?.every((row) => row.actor === "worker:integration")).toBe(true);
-    expect(data?.map((row) => row.action)).toEqual(expect.arrayContaining(["add", "claim", "set-status-labels"]));
+    expect(data?.map((row) => row.action)).toEqual(expect.arrayContaining(["claim", "set-status-labels"]));
   });
 });

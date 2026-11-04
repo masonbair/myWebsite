@@ -56,7 +56,8 @@ export type HubAction =
   | "reopen"
   | "archive"
   | "claim"
-  | "set-status-labels";
+  | "set-status-labels"
+  | "hub-state";
 
 export type ArchiveReason = "merged" | "memo-split";
 

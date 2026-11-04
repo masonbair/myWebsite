@@ -1,10 +1,12 @@
 import {
   assertAllowed,
+  assertArchiveAllowed,
   assertArchiveArgs,
   assertLabelChangeAllowed,
   assertStatusLabels,
   STATUS_LABELS,
   CLAUDE_LABEL,
+  pickPatch,
 } from "@/lib/hub/rules";
 import { ITEM_URL_BASE } from "@/lib/hub/store";
 import type { Actor, Comment, HubStore, Item } from "@/lib/hub/types";
@@ -44,15 +46,17 @@ export function createFakeStore(actor: Actor, rows?: Rows): FakeStore {
     async listItems(q) {
       assertAllowed(actor, "read");
       return [...data.items.values()]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .filter((i) => (q.list ? i.list === q.list : true))
         .filter((i) => (q.state ? i.state === q.state : true))
         .filter((i) => (q.withLabels ?? []).every((l) => i.labels.includes(l)))
         .filter((i) => (q.withoutLabels ?? []).every((l) => !i.labels.includes(l)))
         .filter((i) => (q.updatedBefore ? i.updatedAt < q.updatedBefore : true))
-        .slice(0, q.limit ?? 100);
+        .slice(0, q.limit ?? 200);
     },
     async addItem(input) {
       assertAllowed(actor, "add");
+      assertLabelChangeAllowed(actor, [], input.labels ?? []);
       if (input.clientKey) {
         const existing = data.clientKeys.get(input.clientKey);
         if (existing) return need(existing);
@@ -81,7 +85,7 @@ export function createFakeStore(actor: Actor, rows?: Rows): FakeStore {
       assertAllowed(actor, "update");
       const item = need(id);
       if (patch.labels) assertLabelChangeAllowed(actor, item.labels, patch.labels);
-      return save(item, patch);
+      return save(item, pickPatch(patch));
     },
     async complete(id) {
       assertAllowed(actor, "complete");
@@ -94,7 +98,9 @@ export function createFakeStore(actor: Actor, rows?: Rows): FakeStore {
     async archive(id, reason, mergedInto, note) {
       assertAllowed(actor, "archive");
       assertArchiveArgs(reason, mergedInto, id);
-      const archived = save(need(id), { state: "archived", mergedInto });
+      const current = need(id);
+      assertArchiveAllowed(actor, current.state, note);
+      const archived = save(current, { state: "archived", mergedInto });
       data.comments.push({
         id: nextId(),
         itemId: id,
@@ -117,7 +123,7 @@ export function createFakeStore(actor: Actor, rows?: Rows): FakeStore {
       assertStatusLabels(labels);
       const item = need(id);
       const others = item.labels.filter((l) => !(STATUS_LABELS as readonly string[]).includes(l));
-      save(item, { labels: [...others, ...labels] });
+      save(item, { labels: [...others, ...new Set(labels)] });
     },
     async addComment(itemId, body) {
       assertAllowed(actor, "comment");
@@ -137,11 +143,11 @@ export function createFakeStore(actor: Actor, rows?: Rows): FakeStore {
       return data.comments.filter((c) => c.itemId === itemId);
     },
     async getHubState(key) {
-      assertAllowed(actor, "read");
+      assertAllowed(actor, "hub-state");
       return data.state.has(key) ? data.state.get(key) : null;
     },
     async setHubState(key, value) {
-      assertAllowed(actor, "update");
+      assertAllowed(actor, "hub-state");
       data.state.set(key, value);
     },
   };

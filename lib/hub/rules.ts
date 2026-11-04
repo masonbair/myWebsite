@@ -1,4 +1,4 @@
-import type { Actor, ArchiveReason, HubAction } from "./types";
+import type { Actor, ArchiveReason, HubAction, Item, ItemPatch } from "./types";
 
 export class ForbiddenError extends Error {
   constructor(message: string) {
@@ -20,6 +20,7 @@ const ALLOWED: Record<HubAction, Actor["kind"][]> = {
   archive: ["mason", "worker", "agent"],
   claim: ["worker"],
   "set-status-labels": ["worker"],
+  "hub-state": ["worker"],
 };
 
 export function assertAllowed(actor: Actor, action: HubAction): void {
@@ -63,4 +64,22 @@ export function auditActor(actor: Actor): string {
   if (actor.kind === "worker") return `worker:${actor.runId}`;
   if (actor.kind === "agent") return `agent:${actor.client}`;
   return "mason";
+}
+
+export function assertArchiveAllowed(actor: Actor, state: Item["state"], note: string): void {
+  if (note.trim() === "") throw new ForbiddenError("archiving needs a note");
+  if (state === "done" && actor.kind !== "mason") {
+    throw new ForbiddenError(`${actor.kind} may not archive a done item`);
+  }
+}
+
+const PATCH_FIELDS = ["title", "description", "labels", "list", "due"] as const;
+
+/** Keeps only editable fields, so a runtime patch cannot smuggle in state or mergedInto. */
+export function pickPatch(patch: ItemPatch): ItemPatch {
+  const picked: Record<string, unknown> = {};
+  for (const field of PATCH_FIELDS) {
+    if (patch[field] !== undefined) picked[field] = patch[field];
+  }
+  return picked as ItemPatch;
 }

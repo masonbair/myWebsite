@@ -2,10 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   STATUS_LABELS,
   assertAllowed,
+  assertArchiveAllowed,
   assertArchiveArgs,
   assertLabelChangeAllowed,
   assertStatusLabels,
   auditActor,
+  pickPatch,
 } from "./rules";
 import type { Actor, Comment, HubAction, HubStore, Item, ItemPatch, ItemQuery } from "./types";
 
@@ -58,7 +60,8 @@ function toComment(row: CommentRow): Comment {
   return { id: row.id, itemId: row.item_id, body: row.body, author: row.author, createdAt: row.created_at };
 }
 
-function toPatchColumns(patch: ItemPatch): Record<string, unknown> {
+function toPatchColumns(rawPatch: ItemPatch): Record<string, unknown> {
+  const patch = pickPatch(rawPatch);
   const columns: Record<string, unknown> = {};
   if (patch.title !== undefined) columns.title = patch.title;
   if (patch.description !== undefined) columns.description = patch.description;
@@ -141,6 +144,7 @@ export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
 
     async addItem(input) {
       assertAllowed(actor, "add");
+      assertLabelChangeAllowed(actor, [], input.labels ?? []);
       if (input.clientKey) {
         const existing = await itemByClientKey(input.clientKey);
         if (existing) return existing;
@@ -195,12 +199,14 @@ export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
     async archive(id, reason, mergedInto, note) {
       assertAllowed(actor, "archive");
       assertArchiveArgs(reason, mergedInto, id);
+      const current = await requireItem(id);
+      assertArchiveAllowed(actor, current.state, note);
+      await insertComment(id, note);
       const item = await updateColumns(id, {
         state: "archived",
         archived_reason: reason,
         merged_into: mergedInto,
       });
-      await insertComment(id, note);
       await audit("archive", id, { reason, mergedInto });
       return item;
     },
@@ -243,14 +249,14 @@ export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
     },
 
     async getHubState(key) {
-      assertAllowed(actor, "read");
+      assertAllowed(actor, "hub-state");
       const { data, error } = await client.from("hub_state").select("value").eq("key", key).maybeSingle();
       if (error) throw error;
       return data ? data.value : null;
     },
 
     async setHubState(key, value) {
-      assertAllowed(actor, "update");
+      assertAllowed(actor, "hub-state");
       const { error } = await client
         .from("hub_state")
         .upsert({ key, value, updated_at: new Date().toISOString() });
