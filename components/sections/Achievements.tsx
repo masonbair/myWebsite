@@ -25,8 +25,8 @@ const cells: Cell[] = [
 
 const tones = {
   surface: { core: "bg-surface", title: "text-ink", body: "text-mute", chip: "bg-ink/5 text-mute" },
-  accent: { core: "bg-accent", title: "text-night", body: "text-night/85", chip: "bg-night/10 text-night" },
-  tea: { core: "bg-tea", title: "text-night", body: "text-night/85", chip: "bg-night/10 text-night" },
+  accent: { core: "bg-accent", title: "text-night", body: "text-night", chip: "bg-night/10 text-night" },
+  tea: { core: "bg-tea", title: "text-night", body: "text-night", chip: "bg-night/10 text-night" },
 };
 
 const STRIP_HEIGHT = { base: 256, md: 320 };
