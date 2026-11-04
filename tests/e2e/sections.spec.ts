@@ -47,6 +47,16 @@ test("no phone number in page HTML", async ({ request }) => {
   expect(html).not.toContain("tel:");
 });
 
+test("resume contact block links to the coffee chat page", async ({ page }) => {
+  await page.goto("/");
+  const link = page.locator("#resume").getByRole("link", { name: "Book a coffee chat" });
+  await link.scrollIntoViewIfNeeded();
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute("href", "/coffee");
+  await link.click();
+  await expect(page).toHaveURL(/\/coffee$/);
+});
+
 test("ended roles are in the past and copy is current", async ({ request }) => {
   const html = await (await request.get("/")).text();
   expect(html).not.toContain("to present");

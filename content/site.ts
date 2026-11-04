@@ -215,6 +215,8 @@ export const contact = {
   linkedin: "https://www.linkedin.com/in/masonbair/",
 };
 
+export const coffeeChat = { href: "/coffee", label: "Book a coffee chat" };
+
 export const resumeHref = "/misc/Mason_Bair_Resume_01_20_2026.pdf";
 
 export const siteUrl = "https://masonbair.com";

@@ -1,5 +1,6 @@
-import { ArrowUpRight, DownloadSimple } from "@phosphor-icons/react/dist/ssr";
-import { contact, education, resumeHref, skills } from "@/content/site";
+import { ArrowRight, ArrowUpRight, Coffee, DownloadSimple } from "@phosphor-icons/react/dist/ssr";
+import Link from "next/link";
+import { coffeeChat, contact, education, resumeHref, skills } from "@/content/site";
 import { Tile } from "../board/Tile";
 import { sectionShell } from "./Section";
 
@@ -52,8 +53,18 @@ export function Resume() {
           </div>
         </div>
 
-        <div className="mt-12 border-t border-ink/10 pt-8">
+        <div className="mt-12 flex flex-col gap-6 border-t border-ink/10 pt-8 lg:flex-row lg:items-center lg:justify-between">
           <h3 className="sr-only">Contact</h3>
+          <Link
+            href={coffeeChat.href}
+            className={`group inline-flex items-center gap-3 self-start rounded-full bg-accent/15 py-2 pr-2 pl-5 text-base font-semibold whitespace-nowrap text-accent-ink transition-transform duration-300 ease-spring active:scale-[0.98] lg:order-last ${focusRing}`}
+          >
+            <Coffee weight="light" size={20} aria-hidden />
+            {coffeeChat.label}
+            <span className="flex size-9 items-center justify-center rounded-full bg-accent/15 transition-transform duration-300 ease-spring group-hover:translate-x-0.5">
+              <ArrowRight weight="light" size={18} aria-hidden />
+            </span>
+          </Link>
           <ul className="flex flex-wrap gap-x-8 gap-y-3">
             <li>
               <a href={`mailto:${contact.email}`} className={linkClass}>
