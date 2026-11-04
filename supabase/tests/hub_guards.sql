@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(59);
+select plan(64);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000a', 'owner@example.com'),
@@ -109,6 +109,27 @@ select lives_ok(
 select throws_ok(
   $$ update public.comments set author = 'mason' where id = '20000000-0000-0000-0000-000000000002' $$,
   'P0001', null, 'service_role cannot relabel a comment as mason');
+select throws_ok(
+  $$ update public.comments set body = 'rewritten' where id = '20000000-0000-0000-0000-000000000001' $$,
+  'P0001', null, 'service_role cannot rewrite a comment body');
+
+select throws_ok(
+  $$ update public.items set labels = array['todo', null] where id = '10000000-0000-0000-0000-000000000003' $$,
+  '23514', null, 'labels cannot hold a null element');
+
+-- Drop the check (rolled back) to prove the trigger alone also refuses the null-element paths.
+reset role;
+alter table public.items drop constraint items_labels_no_null;
+set local role service_role;
+select throws_ok(
+  $$ insert into public.items (title, source, labels) values ('null approved', 'test', array['todo', null, 'claude']) $$,
+  'P0001', null, 'trigger refuses claude next to a null element on insert');
+select throws_ok(
+  $$ update public.items set labels = array['todo', null, 'claude'] where id = '10000000-0000-0000-0000-000000000003' $$,
+  'P0001', null, 'trigger refuses claude next to a null element on update');
+select throws_ok(
+  $$ update public.items set labels = array['todo', null] where id = '10000000-0000-0000-0000-000000000007' $$,
+  'P0001', null, 'trigger refuses dropping claude behind a null element');
 
 reset role;
 update public.items
@@ -126,7 +147,10 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}';
 
 select is(public.is_owner(), true, 'owner is recognised');
-select is((select count(*)::int from public.items), 8, 'owner sees every item');
+-- Count only fixture rows: the local database is shared with other test runs whose rows can never be deleted.
+select is(
+  (select count(*)::int from public.items where id::text like '10000000-0000-0000-0000-%'),
+  8, 'owner sees every item');
 select lives_ok(
   $$ update public.items set state = 'done' where id = '10000000-0000-0000-0000-000000000002' $$,
   'owner can complete an item');

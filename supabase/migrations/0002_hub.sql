@@ -9,7 +9,7 @@ create table public.items (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   description text not null default '',
-  labels text[] not null default '{}',
+  labels text[] not null default '{}' constraint items_labels_no_null check (array_position(labels, null) is null),
   list text not null default 'inbox' check (list in ('inbox', 'todo', 'ideas')),
   state text not null default 'open' check (state in ('open', 'done', 'archived')),
   due_date date,
@@ -85,15 +85,17 @@ declare
   -- Any role can set request.jwt.claims on itself, so auth.uid() alone is only trusted for the authenticated role.
   caller_is_owner boolean := current_user = 'authenticated' and public.is_owner();
   previous_labels text[] := case when tg_op = 'UPDATE' then old.labels else '{}' end;
-  had_claude boolean := 'claude' = any(previous_labels);
-  has_claude boolean := 'claude' = any(new.labels);
+  -- Containment, not `= any`, so a null element can never turn these checks into NULL and skip them.
+  had_claude boolean := coalesce(previous_labels @> array['claude'], false);
+  has_claude boolean := coalesce(new.labels @> array['claude'], false);
+  has_finish_status boolean := coalesce(new.labels && array['claude-done', 'claude-question'], false);
 begin
   if has_claude and not had_claude and not caller_is_owner then
     raise exception 'only the owner can approve an item for claude';
   end if;
   -- The worker drops claude only when it finishes or blocks (todo-hub lifecycle.ts finishLabels/blockLabels).
   if had_claude and not has_claude and not caller_is_owner
-     and not new.labels && array['claude-done', 'claude-question'] then
+     and not has_finish_status then
     raise exception 'only the owner can remove the claude label';
   end if;
   if new.state = 'done' and previous_state <> 'done' and not caller_is_owner then
@@ -152,19 +154,25 @@ create trigger memo_files_no_truncate before truncate on public.memo_files
 create trigger audit_log_no_truncate before truncate on public.audit_log
   for each statement execute function public.hub_no_delete();
 
-create function public.comments_guard_author() returns trigger
+-- Comments are append-only for everyone but the signed-in owner, so nobody can rewrite or reattribute what Mason said.
+create function public.comments_guard() returns trigger
 language plpgsql set search_path = ''
 as $$
+declare
+  caller_is_owner boolean := current_user = 'authenticated' and public.is_owner();
 begin
-  if new.author = 'mason' and not (current_user = 'authenticated' and public.is_owner()) then
+  if tg_op = 'UPDATE' and not caller_is_owner then
+    raise exception 'only the signed-in owner can edit a comment';
+  end if;
+  if new.author = 'mason' and not caller_is_owner then
     raise exception 'only the signed-in owner can write as mason';
   end if;
   return new;
 end;
 $$;
 
-create trigger comments_guard_author before insert or update of author on public.comments
-  for each row execute function public.comments_guard_author();
+create trigger comments_guard before insert or update on public.comments
+  for each row execute function public.comments_guard();
 
 create function public.hub_claim(p_item uuid, p_stale interval default '2 hours') returns boolean
 language sql set search_path = ''
