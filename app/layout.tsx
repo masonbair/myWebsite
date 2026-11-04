@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { Nav } from "@/components/Nav";
+import { LazyCatGame } from "@/components/game/LazyGame";
+import { siteUrl } from "@/content/site";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakarta" });
@@ -9,15 +11,13 @@ const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono"
 const description =
   "I'm Mason Bair, a software engineer, baker, and traveler who has been to 23 countries and graduated from Kent State in May 2026.";
 
+// Share images come from the opengraph-image files, so none are listed here.
 export const metadata: Metadata = {
-  metadataBase: new URL("https://masonbair.com"),
-  title: "Mason Bair",
+  metadataBase: new URL(siteUrl),
+  title: { default: "Mason Bair", template: "%s | Mason Bair" },
   description,
-  openGraph: {
-    title: "Mason Bair",
-    description,
-    images: ["/misc/Mason_web.webp"],
-  },
+  openGraph: { type: "website", siteName: "Mason Bair", title: "Mason Bair", description, url: "/" },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -26,6 +26,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="font-sans antialiased">
         <Nav />
         {children}
+        <LazyCatGame />
       </body>
     </html>
   );

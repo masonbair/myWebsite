@@ -1,0 +1,176 @@
+import type { Metadata } from "next";
+import Image from "next/image";
+import {
+  AirplaneTilt,
+  ArrowUpRight,
+  CalendarPlus,
+  Compass,
+  GithubLogo,
+  GlobeHemisphereWest,
+  LinkedinLogo,
+  ShieldCheck,
+  Trophy,
+} from "@phosphor-icons/react/dist/ssr";
+import type { Icon } from "@phosphor-icons/react";
+import { Reveal } from "@/components/board/Reveal";
+import { Tile } from "@/components/board/Tile";
+import { JsonLd } from "@/components/JsonLd";
+import { bookingUrl, coffee, type TopicIcon } from "@/content/coffee";
+import { contact } from "@/content/site";
+import { coffeeJsonLd } from "@/lib/jsonld";
+
+export const metadata: Metadata = {
+  title: coffee.title,
+  description: coffee.description,
+  alternates: { canonical: "/coffee" },
+  openGraph: { type: "website", siteName: "Mason Bair", title: coffee.heading, description: coffee.description, url: "/coffee" },
+};
+
+const topicIcons: Record<TopicIcon, Icon> = {
+  shield: ShieldCheck,
+  trophy: Trophy,
+  compass: Compass,
+  plane: AirplaneTilt,
+};
+
+const photo = {
+  src: "/misc/Mason_traveling.webp",
+  alt: "Mason smiling in a red bucket hat and sunglasses, taking a selfie on a roadside with green mountains and a river valley behind him",
+};
+
+const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+
+const elsewhere = [
+  { label: "GitHub", href: contact.github, icon: GithubLogo },
+  { label: "LinkedIn", href: contact.linkedin, icon: LinkedinLogo },
+];
+
+export default function CoffeePage() {
+  return (
+    // The tall bottom padding keeps the last section clear of the corner cat.
+    <main className="mx-auto w-full max-w-[1400px] px-4 pt-24 pb-48 md:px-8">
+      <JsonLd data={coffeeJsonLd()} />
+
+      <div className="grid gap-4 lg:grid-cols-12">
+        <Reveal index={0} className="lg:col-span-7">
+          <Tile core="flex flex-col bg-surface p-7 md:p-12">
+            <h1 className="max-w-[14ch] text-5xl leading-[0.95] font-extrabold tracking-tighter text-ink md:text-7xl">
+              {coffee.heading}
+            </h1>
+            <div className="mt-6 max-w-[52ch] space-y-1 text-lg leading-relaxed text-mute md:text-xl">
+              {coffee.bio.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+            </div>
+            <a
+              href={bookingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`group mt-8 inline-flex items-center gap-3 self-start rounded-full bg-accent-ink py-2 pr-2 pl-6 text-base font-semibold whitespace-nowrap text-snow transition-transform duration-300 ease-spring active:scale-[0.98] dark:text-night ${focusRing}`}
+            >
+              Book a time
+              <span className="flex size-9 items-center justify-center rounded-full bg-snow/15 transition-transform duration-300 ease-spring group-hover:translate-x-0.5 group-hover:-translate-y-px dark:bg-night/10">
+                <CalendarPlus weight="light" size={18} aria-hidden />
+              </span>
+            </a>
+            <dl className="mt-auto grid grid-cols-3 gap-4 pt-12">
+              {coffee.format.map(({ label, value }) => (
+                <div key={label}>
+                  <dt className="text-sm text-mute">{label}</dt>
+                  <dd className="mt-1 text-lg font-semibold tracking-tight text-ink md:text-xl">
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </Tile>
+        </Reveal>
+
+        <Reveal index={1} className="lg:col-span-5">
+          <Tile core="aspect-[4/5] bg-ink/5 lg:aspect-auto lg:min-h-[36rem]">
+            <Image
+              src={photo.src}
+              alt={photo.alt}
+              fill
+              preload
+              sizes="(min-width: 1400px) 540px, (min-width: 1024px) 40vw, calc(100vw - 32px)"
+              className="object-cover object-[50%_35%]"
+            />
+          </Tile>
+        </Reveal>
+
+        <Reveal index={2} className="lg:col-span-8">
+          <Tile core="bg-surface p-7 md:p-10">
+            <h2 className="text-2xl font-bold tracking-tight text-ink md:text-3xl">{coffee.topicsHeading}</h2>
+            <ul className="mt-8 grid gap-x-10 gap-y-7 sm:grid-cols-2">
+              {coffee.topics.map(({ icon, label, detail }) => {
+                const TopicGlyph = topicIcons[icon];
+                return (
+                  <li key={label} className="flex gap-4">
+                    <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent-ink">
+                      <TopicGlyph weight="light" size={22} aria-hidden />
+                    </span>
+                    <div>
+                      <p className="font-semibold text-ink">{label}</p>
+                      <p className="mt-1 text-[15px] leading-relaxed text-mute">{detail}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="mt-10 text-base text-ink">{coffee.audience}</p>
+          </Tile>
+        </Reveal>
+
+        <Reveal index={3} className="lg:col-span-4">
+          <Tile core="flex flex-col bg-tea p-7 text-night md:p-10">
+            <GlobeHemisphereWest weight="light" size={40} aria-hidden />
+            <h2 className="mt-auto pt-10 text-2xl font-bold tracking-tight md:text-3xl">{coffee.timeZoneHeading}</h2>
+            <p className="mt-3 max-w-[36ch] text-base leading-relaxed text-night/80">{coffee.timeZoneNote}</p>
+          </Tile>
+        </Reveal>
+      </div>
+
+      <section aria-labelledby="faq-title" className="mt-24 md:mt-32">
+        <h2 id="faq-title" className="text-4xl leading-none font-bold tracking-tighter text-ink md:text-5xl">
+          {coffee.faqHeading}
+        </h2>
+        <dl data-testid="faq" className="mt-10 grid max-w-5xl gap-x-16 gap-y-10 md:grid-cols-2">
+          {coffee.faqs.map(({ q, a }) => (
+            <div key={q}>
+              <dt className="text-lg font-semibold tracking-tight text-ink">{q}</dt>
+              <dd className="mt-2 max-w-[48ch] leading-relaxed text-mute">{a}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      <section aria-labelledby="elsewhere-title" className="mt-24 md:mt-32">
+        <h2 id="elsewhere-title" className="text-2xl font-bold tracking-tight text-ink">
+          {coffee.linksHeading}
+        </h2>
+        <ul className="mt-6 flex flex-wrap gap-3">
+          {elsewhere.map(({ label, href, icon: Glyph }) => (
+            <li key={label}>
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`group inline-flex items-center gap-2 rounded-full bg-ink/5 py-2.5 pr-4 pl-4 text-sm font-medium text-ink transition-transform duration-300 ease-spring active:scale-[0.98] ${focusRing}`}
+              >
+                <Glyph weight="light" size={18} aria-hidden />
+                {label}
+                <ArrowUpRight
+                  weight="light"
+                  size={14}
+                  aria-hidden
+                  className="text-mute transition-transform duration-300 ease-spring group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                />
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </main>
+  );
+}

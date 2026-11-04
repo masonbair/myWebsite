@@ -2,10 +2,11 @@ import { ArrowUpRight } from "@phosphor-icons/react/dist/ssr";
 import { LazyScorePill } from "./game/LazyGame";
 import { NavMenu, type NavLink } from "./NavMenu";
 
+// Root-relative so the section links also work from /coffee; on / they stay same-page jumps.
 const links: NavLink[] = [
-  { label: "About", href: "#about" },
-  { label: "Work", href: "#projects" },
-  { label: "Résumé", href: "#resume" },
+  { label: "About", href: "/#about" },
+  { label: "Work", href: "/#projects" },
+  { label: "Résumé", href: "/#resume" },
   { label: "GitHub", href: "https://github.com/masonbair", external: true },
   { label: "LinkedIn", href: "https://www.linkedin.com/in/masonbair/", external: true },
 ];
@@ -22,8 +23,10 @@ export function Nav() {
         aria-label="Main"
         className="pointer-events-auto relative flex h-14 w-full items-center justify-between gap-6 rounded-full pr-2 pl-5 before:absolute before:inset-0 before:rounded-full before:bg-surface/75 before:shadow-tile before:ring-1 before:ring-ink/5 before:backdrop-blur-xl md:w-auto"
       >
+        {/* A plain anchor keeps next/link (about 7 KB) off the home page; "/#" is a same-page jump to the top on /. */}
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
         <a
-          href="#"
+          href="/#"
           className={`relative rounded-full text-[15px] font-semibold tracking-tight text-ink ${focusRing}`}
         >
           Mason Bair
