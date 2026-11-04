@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { fixtureUrl } from "./fixture-servers";
 
 test("full board shows location", async ({ page }) => {
@@ -112,4 +112,65 @@ test("github count never clips", async ({ page }) => {
       expect(clipped, `${n} ${label} at ${width}px`).toBe(false);
     }
   }
+});
+
+test.describe("photo slideshow", () => {
+  const slideshow = (page: Page) => page.getByRole("group", { name: "Photo slideshow" });
+  const visiblePhoto = (page: Page) => slideshow(page).locator('img:not([aria-hidden="true"])');
+
+  test("pause button stops rotation, and so does keyboard focus", async ({ page }) => {
+    await page.clock.install();
+    await page.goto("/");
+    const pause = page.getByRole("button", { name: "Pause photo slideshow" });
+    await expect(pause).toBeVisible();
+    await expect(pause).toHaveAttribute("aria-pressed", "false");
+    const first = await visiblePhoto(page).getAttribute("alt");
+    await page.clock.fastForward(6500);
+    await expect(visiblePhoto(page)).not.toHaveAttribute("alt", first!);
+
+    await pause.click();
+    await page.mouse.move(0, 0);
+    await expect(pause).toHaveAttribute("aria-pressed", "true");
+    const held = await visiblePhoto(page).getAttribute("alt");
+    await page.clock.fastForward(20_000);
+    await expect(visiblePhoto(page)).toHaveAttribute("alt", held!);
+
+    // Unpaused but still focused: focus alone keeps it still.
+    await pause.click();
+    await page.mouse.move(0, 0);
+    await expect(pause).toHaveAttribute("aria-pressed", "false");
+    await expect(pause).toBeFocused();
+    await page.clock.fastForward(20_000);
+    await expect(visiblePhoto(page)).toHaveAttribute("alt", held!);
+
+    await pause.blur();
+    await page.clock.fastForward(6500);
+    await expect(visiblePhoto(page)).not.toHaveAttribute("alt", held!);
+  });
+
+  test.describe("without javascript", () => {
+    test.use({ javaScriptEnabled: false });
+
+    test("only the first photo is in the server HTML", async ({ page }) => {
+      await page.goto("/");
+      await expect(slideshow(page).locator("img")).toHaveCount(1);
+      await expect(slideshow(page).locator("img")).toHaveAttribute("loading", "eager");
+      const src = await slideshow(page).locator("img").getAttribute("src");
+      const file = new URL(src!, "http://x").searchParams.get("url") ?? src!;
+      await expect(page.locator(`link[rel="preload"][imagesrcset*="${encodeURIComponent(file)}"]`)).toHaveCount(0);
+    });
+  });
+
+  test.describe("reduced motion", () => {
+    test.use({ reducedMotion: "reduce" });
+
+    test("stays on one photo with no control", async ({ page }) => {
+      await page.goto("/");
+      await expect(page.getByRole("heading", { name: "Hi, I'm Mason." })).toBeVisible();
+      await page.waitForLoadState("load");
+      await page.waitForTimeout(500);
+      await expect(page.getByRole("button", { name: "Pause photo slideshow" })).toHaveCount(0);
+      await expect(slideshow(page).locator("img")).toHaveCount(1);
+    });
+  });
 });
