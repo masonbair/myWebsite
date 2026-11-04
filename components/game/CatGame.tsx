@@ -182,7 +182,7 @@ export function CatGame() {
                 aria-hidden
                 initial={reduce ? false : { opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1, transition: { delay: reduce ? 0 : 1.2, duration: 0.5, ease } }}
-                exit={{ opacity: 0, transition: { duration: 0.15 } }}
+                exit={{ opacity: 0, transition: { duration: reduce ? 0 : 0.15 } }}
                 className="rounded-full bg-surface px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap text-ink shadow-tile ring-1 ring-ink/5 min-[501px]:mb-3 min-[501px]:px-3.5 min-[501px]:py-2 min-[501px]:text-xs"
               >
                 Play with me
