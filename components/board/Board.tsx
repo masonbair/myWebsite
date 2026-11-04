@@ -16,6 +16,9 @@ const FALLBACK_PHOTO: Photo = {
 
 const TALL = "md:col-span-3 md:row-span-2 lg:col-span-3 lg:row-span-2";
 
+// These fill the first screen, so they paint at once: a fade-in there blanks Lighthouse's filmstrip and raises Speed Index.
+const FIRST_SCREEN = new Set(["hello", "location", "photo", "github"]);
+
 // Spans are picked from which tiles exist so every grid row is filled; dense flow alone leaves holes.
 export function Board({ board }: { board: BoardData }) {
   const { now, github } = board;
@@ -51,11 +54,17 @@ export function Board({ board }: { board: BoardData }) {
         data-board-grid
         className="grid grid-flow-row-dense grid-cols-1 gap-3 md:grid-cols-6 lg:grid-cols-12 lg:grid-rows-[repeat(2,minmax(17.5rem,auto))]"
       >
-        {tiles.map((t, i) => (
-          <Reveal key={t.key} index={i} className={t.span}>
-            {t.node}
-          </Reveal>
-        ))}
+        {tiles.map((t, i) =>
+          FIRST_SCREEN.has(t.key) ? (
+            <div key={t.key} className={t.span}>
+              {t.node}
+            </div>
+          ) : (
+            <Reveal key={t.key} index={i} className={t.span}>
+              {t.node}
+            </Reveal>
+          ),
+        )}
       </div>
     </section>
   );
