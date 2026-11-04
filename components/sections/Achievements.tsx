@@ -55,17 +55,17 @@ function AchievementCell({ a, cell }: { a: Achievement; cell: Cell }) {
 
 export function Achievements() {
   return (
-    <Section id="achievements" title="Hackathons and honors">
+    <Section id="achievements" title="Hackathons, projects, and honors">
       <div className="mt-10 grid grid-cols-1 gap-3 md:mt-14 md:grid-cols-6 lg:grid-cols-12">
         {achievements.map((a, i) => (
           <AchievementCell key={a.title} a={a} cell={cells[i]} />
         ))}
       </div>
 
-      <h3 className="mt-20 text-2xl font-semibold tracking-tight text-ink md:mt-24">Hackathons and community</h3>
+      <h3 className="mt-20 text-2xl font-semibold tracking-tight text-ink md:mt-24">Photos from events and clubs</h3>
       <div
         role="region"
-        aria-label="Hackathon and community photos"
+        aria-label="Event and club photos"
         tabIndex={0}
         className="-mx-4 mt-6 snap-x snap-mandatory scroll-px-4 overflow-x-auto overscroll-x-contain px-4 pb-4 outline-none [scrollbar-width:thin] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:-mx-8 md:scroll-px-8 md:px-8"
       >

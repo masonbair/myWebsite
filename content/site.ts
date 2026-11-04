@@ -12,10 +12,10 @@ export type Work = {
 export type Achievement = { title: string; summary: string; tech: string[]; image?: SiteImage };
 
 export const about: string[] = [
-  "I'm Mason. I graduated from Kent State University in May 2026 with a B.S. in Computer Science and a 3.97 GPA, and now I work as a digital nomad. My work sits across DevSecOps, system administration, and software development.",
+  "I'm Mason. I graduated from Kent State University in May 2026 with a B.S. in Computer Science and a 3.97 GPA, and now I travel and work remotely. My work sits across DevSecOps, system administration, and software development.",
   "I spent a full year studying abroad at Tartu University in Estonia, from August 2024 to June 2025. It changed how I think about technology and working with people from other countries.",
-  "As an Assistant System Administrator at Kent State, I set up GPU servers for research, automate work with Ansible, and keep more than 20 research servers in line with security rules. Before that, as a DevSecOps intern at Nationwide, I built tools that save over $10K a year and simplified CI/CD pipelines for more than 1,000 applications.",
-  "Outside of work I lead HacKSU, Kent State's largest CS club, as President. I organize hackathons and mentor other students. I travel, I bake artisan bread, and I'm an Eagle Scout. As a Choose Ohio First scholarship recipient, I care about building tech communities and making technology open to everyone.",
+  "As an Assistant System Administrator at Kent State, I set up GPU servers for research, automated work with Ansible, and kept more than 20 research servers in line with security rules. Before that, as a DevSecOps intern at Nationwide, I built tools that save over $10K a year and simplified CI/CD pipelines for more than 1,000 applications.",
+  "Outside of work I was President of HacKSU, Kent State's largest CS club. I organized hackathons and mentored other students. I travel, I bake artisan bread, and I'm an Eagle Scout. As a Choose Ohio First scholarship recipient, I cared about building tech communities and making technology open to everyone.",
 ];
 
 export const portrait: SiteImage = {
@@ -29,9 +29,9 @@ export const work: Work[] = [
   {
     title: "Assistant System Administrator",
     org: "Kent State University",
-    dates: "August 2025 to present",
+    dates: "August 2025 to May 2026",
     summary:
-      "I set up and deploy Dell R760 GPU servers for faculty research. I automate Tenable agents, updates, and compliance across 20+ servers with Ansible, and I wrote VPN guides for several operating systems for the CS department.",
+      "I set up and deployed Dell R760 GPU servers for faculty research. I automated Tenable agents, updates, and compliance across 20+ servers with Ansible, and I wrote VPN guides for several operating systems for the CS department.",
     tech: ["Ubuntu Server", "Ansible", "SSSD", "LDAP", "Docker", "Lambda AI Stack"],
     image: {
       src: "/misc/Mason_at_RSM_office.webp",
@@ -57,9 +57,9 @@ export const work: Work[] = [
   {
     title: "President",
     org: "HacKSU",
-    dates: "May 2025 to present",
+    dates: "May 2025 to May 2026",
     summary:
-      "I lead Kent State's largest CS club with a team of 6. We run weekly meetings for 10 to 30 people, the Kent Hack Enough hackathon, and talks from industry speakers.",
+      "I led Kent State's largest CS club with a team of 6. We ran weekly meetings for 10 to 30 people, the Kent Hack Enough hackathon, and talks from industry speakers.",
     tech: ["Leadership", "Event management", "Community building"],
     image: {
       src: "/misc/Mason_infront_of_hacksu_sign.webp",
@@ -133,7 +133,7 @@ export const achievements: Achievement[] = [
   {
     title: "Honors",
     summary:
-      "Choose Ohio First Scholarship in Computer Science, 2023 to present. Eagle Scout with Scouts BSA, St. Francis Xavier, 2016 to 2022. Active in the MLH community and the hackathon circuit.",
+      "Choose Ohio First Scholarship in Computer Science, 2023 to May 2026. Eagle Scout with Scouts BSA, St. Francis Xavier, 2016 to 2022. Active in the MLH community and the hackathon circuit.",
     tech: [],
   },
   {
@@ -211,7 +211,6 @@ export const education: { school: string; detail: string; dates: string }[] = [
 
 export const contact = {
   email: "bair.s.mason@gmail.com",
-  phone: "380-237-2839",
   github: "https://github.com/masonbair",
   linkedin: "https://www.linkedin.com/in/masonbair/",
 };

@@ -3,7 +3,7 @@ import { getBoard } from "@/lib/board";
 import { parseNow, readNow } from "@/lib/now";
 import type { GithubActivity } from "@/lib/github";
 
-const now = parseNow({ countriesVisited: 21 });
+const now = parseNow({ countriesVisited: 23 });
 const github: GithubActivity = { commits30d: 4, private30d: 0, total30d: 4, repos30d: 2, recent: [], online: [] };
 
 describe("getBoard", () => {

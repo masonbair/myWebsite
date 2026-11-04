@@ -35,8 +35,26 @@ test("nav anchors scroll", async ({ page }, testInfo) => {
 test("gallery strip scrolls inside itself", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile", "phone width only");
   await page.goto("/");
-  const strip = page.getByRole("region", { name: "Hackathon and community photos" });
+  const strip = page.getByRole("region", { name: "Event and club photos" });
   await expect(strip).toHaveAttribute("tabindex", "0");
   expect(await strip.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+});
+
+test("no phone number in page HTML", async ({ request }) => {
+  const html = await (await request.get("/")).text();
+  expect(html).not.toContain("380-237-2839");
+  expect(html).not.toContain("tel:");
+});
+
+test("ended roles are in the past and copy is current", async ({ request }) => {
+  const html = await (await request.get("/")).text();
+  expect(html).not.toContain("to present");
+  expect(html).not.toContain("digital nomad");
+  expect(html).not.toContain("Hackathons and honors");
+  expect(html).toContain("August 2025 to May 2026");
+  expect(html).toContain("May 2025 to May 2026");
+  expect(html).toContain("Hackathons, projects, and honors");
+  expect(html).toContain("been to 23 countries");
+  expect(html).not.toContain("21 countries");
 });

@@ -61,11 +61,6 @@ export function Resume() {
               </a>
             </li>
             <li>
-              <a href={`tel:+1${contact.phone.replaceAll("-", "")}`} className={linkClass}>
-                {contact.phone}
-              </a>
-            </li>
-            <li>
               <a href={contact.github} target="_blank" rel="noopener noreferrer" className={linkClass}>
                 github.com/masonbair
                 <ArrowUpRight weight="light" size={14} aria-hidden />

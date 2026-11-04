@@ -7,7 +7,7 @@ const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakart
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
 
 const description =
-  "I'm Mason Bair, a software engineer, baker, and digital nomad who has been to 21 countries and graduated from Kent State in May 2026.";
+  "I'm Mason Bair, a software engineer, baker, and traveler who has been to 23 countries and graduated from Kent State in May 2026.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://masonbair.com"),
