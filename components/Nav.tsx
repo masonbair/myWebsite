@@ -1,5 +1,5 @@
 import { ArrowUpRight } from "@phosphor-icons/react/dist/ssr";
-import { ScorePill } from "./game/ScorePill";
+import { LazyScorePill } from "./game/LazyGame";
 import { NavMenu, type NavLink } from "./NavMenu";
 
 const links: NavLink[] = [
@@ -43,7 +43,7 @@ export function Nav() {
           ))}
         </ul>
         <div className="relative flex items-center gap-2">
-          <ScorePill />
+          <LazyScorePill />
           <NavMenu links={links} />
         </div>
       </nav>

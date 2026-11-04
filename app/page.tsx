@@ -1,5 +1,5 @@
 import { Board } from "@/components/board/Board";
-import { CatGame } from "@/components/game/CatGame";
+import { LazyCatGame } from "@/components/game/LazyGame";
 import { About } from "@/components/sections/About";
 import { Achievements } from "@/components/sections/Achievements";
 import { Resume } from "@/components/sections/Resume";
@@ -20,7 +20,7 @@ export default async function Home() {
         <Achievements />
         <Resume />
       </main>
-      <CatGame />
+      <LazyCatGame />
     </>
   );
 }

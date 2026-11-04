@@ -4,6 +4,7 @@ import { Cat } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef } from "react";
 import { Leaderboard } from "./Leaderboard";
+import { takePlaceholderFocus } from "./LazyGame";
 import { game, useGame } from "./store";
 
 /** Nav pill with the live game score; opens the leaderboard. */
@@ -16,6 +17,11 @@ export function ScorePill() {
     game.setLeaderboardOpen(false);
     pillRef.current?.focus();
   };
+
+  // The open leaderboard focuses its own close button, so only carry focus over when it is shut.
+  useEffect(() => {
+    if (takePlaceholderFocus() && !game.isLeaderboardOpen()) pillRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     if (!leaderboardOpen) return;

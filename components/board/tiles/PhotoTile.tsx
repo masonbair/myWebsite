@@ -1,9 +1,9 @@
 "use client";
 
-import { useReducedMotion } from "motion/react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import type { Photo } from "@/lib/now";
+import { useReducedMotion } from "@/lib/use-reduced-motion";
 import { Tile } from "../Tile";
 
 const INTERVAL_MS = 6000;

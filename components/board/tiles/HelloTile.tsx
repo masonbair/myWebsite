@@ -15,12 +15,12 @@ const { props: wide } = getImageProps({
   fill: true,
   sizes: "(min-width: 1024px) 1024px, 860px",
 });
-// The 4:5 crop is at least 384px wide in a 480px-tall tile, and the tile is at most 435px wide below 480px.
+// The 4:5 crop shows 384px wide in the 480px-tall tile; 360px lands phones at DPR 1.75 on the 640w file, about 20% lighter than 750w.
 const { props: phone } = getImageProps({
   src: "/misc/Mason_web_portrait.webp",
   alt,
   fill: true,
-  sizes: "400px",
+  sizes: "360px",
 });
 
 export function HelloTile() {

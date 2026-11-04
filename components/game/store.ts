@@ -37,5 +37,6 @@ export const game = {
   scorePoint: () => set({ score: state.score + 1 }),
   togglePlay: () => set({ playing: !state.playing }),
   setLeaderboardOpen: (leaderboardOpen: boolean) => set({ leaderboardOpen }),
+  isLeaderboardOpen: () => state.leaderboardOpen,
   newPlayerName: () => set({ playerName: randomPlayerName() }),
 };

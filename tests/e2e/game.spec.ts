@@ -141,3 +141,16 @@ test("leaderboard moves focus in and back", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Leaderboard" })).toHaveCount(0);
   await expect(pill).toBeFocused();
 });
+
+test("pill clicked before the game loads still opens the leaderboard", async ({ page }) => {
+  // Hold back chunks requested after load, which is when the game island is fetched.
+  let loaded = false;
+  page.on("load", () => (loaded = true));
+  await page.route("**/_next/static/chunks/**", async (route) => {
+    if (loaded) await new Promise((r) => setTimeout(r, 1500));
+    await route.fallback();
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Score 0, leaderboard" }).click();
+  await expect(page.getByRole("button", { name: "Close leaderboard" })).toBeFocused();
+});

@@ -1,16 +1,12 @@
 "use client";
 
 import { ArrowUpRight } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 export type NavLink = { label: string; href: string; external?: boolean };
 
-const ease = [0.32, 0.72, 0, 1] as const;
-
 export function NavMenu({ links }: { links: NavLink[] }) {
   const [open, setOpen] = useState(false);
-  const reduce = useReducedMotion();
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -52,40 +48,36 @@ export function NavMenu({ links }: { links: NavLink[] }) {
         <span className={`${bar} top-1/2 ${open ? "rotate-45" : "-translate-y-[3.5px]"}`} />
         <span className={`${bar} top-1/2 ${open ? "-rotate-45" : "translate-y-[3.5px]"}`} />
       </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            id="mobile-menu"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Menu"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: reduce ? 0 : 0.35, ease }}
-            className="fixed inset-0 -z-10 bg-canvas/85 backdrop-blur-2xl md:hidden"
-          >
-            <ul className="flex flex-col gap-2 px-6 pt-28">
-              {links.map(({ label, href, external }, i) => (
-                <li key={href} className="overflow-hidden">
-                  <motion.a
-                    href={href}
-                    onClick={() => setOpen(false)}
-                    {...(external && { target: "_blank", rel: "noopener noreferrer" })}
-                    initial={reduce ? false : { y: "100%", opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ duration: reduce ? 0 : 0.6, delay: reduce ? 0 : 0.08 + i * 0.05, ease }}
-                    className="flex items-center gap-2 py-1 text-4xl font-semibold tracking-tight text-ink outline-none focus-visible:text-accent-ink"
-                  >
-                    {label}
-                    {external && <ArrowUpRight weight="light" size={26} className="text-mute" aria-hidden />}
-                  </motion.a>
-                </li>
-              ))}
-            </ul>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Always mounted so CSS can fade it out; `invisible` drops it from focus and the accessibility tree when closed. */}
+      <div
+        id="mobile-menu"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menu"
+        inert={!open}
+        className={`fixed inset-0 -z-10 bg-canvas/85 backdrop-blur-2xl transition-[opacity,visibility] duration-[350ms] ease-spring motion-reduce:transition-none md:hidden ${
+          open ? "visible opacity-100" : "invisible opacity-0"
+        }`}
+      >
+        <ul className="flex flex-col gap-2 px-6 pt-28">
+          {links.map(({ label, href, external }, i) => (
+            <li key={href} className="overflow-hidden">
+              <a
+                href={href}
+                onClick={() => setOpen(false)}
+                {...(external && { target: "_blank", rel: "noopener noreferrer" })}
+                style={{ transitionDelay: open ? `${80 + i * 50}ms` : "0ms" }}
+                className={`flex items-center gap-2 py-1 text-4xl font-semibold tracking-tight text-ink outline-none transition-[translate,opacity] duration-600 ease-spring focus-visible:text-accent-ink motion-reduce:transition-none ${
+                  open ? "translate-y-0 opacity-100" : "translate-y-full opacity-0"
+                }`}
+              >
+                {label}
+                {external && <ArrowUpRight weight="light" size={26} className="text-mute" aria-hidden />}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
     </>
   );
 }

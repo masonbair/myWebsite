@@ -4,8 +4,6 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   typescript: { tsconfigPath: process.env.NEXT_TSCONFIG || "tsconfig.json" },
-  // AVIF is about a third smaller than WebP for these photos; browsers without it still get WebP.
-  images: { formats: ["image/avif", "image/webp"] },
   // Mirrors vercel.json so /coffee also works under `next start`.
   async redirects() {
     return [{ source: "/coffee", destination: "https://calendar.app.google/suAxGdTVkbEB2GFN6", permanent: false }];
