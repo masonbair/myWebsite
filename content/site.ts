@@ -216,3 +216,8 @@ export const contact = {
 };
 
 export const resumeHref = "/misc/Mason_Bair_Resume_01_20_2026.pdf";
+
+export const siteUrl = "https://masonbair.com";
+
+// Bump when the copy on this site changes; feeds the sitemap and the home page's dateModified.
+export const siteUpdated = "2026-11-04";
