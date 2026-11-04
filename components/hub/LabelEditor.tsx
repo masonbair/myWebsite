@@ -2,17 +2,24 @@
 
 import { Plus, X } from "@phosphor-icons/react";
 import { useState } from "react";
+import { LABEL_PATTERN, MAX_LABEL_LENGTH, normalizeLabel } from "@/lib/hub/input";
 import { field, focusRing, smallButton } from "./styles";
 import { useItemSave } from "./useItemSave";
 
 export function LabelEditor({ itemId, labels }: { itemId: string; labels: string[] }) {
-  const { pending, error, save } = useItemSave(itemId);
+  const { pending, error: saveError, save } = useItemSave(itemId);
   const [draft, setDraft] = useState("");
+  const [shapeError, setShapeError] = useState<string | null>(null);
+  const error = shapeError ?? saveError;
 
   function add(event: React.FormEvent) {
     event.preventDefault();
-    const label = draft.trim();
+    const label = normalizeLabel(draft);
     if (!label) return;
+    if (!LABEL_PATTERN.test(label)) {
+      return setShapeError("Labels use letters, numbers, - _ and : only.");
+    }
+    setShapeError(null);
     if (labels.includes(label)) return setDraft("");
     save({ labels: [...labels, label] }, () => setDraft(""));
   }
@@ -47,7 +54,7 @@ export function LabelEditor({ itemId, labels }: { itemId: string; labels: string
           id={`new-label-${itemId}`}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          maxLength={60}
+          maxLength={MAX_LABEL_LENGTH}
           autoComplete="off"
           className={`${field} w-full min-w-0 max-w-56`}
         />

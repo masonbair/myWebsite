@@ -25,6 +25,7 @@ type Props = {
 export function ItemDetail({ item, comments, mergedFrom, mergedInto, workerLive }: Props) {
   const due = formatDue(item.due);
   const reason = item.state === "open" ? needsYouReason(item.labels) : null;
+  const archived = item.state === "archived";
   const canApprove = workerLive && item.state === "open" && !item.labels.includes(CLAUDE_LABEL);
 
   return (
@@ -50,20 +51,25 @@ export function ItemDetail({ item, comments, mergedFrom, mergedInto, workerLive 
         <span>Added {timeAgo(item.createdAt)}</span>
       </p>
 
+      {archived && (
+        <div className="mt-5 rounded-tile bg-accent/10 px-5 py-4 ring-1 ring-accent/30">
+          <p className="text-sm text-mute">Archived. It stays here for the record and cannot be changed.</p>
+          {mergedInto && (
+            <p className="mt-1 text-base font-semibold text-ink">
+              Merged into{" "}
+              <Link href={`/hub/item/${mergedInto.id}`} className={`text-accent-ink underline underline-offset-4 ${focusRing}`}>
+                {mergedInto.title}
+              </Link>
+            </p>
+          )}
+        </div>
+      )}
+
       {item.description && (
         <p className="mt-4 max-w-[65ch] leading-relaxed whitespace-pre-wrap text-ink/85">{item.description}</p>
       )}
 
-      {mergedInto && (
-        <p className={`${panel} mt-6 px-5 py-4 text-sm text-ink`}>
-          Merged into{" "}
-          <Link href={`/hub/item/${mergedInto.id}`} className={`font-semibold text-accent-ink underline-offset-4 hover:underline ${focusRing}`}>
-            {mergedInto.title}
-          </Link>
-        </p>
-      )}
-
-      {item.state !== "archived" && (
+      {!archived && (
         <div className="mt-6 flex flex-wrap gap-2">
           {item.state === "open" ? (
             <form action={completeItem.bind(null, item.id)}>
@@ -87,23 +93,35 @@ export function ItemDetail({ item, comments, mergedFrom, mergedInto, workerLive 
         </div>
       )}
 
-      <dl className={`${panel} mt-8 divide-y divide-ink/[0.06]`}>
-        <Field label={<label htmlFor="item-list">List</label>}>
-          <ListPicker item={item} />
-        </Field>
-        <Field
-          label={
-            <label htmlFor="item-due">
-              Due<span className="sr-only"> date</span>
-            </label>
-          }
-        >
-          <DueEditor item={item} />
-        </Field>
-        <Field label="Labels">
-          <LabelEditor itemId={item.id} labels={item.labels} />
-        </Field>
-      </dl>
+      {archived ? (
+        item.labels.length > 0 && (
+          <ul aria-label="Labels" className="mt-6 flex flex-wrap gap-1.5">
+            {item.labels.map((label) => (
+              <li key={label} className="rounded-full bg-ink/5 px-2.5 py-0.5 text-sm text-ink">
+                {label}
+              </li>
+            ))}
+          </ul>
+        )
+      ) : (
+        <dl className={`${panel} mt-8 divide-y divide-ink/[0.06]`}>
+          <Field label={<label htmlFor="item-list">List</label>}>
+            <ListPicker item={item} />
+          </Field>
+          <Field
+            label={
+              <label htmlFor="item-due">
+                Due<span className="sr-only"> date</span>
+              </label>
+            }
+          >
+            <DueEditor item={item} />
+          </Field>
+          <Field label="Labels">
+            <LabelEditor itemId={item.id} labels={item.labels} />
+          </Field>
+        </dl>
+      )}
 
       {mergedFrom.length > 0 && (
         <section aria-labelledby="merged-from" className="mt-10">
@@ -136,7 +154,7 @@ export function ItemDetail({ item, comments, mergedFrom, mergedInto, workerLive 
         ) : (
           <p className="px-1 text-sm text-mute">No comments yet.</p>
         )}
-        <CommentForm itemId={item.id} />
+        {!archived && <CommentForm itemId={item.id} />}
       </section>
     </article>
   );

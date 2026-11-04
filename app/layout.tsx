@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { Nav } from "@/components/Nav";
+import { PublicOnly } from "@/components/PublicOnly";
 import now from "@/content/now.json";
 import { siteUrl } from "@/content/site";
 import "./globals.css";
@@ -24,7 +25,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${jakarta.variable} ${geistMono.variable}`}>
       <body className="font-sans antialiased">
-        <Nav />
+        <PublicOnly>
+          <Nav />
+        </PublicOnly>
         {children}
       </body>
     </html>

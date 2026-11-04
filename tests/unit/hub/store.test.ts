@@ -133,4 +133,19 @@ describe("fake store rules", () => {
     await store.archive(dupe.id, "merged", keep.id, "Merged into keep");
     expect((await store.listItems({ mergedInto: keep.id })).map((i) => i.id)).toEqual([dupe.id]);
   });
+
+  it("completes only an open item and reopens only a done one", async () => {
+    const store = createFakeStore(mason);
+    const keep = await store.addItem({ title: "keep", source: "test" });
+    const item = await store.addItem({ title: "a", source: "test" });
+    await expect(store.reopen(item.id)).rejects.toThrow(ForbiddenError);
+    await store.complete(item.id);
+    await expect(store.complete(item.id)).rejects.toThrow(ForbiddenError);
+    await expect(store.reopen(item.id)).resolves.toMatchObject({ state: "open" });
+    const dupe = await store.addItem({ title: "dupe", source: "test" });
+    await store.archive(dupe.id, "merged", keep.id, "Merged into keep");
+    await expect(store.complete(dupe.id)).rejects.toThrow(ForbiddenError);
+    await expect(store.reopen(dupe.id)).rejects.toThrow(ForbiddenError);
+    expect((await store.getItem(dupe.id))?.state).toBe("archived");
+  });
 });

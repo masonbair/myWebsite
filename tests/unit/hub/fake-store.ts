@@ -3,6 +3,7 @@ import {
   assertArchiveAllowed,
   assertArchiveArgs,
   assertLabelChangeAllowed,
+  assertStateChange,
   assertStatusLabels,
   STATUS_LABELS,
   CLAUDE_LABEL,
@@ -90,10 +91,12 @@ export function createFakeStore(actor: Actor, rows?: Rows): FakeStore {
     },
     async complete(id) {
       assertAllowed(actor, "complete");
+      assertStateChange(need(id).state, "done");
       return save(need(id), { state: "done" });
     },
     async reopen(id) {
       assertAllowed(actor, "reopen");
+      assertStateChange(need(id).state, "open");
       return save(need(id), { state: "open" });
     },
     async archive(id, reason, mergedInto, note) {

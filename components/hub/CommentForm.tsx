@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { addCommentAction } from "@/app/hub/actions";
+import { MAX_COMMENT } from "@/lib/hub/input";
 import { focusRing, quietButton } from "./styles";
 
 export function CommentForm({ itemId }: { itemId: string }) {
@@ -33,7 +34,7 @@ export function CommentForm({ itemId }: { itemId: string }) {
         id="comment-body"
         name="body"
         rows={3}
-        maxLength={10_000}
+        maxLength={MAX_COMMENT}
         className={`mt-2 block w-full resize-y rounded-2xl border-0 bg-surface px-4 py-3 text-sm text-ink shadow-tile ring-1 ring-ink/10 focus-visible:ring-2 focus-visible:ring-accent ${focusRing}`}
       />
       <div className="mt-3 flex items-center justify-end gap-3">

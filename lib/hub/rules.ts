@@ -73,6 +73,12 @@ export function assertArchiveAllowed(actor: Actor, state: Item["state"], note: s
   }
 }
 
+/** Done is only reached from open and only left back to open, so an archived item never comes back through these. */
+export function assertStateChange(from: Item["state"], to: "open" | "done"): void {
+  const allowedFrom = to === "done" ? "open" : "done";
+  if (from !== allowedFrom) throw new ForbiddenError(`a ${from} item cannot be ${to === "done" ? "completed" : "reopened"}`);
+}
+
 const PATCH_FIELDS = ["title", "description", "labels", "list", "due"] as const;
 
 /** Keeps only editable fields, so a runtime patch cannot smuggle in state or mergedInto. */

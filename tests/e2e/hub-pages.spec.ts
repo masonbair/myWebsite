@@ -158,6 +158,42 @@ test.describe("hub pages", () => {
     await expect(page.getByRole("link", { name: survivor.title })).toBeVisible();
   });
 
+  test("typing claude in the label editor is refused while the worker is off", async ({ page }) => {
+    const item = await seedItem({ list: "todo", labels: ["laptop"] });
+    await page.goto(`/hub/item/${item.id}`);
+    await page.getByLabel("New label").fill("claude");
+    await page.getByRole("button", { name: "Add label" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Could not save. Try again." })).toBeVisible();
+    expect((await itemRow(item.id)).labels).toEqual(["laptop"]);
+  });
+
+  test("an archived item page is read-only and points at the surviving item", async ({ page }) => {
+    const survivor = await seedItem({ list: "todo" });
+    const merged = await seedItem({ list: "todo", labels: ["laptop"], state: "archived", mergedInto: survivor.id });
+    await page.goto(`/hub/item/${merged.id}`);
+    await expect(page.getByText("Archived. It stays here for the record and cannot be changed.")).toBeVisible();
+    await expect(page.getByRole("link", { name: survivor.title })).toBeVisible();
+    await expect(page.getByRole("list", { name: "Labels" }).getByText("laptop")).toBeVisible();
+    for (const control of ["Done", "Reopen", "Approve", "Add label", "Save date", "Post"]) {
+      await expect(page.getByRole("button", { name: control, exact: true })).toHaveCount(0);
+    }
+    await expect(page.getByLabel("List", { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("Add a comment")).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Comments" })).toBeVisible();
+  });
+
+  test("the hub has its own header, not the public site nav, and Sign out ends the session", async ({ page }) => {
+    await page.goto("/hub");
+    await expect(page.getByRole("navigation", { name: "Main" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "About", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Hub", exact: true })).toHaveAttribute("href", "/hub");
+    await expect(page.getByRole("link", { name: "Site" })).toHaveAttribute("href", "/");
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL(/\/hub\/login$/);
+    await page.goto("/hub");
+    await expect(page).toHaveURL(/\/hub\/login$/);
+  });
+
   test("an unknown list or item is a 404", async ({ page }) => {
     expect((await page.goto("/hub/list/someday"))?.status()).toBe(404);
     expect((await page.goto(`/hub/item/${randomUUID()}`))?.status()).toBe(404);

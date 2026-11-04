@@ -13,7 +13,7 @@ const TABS = [
 export function HubTabs() {
   const path = usePathname();
   return (
-    <nav aria-label="Hub lists" className="mb-8">
+    <nav aria-label="Hub lists">
       <ul className="inline-flex rounded-full bg-ink/5 p-1">
         {TABS.map((tab) => {
           const current = path === tab.href;

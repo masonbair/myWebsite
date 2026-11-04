@@ -2,9 +2,12 @@ import type { Item, ItemPatch } from "./types";
 
 const LISTS: readonly Item["list"][] = ["inbox", "todo", "ideas"];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const TIME = /^\d{2}:\d{2}(:\d{2})?$/;
+const TIME = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
+export const LABEL_PATTERN = /^[a-z0-9_:-]+$/;
 const MAX_TITLE = 500;
-const MAX_LABEL = 60;
+export const MAX_LABEL_LENGTH = 60;
+const MAX_LABELS = 50;
+const MAX_DESCRIPTION = 10_000;
 export const MAX_COMMENT = 10_000;
 
 function fail(message: string): never {
@@ -15,14 +18,24 @@ function parseDue(raw: unknown): Item["due"] {
   if (raw === null) return null;
   const due = raw as { date?: unknown; time?: unknown };
   if (typeof due !== "object" || typeof due.date !== "string" || !DATE.test(due.date)) fail("due.date");
-  if (Number.isNaN(Date.parse(`${due.date}T00:00:00Z`))) fail("due.date");
+  // Date rolls 2026-02-31 over to March 3, so a real day must come back unchanged.
+  const day = new Date(`${due.date}T00:00:00Z`);
+  if (Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== due.date) fail("due.date");
   const time = due.time ?? null;
   if (time !== null && (typeof time !== "string" || !TIME.test(time))) fail("due.time");
   return { date: due.date, time };
 }
 
-/** Checks a patch sent from the browser; server actions are open POST endpoints, so nothing is trusted. */
-export function parseItemPatch(raw: unknown): ItemPatch {
+/** New labels are lowercased; anything left that is not a-z, 0-9, -, _ or : is refused. */
+export function normalizeLabel(label: string): string {
+  return label.trim().toLowerCase();
+}
+
+/**
+ * Checks a patch sent from the browser; server actions are open POST endpoints, so nothing is trusted.
+ * @param existingLabels labels already on the item, kept as they are so imported project labels never block an edit.
+ */
+export function parseItemPatch(raw: unknown, existingLabels: string[] = []): ItemPatch {
   if (typeof raw !== "object" || raw === null) fail("not an object");
   const input = raw as Record<string, unknown>;
   const patch: ItemPatch = {};
@@ -32,13 +45,18 @@ export function parseItemPatch(raw: unknown): ItemPatch {
     patch.title = title;
   }
   if (input.description !== undefined) {
-    if (typeof input.description !== "string") fail("description");
+    if (typeof input.description !== "string" || input.description.length > MAX_DESCRIPTION) fail("description");
     patch.description = input.description;
   }
   if (input.labels !== undefined) {
-    if (!Array.isArray(input.labels)) fail("labels");
-    const labels = input.labels.map((label) => (typeof label === "string" ? label.trim() : ""));
-    if (labels.some((label) => !label || label.length > MAX_LABEL)) fail("labels");
+    if (!Array.isArray(input.labels) || input.labels.length > MAX_LABELS) fail("labels");
+    const labels = input.labels.map((label) => {
+      if (typeof label !== "string") fail("labels");
+      if (existingLabels.includes(label)) return label;
+      const clean = normalizeLabel(label);
+      if (!LABEL_PATTERN.test(clean) || clean.length > MAX_LABEL_LENGTH) fail(`label ${JSON.stringify(label)}`);
+      return clean;
+    });
     patch.labels = [...new Set(labels)];
   }
   if (input.list !== undefined) {

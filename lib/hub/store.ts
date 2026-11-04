@@ -5,6 +5,7 @@ import {
   assertArchiveAllowed,
   assertArchiveArgs,
   assertLabelChangeAllowed,
+  assertStateChange,
   assertStatusLabels,
   auditActor,
   pickPatch,
@@ -189,11 +190,13 @@ export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
 
     async complete(id) {
       assertAllowed(actor, "complete");
+      assertStateChange((await requireItem(id)).state, "done");
       return updateColumns(id, { state: "done" });
     },
 
     async reopen(id) {
       assertAllowed(actor, "reopen");
+      assertStateChange((await requireItem(id)).state, "open");
       return updateColumns(id, { state: "open" });
     },
 
