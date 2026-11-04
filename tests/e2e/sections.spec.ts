@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PHONE } from "./phone";
 
 test("anchors exist", async ({ page }) => {
   await page.goto("/");
@@ -41,10 +42,12 @@ test("gallery strip scrolls inside itself", async ({ page }, testInfo) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
 });
 
-test("no phone number in page HTML", async ({ request }) => {
+test("no phone number in page HTML or text", async ({ page, request }) => {
   const html = await (await request.get("/")).text();
-  expect(html).not.toContain("380-237-2839");
+  expect(html).not.toMatch(PHONE);
   expect(html).not.toContain("tel:");
+  await page.goto("/");
+  expect(await page.locator("body").innerText()).not.toMatch(PHONE);
 });
 
 test("resume contact block links to the coffee chat page", async ({ page }) => {

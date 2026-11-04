@@ -1,5 +1,5 @@
 {
-  "place": { "city": "Ravenna", "region": "Ohio", "country": "United States", "private": true, "updatedAt": "2026-11-02T09:30:00Z" },
+  "place": { "city": "Testerville", "region": "Ohio", "country": "United States", "private": true, "updatedAt": "2026-11-02T09:30:00Z" },
   "countriesVisited": 23,
   "bake": null,
   "photos": []

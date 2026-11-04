@@ -11,7 +11,7 @@ test("private place hides city", async ({ page, request }) => {
   await expect(page.getByText("Ohio, United States")).toBeVisible();
   // Raw response, so the RSC payload is checked too.
   const html = await (await request.get(fixtureUrl("private"))).text();
-  expect(html).not.toContain("Ravenna");
+  expect(html).not.toContain("Testerville");
 });
 
 test("html never contains lat", async ({ page, request }) => {

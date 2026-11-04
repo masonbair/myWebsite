@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import fixture from "./fixtures/github-graphql.json";
+import fixture from "../e2e/fixtures/github-graphql.json";
 import { getGithubActivity } from "@/lib/github";
 
 const ok = (body: unknown) => vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })) as unknown as typeof fetch;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PHONE } from "../e2e/phone";
 import { coffeeJsonLd, homeJsonLd, PERSON_ID, serializeJsonLd } from "@/lib/jsonld";
 
 const home = homeJsonLd(new Date("2026-11-04T00:00:00Z"));
@@ -36,9 +37,10 @@ describe("json-ld", () => {
 
   it("never holds a phone, address, or coordinates", () => {
     const text = JSON.stringify([home, coffee]);
-    for (const banned of ["telephone", "address", "geo", "latitude", "380-237", "FAQPage", "—", "–"]) {
+    for (const banned of ["telephone", "address", "geo", "latitude", "FAQPage", "—", "–"]) {
       expect(text).not.toContain(banned);
     }
+    expect(text).not.toMatch(PHONE);
   });
 
   it("escapes < so a string cannot close the script tag", () => {

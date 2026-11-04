@@ -23,7 +23,8 @@ const fixtureServers = FIXTURES.map((f) => ({
   reuseExistingServer: false,
   timeout: 120_000,
   env: {
-    NOW_FIXTURE: `${f}.json`,
+    // The github server shows the full board plus fixture GitHub data.
+    NOW_FIXTURE: f === "github" ? "full.json" : `${f}.json`,
     GITHUB_TOKEN: "",
     SUPABASE_URL: "",
     ...(f === "github" ? { GITHUB_FIXTURE: "github-graphql.json" } : {}),
@@ -56,10 +57,11 @@ export default defineConfig({
     {
       command: `npx next dev -p ${PORT}`,
       url: `http://localhost:${PORT}`,
-      reuseExistingServer: !process.env.CI,
+      // Never reuse: a stray server here could have the real GitHub token or Supabase keys.
+      reuseExistingServer: false,
       timeout: 120_000,
-      // Empty beats .env.local, so e2e never writes to the real leaderboard; game.spec also stubs the API.
-      env: { SUPABASE_URL: "" },
+      // Empty beats .env.local, so e2e never calls live GitHub or writes to the real leaderboard.
+      env: { GITHUB_TOKEN: "", SUPABASE_URL: "" },
     },
     ...fixtureServers,
   ],

@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { PHONE } from "./phone";
 
 const BOOKING_URL = "https://calendar.app.google/suAxGdTVkbEB2GFN6";
 const PERSON_ID = "https://masonbair.com/#person";
@@ -94,8 +95,8 @@ test.describe("crawl files", () => {
     expect(res.headers()["content-type"]).toContain("text/plain");
     const text = await res.text();
     expect(text).toContain("https://masonbair.com/coffee");
-    expect(text).not.toContain("380-237");
     expect(text).not.toMatch(/[—–]/);
+    expect(text).not.toMatch(PHONE);
   });
 
   test("opengraph image renders", async ({ request }) => {
@@ -145,7 +146,7 @@ test.describe("coffee page", () => {
 
   test("no phone, dashes, or coordinates", async ({ page, request }) => {
     const html = await (await request.get("/coffee")).text();
-    expect(html).not.toContain("380-237-2839");
+    expect(html).not.toMatch(PHONE);
     expect(html).not.toContain("tel:");
     expect(html).not.toContain('"lat"');
     expect(html).not.toContain("latitude");
@@ -154,6 +155,7 @@ test.describe("coffee page", () => {
       () => document.body.innerText + document.title + (document.querySelector('meta[name="description"]')?.getAttribute("content") ?? ""),
     );
     expect(text).not.toMatch(/[—–]/);
+    expect(text).not.toMatch(PHONE);
   });
 
   test("nav section links lead back to the home page", async ({ page }, testInfo) => {
