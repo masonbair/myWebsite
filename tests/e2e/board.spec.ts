@@ -9,9 +9,9 @@ test("full board shows location", async ({ page }) => {
 test("private place hides city", async ({ page, request }) => {
   await page.goto(fixtureUrl("private"));
   await expect(page.getByText("Ohio, United States")).toBeVisible();
-  // Raw response, so the RSC payload is checked too; "Kent State" is Mason's school in the site copy, not the place.
+  // Raw response, so the RSC payload is checked too.
   const html = await (await request.get(fixtureUrl("private"))).text();
-  expect(html).not.toMatch(/Kent(?! State)/);
+  expect(html).not.toContain("Ravenna");
 });
 
 test("html never contains lat", async ({ page, request }) => {
@@ -60,4 +60,24 @@ test("hello visible without scroll", async ({ page }) => {
   const box = await heading.boundingBox();
   expect(box).not.toBeNull();
   expect(box!.y + box!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+});
+
+test.describe("without javascript", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("hello shows without javascript", async ({ page }) => {
+    await page.goto("/");
+    const heading = page.getByRole("heading", { name: "Hi, I'm Mason." });
+    await expect(heading).toBeVisible();
+    // toBeVisible ignores opacity, so multiply it up the tree to catch a fade that never finishes.
+    await expect
+      .poll(() =>
+        heading.evaluate((el) => {
+          let opacity = 1;
+          for (let n: Element | null = el; n; n = n.parentElement) opacity *= Number(getComputedStyle(n).opacity);
+          return opacity;
+        }),
+      )
+      .toBe(1);
+  });
 });

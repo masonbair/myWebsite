@@ -19,7 +19,8 @@ function fixtureTsconfig(f: Fixture): string {
 const fixtureServers = FIXTURES.map((f) => ({
   command: `npx next dev -p ${fixturePort(f)}`,
   url: `http://localhost:${fixturePort(f)}`,
-  reuseExistingServer: !process.env.CI,
+  // Never reuse: a stray server on this port could have the real GitHub token.
+  reuseExistingServer: false,
   timeout: 120_000,
   env: {
     NOW_FIXTURE: `${f}.json`,

@@ -20,7 +20,7 @@ const TALL = "md:col-span-3 md:row-span-2 lg:col-span-3 lg:row-span-2";
 export function Board({ board }: { board: BoardData }) {
   const { now, github } = board;
   const hasLocation = now.place !== null || now.countriesVisited > 0;
-  const online = github?.online ?? [];
+  const online = (github?.online ?? []).flatMap((r) => (r.homepage ? [{ ...r, homepage: r.homepage }] : []));
   const photos = now.photos.length > 0 ? now.photos : [FALLBACK_PHOTO];
   const lowerSpan = online.length > 0 && now.bake ? null : "md:col-span-6 lg:col-span-12";
 

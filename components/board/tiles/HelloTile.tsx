@@ -9,7 +9,8 @@ export function HelloTile() {
         alt="Mason standing on a glass ledge high above the Manhattan skyline"
         fill
         preload
-        sizes="(min-width: 1400px) 700px, (min-width: 1024px) 50vw, 100vw"
+        // The landscape photo covers a near-square tile, so its rendered width follows the tile height, not the viewport width.
+        sizes="(min-width: 1024px) 1024px, 860px"
         className="object-cover"
       />
       <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-night/90 via-night/45 to-transparent" />
