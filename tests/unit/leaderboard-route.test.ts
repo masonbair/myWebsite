@@ -88,8 +88,11 @@ describe("POST /api/leaderboard", () => {
 
   it("rejects bad JSON and oversized bodies with 400", async () => {
     const { POST, rows } = setup();
-    expect((await POST(post("{nope"))).status).toBe(400);
-    expect((await POST(post({ name: "a", score: 1, pad: "x".repeat(5000) }))).status).toBe(400);
+    for (const body of ["{nope", { name: "a", score: 1, pad: "x".repeat(5000) }]) {
+      const res = await POST(post(body));
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "bad_request" });
+    }
     expect(rows).toHaveLength(0);
   });
 

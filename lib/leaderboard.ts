@@ -28,7 +28,7 @@ export function loadScores(): ScoreEntry[] {
 
 /** Adds a score and returns the new entry plus the new list, even when it could not be stored. */
 export function saveScore(name: string, score: number): { entry: ScoreEntry; list: ScoreEntry[] } {
-  const entry = { name: name.trim().slice(0, MAX_NAME), score, date: new Date().toISOString() };
+  const entry = { name: [...name.trim()].slice(0, MAX_NAME).join(""), score, date: new Date().toISOString() };
   const list = [...loadScores(), entry].sort((a, b) => b.score - a.score).slice(0, MAX_ENTRIES);
   try {
     localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(list));

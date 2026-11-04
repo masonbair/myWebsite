@@ -79,6 +79,8 @@ describe("validateEntry", () => {
     [{ name: 42, score: 5 }, "bad_name"],
     [{ name: "tab\there", score: 5 }, "bad_name"],
     [{ name: "rtl‮flip", score: 5 }, "bad_name"],
+    [{ name: "half\ud83d", score: 5 }, "bad_name"],
+    [{ name: "\ude00half", score: 5 }, "bad_name"],
     [null, "bad_name"],
     [{ name: "ok", score: 0 }, "bad_score"],
     [{ name: "ok", score: 1001 }, "bad_score"],

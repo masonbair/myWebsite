@@ -52,7 +52,7 @@ export function Leaderboard({ onClose }: { onClose: () => void }) {
       setMessage("Score some points first. Tap the cat, then catch a circle.");
       return;
     }
-    const finalName = (name.trim() || playerName).replace(/\s+/g, " ").slice(0, MAX_NAME).trim();
+    const finalName = [...(name.trim() || playerName).replace(/\s+/g, " ")].slice(0, MAX_NAME).join("").trim();
     setSaving(true);
     const result = await submitSharedScore({ name: finalName, score });
     setSaving(false);

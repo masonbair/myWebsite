@@ -6,11 +6,12 @@ import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from "o
 import { MAX_NAME, MAX_SCORE, RATE_LIMIT, type Entry } from "./leaderboard";
 
 export type EntryError = "bad_name" | "offensive_name" | "bad_score";
+export type RequestError = EntryError | "bad_request";
 
 const TOP = 10;
 const MAX_BODY = 1024;
-// Control and format characters (tabs, zero-width, right-to-left overrides) can disguise a name.
-const HIDDEN_CHARS = /[\p{Cc}\p{Cf}]/u;
+// Control, format (zero-width, right-to-left) and unpaired surrogate characters can disguise or corrupt a name.
+const HIDDEN_CHARS = /[\p{Cc}\p{Cf}\p{Cs}]/u;
 
 const matcher = new RegExpMatcher({ ...englishDataset.build(), ...englishRecommendedTransformers });
 
@@ -63,14 +64,10 @@ const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
 
 async function readBody(req: Request): Promise<unknown> {
-  if (Number(req.headers.get("content-length")) > MAX_BODY) return null;
+  if (Number(req.headers.get("content-length")) > MAX_BODY) throw new Error("too_big");
   const text = await req.text();
-  if (text.length > MAX_BODY) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
+  if (text.length > MAX_BODY) throw new Error("too_big");
+  return JSON.parse(text);
 }
 
 /** GET and POST handlers over any store; route.ts passes the Supabase one. */
@@ -88,7 +85,13 @@ export function createLeaderboardHandlers({ store, salt, now = () => new Date() 
 
     async POST(req: Request): Promise<Response> {
       if (!store || !salt) return json({ error: "unavailable" }, 503);
-      const result = validateEntry(await readBody(req));
+      let body: unknown;
+      try {
+        body = await readBody(req);
+      } catch {
+        return json({ error: "bad_request" satisfies RequestError }, 400);
+      }
+      const result = validateEntry(body);
       if (!result.ok) return json({ error: result.error }, 400);
       const ipHash = hashIp(clientIp(req), salt);
       try {
