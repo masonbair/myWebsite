@@ -10,3 +10,5 @@ playwright-report
 next-env.d.ts
 *.tsbuildinfo
 .DS_Store
+supabase/.temp/
+.vitest/

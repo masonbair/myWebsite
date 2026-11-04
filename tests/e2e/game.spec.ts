@@ -15,6 +15,11 @@ async function catchCircles(page: Page, n: number, check?: () => Promise<void>) 
   }
 }
 
+// A reused dev server may have real Supabase env, so tests never let the API through.
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/leaderboard", (route) => route.fulfill({ status: 503, json: { error: "unavailable" } }));
+});
+
 test("clicking circles raises score", async ({ page }) => {
   await startGame(page);
   await catchCircles(page, 4);
@@ -46,6 +51,42 @@ test("local leaderboard saves", async ({ page }) => {
   await page.getByLabel("Your name").fill("Tester");
   await page.getByRole("button", { name: "Save score" }).click();
   await expect(page.getByRole("list", { name: "Top scores" }).getByText("Tester")).toBeVisible();
+  await expect(page.getByText("Couldn't reach the leaderboard. Saved on this device.")).toBeVisible();
+});
+
+test("shared leaderboard shows and saves server scores", async ({ page }) => {
+  let posted: unknown = null;
+  await page.route("**/api/leaderboard", (route) => {
+    if (route.request().method() === "POST") {
+      posted = route.request().postDataJSON();
+      return route.fulfill({ status: 201, json: { entries: [{ name: "Tester", score: 2 }, { name: "Remote", score: 1 }] } });
+    }
+    return route.fulfill({ json: { entries: [{ name: "<b>Remote</b>", score: 1 }] } });
+  });
+  await startGame(page);
+  await catchCircles(page, 2);
+  await page.getByRole("button", { name: /leaderboard/i }).click();
+  const list = page.getByRole("list", { name: "Top scores" });
+  await expect(list.getByText("<b>Remote</b>")).toBeVisible();
+  await expect(page.getByText("Scores are shared with everyone.")).toBeVisible();
+  await page.getByLabel("Your name").fill("Tester");
+  await page.getByRole("button", { name: "Save score" }).click();
+  await expect(list.getByText("Tester")).toBeVisible();
+  expect(posted).toEqual({ name: "Tester", score: 2 });
+});
+
+test("rejected names show a plain message", async ({ page }) => {
+  await page.route("**/api/leaderboard", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 400, json: { error: "offensive_name" } })
+      : route.fulfill({ json: { entries: [] } }),
+  );
+  await startGame(page);
+  await catchCircles(page, 1);
+  await page.getByRole("button", { name: /leaderboard/i }).click();
+  await page.getByLabel("Your name").fill("Rude");
+  await page.getByRole("button", { name: "Save score" }).click();
+  await expect(page.getByText("That name isn't allowed. Try another one.")).toBeVisible();
 });
 
 test("game can be paused", async ({ page }) => {

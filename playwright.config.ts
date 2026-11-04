@@ -25,6 +25,7 @@ const fixtureServers = FIXTURES.map((f) => ({
   env: {
     NOW_FIXTURE: `${f}.json`,
     GITHUB_TOKEN: "",
+    SUPABASE_URL: "",
     ...(f === "github" ? { GITHUB_FIXTURE: "github-graphql.json" } : {}),
     NEXT_DIST_DIR: `.next/e2e-${f}`,
     NEXT_TSCONFIG: fixtureTsconfig(f),
@@ -57,6 +58,8 @@ export default defineConfig({
       url: `http://localhost:${PORT}`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
+      // Empty beats .env.local, so e2e never writes to the real leaderboard; game.spec also stubs the API.
+      env: { SUPABASE_URL: "" },
     },
     ...fixtureServers,
   ],

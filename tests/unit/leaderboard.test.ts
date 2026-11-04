@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LEADERBOARD_KEY, loadScores, saveScore } from "@/lib/leaderboard";
+import { LEADERBOARD_KEY, MAX_NAME, MAX_SCORE, RATE_LIMIT, loadScores, saveScore } from "@/lib/leaderboard";
+import { hashIp, validateEntry } from "@/lib/leaderboard-server";
 
 function fakeStorage(initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial));
@@ -67,5 +68,56 @@ describe("local leaderboard", () => {
       },
     });
     expect(saveScore("Tester", 2).list).toEqual([{ name: "Tester", score: 2, date: "2026-11-04T12:00:00.000Z" }]);
+  });
+});
+
+describe("validateEntry", () => {
+  it.each([
+    [{ name: "", score: 5 }, "bad_name"],
+    [{ name: "   ", score: 5 }, "bad_name"],
+    [{ name: "a".repeat(21), score: 5 }, "bad_name"],
+    [{ name: 42, score: 5 }, "bad_name"],
+    [{ name: "tab\there", score: 5 }, "bad_name"],
+    [{ name: "rtl‮flip", score: 5 }, "bad_name"],
+    [null, "bad_name"],
+    [{ name: "ok", score: 0 }, "bad_score"],
+    [{ name: "ok", score: 1001 }, "bad_score"],
+    [{ name: "ok", score: 2.5 }, "bad_score"],
+    [{ name: "ok", score: "5" }, "bad_score"],
+    [{ name: "ok", score: 10_000_000 }, "bad_score"],
+    [{ name: "fuck", score: 5 }, "offensive_name"],
+    [{ name: "sh1t head", score: 5 }, "offensive_name"],
+  ])("rejects %j as %s", (raw, error) => {
+    expect(validateEntry(raw)).toEqual({ ok: false, error });
+  });
+
+  it("trims and collapses whitespace", () => {
+    expect(validateEntry({ name: "  Mason   B ", score: 12 })).toEqual({ ok: true, entry: { name: "Mason B", score: 12 } });
+  });
+
+  it("keeps HTML as literal text", () => {
+    expect(validateEntry({ name: "<b>hi</b>", score: 1 })).toEqual({ ok: true, entry: { name: "<b>hi</b>", score: 1 } });
+  });
+
+  it("accepts the max score and a 20 char name, and drops extra fields", () => {
+    const name = "a".repeat(MAX_NAME);
+    expect(validateEntry({ name, score: MAX_SCORE, ip_hash: "x" })).toEqual({ ok: true, entry: { name, score: 1000 } });
+  });
+});
+
+describe("hashIp", () => {
+  it("is a salted sha256 hex", () => {
+    const h = hashIp("1.2.3.4", "salt");
+    expect(h).toMatch(/^[0-9a-f]{64}$/);
+    expect(hashIp("1.2.3.4", "salt")).toBe(h);
+    expect(hashIp("1.2.3.4", "other")).not.toBe(h);
+    expect(hashIp("1.2.3.5", "salt")).not.toBe(h);
+  });
+});
+
+describe("constants", () => {
+  it("match the brief", () => {
+    expect(MAX_SCORE).toBe(1000);
+    expect(RATE_LIMIT).toEqual({ max: 5, windowMinutes: 10 });
   });
 });

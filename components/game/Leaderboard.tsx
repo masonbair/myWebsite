@@ -3,38 +3,75 @@
 import { X } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { MAX_NAME, loadScores, saveScore, type ScoreEntry } from "@/lib/leaderboard";
+import {
+  MAX_NAME,
+  fetchSharedScores,
+  loadScores,
+  saveScore,
+  submitSharedScore,
+  type Entry,
+} from "@/lib/leaderboard";
 import { game, useGame } from "./store";
 
 const SHOWN = 10;
 const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+const OFFLINE = "Couldn't reach the leaderboard. Saved on this device.";
+const FOOTER = { loading: "", shared: "Scores are shared with everyone.", local: "Scores are saved on this device." };
 
-/** Score popover under the nav pill: save the current score and see the best local scores. */
+/** Score popover under the nav pill: save the current score and see the shared top scores, or local ones offline. */
 export function Leaderboard({ onClose }: { onClose: () => void }) {
   const { score, playerName } = useGame();
   const reduce = useReducedMotion();
-  const [scores, setScores] = useState<ScoreEntry[]>(loadScores);
+  const [mode, setMode] = useState<keyof typeof FOOTER>("loading");
+  const [scores, setScores] = useState<Entry[]>([]);
   const [name, setName] = useState("");
-  const [saved, setSaved] = useState<ScoreEntry | null>(null);
+  const [savedAt, setSavedAt] = useState(-1);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
   const closeRef = useRef<HTMLButtonElement>(null);
 
   // Close, not the input, gets focus so a tap on a phone does not pop the keyboard.
   useEffect(() => {
     closeRef.current?.focus({ preventScroll: true });
   }, []);
-  const [message, setMessage] = useState("");
 
-  function save(e: FormEvent) {
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetchSharedScores(ctrl.signal).then((entries) => {
+      if (ctrl.signal.aborted) return;
+      setScores(entries ?? loadScores());
+      setMode(entries ? "shared" : "local");
+    });
+    return () => ctrl.abort();
+  }, []);
+
+  async function save(e: FormEvent) {
     e.preventDefault();
+    if (saving) return;
     if (score === 0) {
       setMessage("Score some points first. Tap the cat, then catch a circle.");
       return;
     }
-    const finalName = name.trim() || playerName;
-    const { entry, list } = saveScore(finalName, score);
-    setScores(list);
-    setSaved(entry);
-    setMessage(`Saved ${entry.name} with ${score} points.`);
+    const finalName = (name.trim() || playerName).replace(/\s+/g, " ").slice(0, MAX_NAME).trim();
+    setSaving(true);
+    const result = await submitSharedScore({ name: finalName, score });
+    setSaving(false);
+    if (result.kind === "rejected") {
+      setMessage(result.message);
+      return;
+    }
+    if (result.kind === "saved") {
+      setScores(result.entries);
+      setMode("shared");
+      setSavedAt(result.entries.findIndex((s) => s.name === finalName && s.score === score));
+      setMessage(`Saved ${finalName} with ${score} points.`);
+    } else {
+      const { entry, list } = saveScore(finalName, score);
+      setScores(list);
+      setMode("local");
+      setSavedAt(list.indexOf(entry));
+      setMessage(OFFLINE);
+    }
     setName("");
     game.newPlayerName();
   }
@@ -82,7 +119,8 @@ export function Leaderboard({ onClose }: { onClose: () => void }) {
             />
             <button
               type="submit"
-              className={`h-11 shrink-0 rounded-full bg-accent-ink px-5 text-sm font-semibold whitespace-nowrap text-snow active:scale-[0.98] dark:text-night ${focusRing}`}
+              disabled={saving}
+              className={`h-11 shrink-0 rounded-full bg-accent-ink px-5 text-sm font-semibold whitespace-nowrap text-snow active:scale-[0.98] disabled:opacity-60 dark:text-night ${focusRing}`}
             >
               Save score
             </button>
@@ -96,7 +134,11 @@ export function Leaderboard({ onClose }: { onClose: () => void }) {
           </p>
         </form>
 
-        {scores.length === 0 ? (
+        {mode === "loading" ? (
+          <p role="status" className="mt-3 rounded-[calc(1.5rem-0.375rem)] bg-ink/[0.03] px-4 py-5 text-center text-sm text-mute">
+            Loading scores…
+          </p>
+        ) : scores.length === 0 ? (
           <p className="mt-3 rounded-[calc(1.5rem-0.375rem)] bg-ink/[0.03] px-4 py-5 text-center text-sm text-mute">
             No scores yet. Be the first!
           </p>
@@ -104,8 +146,8 @@ export function Leaderboard({ onClose }: { onClose: () => void }) {
           <ol aria-label="Top scores" className="mt-3 flex max-h-72 flex-col gap-1 overflow-y-auto">
             {scores.slice(0, SHOWN).map((s, i) => (
               <li
-                key={`${s.date}-${i}`}
-                className={`flex items-center gap-3 rounded-full px-3 py-2 text-sm ${s === saved ? "bg-accent/15" : i < 3 ? "bg-ink/[0.03]" : ""}`}
+                key={`${i}-${s.name}-${s.score}`}
+                className={`flex items-center gap-3 rounded-full px-3 py-2 text-sm ${i === savedAt ? "bg-accent/15" : i < 3 ? "bg-ink/[0.03]" : ""}`}
               >
                 <span className={`w-5 text-right font-mono ${i < 3 ? "font-semibold text-accent-ink" : "text-mute"}`}>{i + 1}</span>
                 <span className="min-w-0 flex-1 truncate font-medium text-ink">{s.name}</span>
@@ -114,7 +156,7 @@ export function Leaderboard({ onClose }: { onClose: () => void }) {
             ))}
           </ol>
         )}
-        <p className="mt-3 text-xs text-mute">Scores are saved on this device.</p>
+        <p className="mt-3 min-h-4 text-xs text-mute">{FOOTER[mode]}</p>
       </div>
     </motion.div>
   );
