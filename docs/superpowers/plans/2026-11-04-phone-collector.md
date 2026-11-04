@@ -26,6 +26,9 @@
 - Every 15 to 60 minutes is fresh enough. No foreground service, no permanent notification.
 - Never touch the where_are_my_friends repo or its Supabase project.
 - Package id: `com.masonbair.collector`. App name: "Collector".
+- The app lives in the `myWebsite` repo at `apps/collector` (Mason). Every path below is relative to `apps/collector` unless it starts with `shared/`, which is at the repo root.
+- Sign-in is GitHub OAuth through Supabase, the same as the website. Only the GitHub user `masonbair` is allowed; the server enforces this, the app only reflects it.
+- The data contract is one shared file pair used by both the site and the app: `shared/collector-contract.ts` (types + RPC names) and `shared/collector-contract.md` (the human-readable table below).
 
 ## Review Focus
 
@@ -33,17 +36,17 @@
 2. **A fix that matches no bundled city** (rural, ocean, flight) must send nothing and keep the last report, not send "unknown". Test in Task 4: `runPlaceTask` with `nearestPlace → null` makes no RPC call and leaves stored state unchanged.
 3. **Supabase down or paused** (free projects pause after a week idle) or offline: no crash, the watermark/uploaded set is not advanced, the next run retries, and the health screen shows the age of the last success. Tests in Tasks 5 and 6: an RPC error leaves the asset unmarked.
 4. **Photo access downgraded to "selected photos only"** (Android 14+ partial access) or the "Website" album missing/renamed: health shows red with the reason; the job uploads nothing rather than whatever subset it can see. Test in Task 5 and Task 7.
-5. **Signed-out or expired session in the background:** jobs exit quietly, health shows "Signed out". Test in Task 4: `runPlaceTask` with no session makes no RPC call.
+5. **Signed-out or expired session in the background, or a GitHub account other than `masonbair`:** jobs exit quietly, health shows "Signed out". Tests: Task 4 `runPlaceTask` with no session makes no RPC call; Task 1 `signInWithGitHub` with another GitHub user signs out and returns `'not-allowed'`.
 
 ---
 
 ## What the app needs from Project 2 (the receiving side)
 
-This plan assumes Project 2 builds these in the `masonbair` Supabase project. Task 1 writes them into `docs/server-contract.md` in the app so both sides build against the same thing. If Project 2 is not done when this is built, the builder creates them as a migration in the app repo's `supabase/` folder and tells Mason (still the `masonbair` project, never where_are_my_friends).
+This plan assumes Project 2 builds these in the `masonbair` Supabase project. Task 1 writes them into the shared contract (`shared/collector-contract.ts` and `.md` at the repo root) so the site and the app build against the same file. If Project 2 is not done when this is built, the builder adds them as a migration in the repo's existing Supabase migrations folder (created in the redesign's leaderboard task) and tells Mason (still the `masonbair` project, never where_are_my_friends).
 
 | Need | Shape |
 |---|---|
-| Auth | Mason's Supabase user. The app signs in once with email OTP and keeps the session. |
+| Auth | Supabase GitHub OAuth provider, the same one the website uses. Every RPC and storage policy below allows only Mason's user (GitHub login `masonbair`). Redirect URL `collector://auth-callback` added to Supabase's allowed redirect list. |
 | RPC `collector_report_place` | `(p_city text, p_region text, p_country_code text, p_country text, p_observed_at timestamptz) returns void`. `p_city` is null inside a private place. Rejects any call not from Mason's user. Has no latitude/longitude parameters. |
 | Storage bucket `photos` | Mason's user may insert into `collector/`. Read access is Project 2's call (public, since photos auto-publish and are cleaned). |
 | RPC `collector_add_photo` | `(p_path text, p_asset_id text, p_taken_at timestamptz, p_width int, p_height int) returns void`. Unique on `p_asset_id`; a repeat call is a no-op, not an error. |
@@ -53,9 +56,12 @@ This plan assumes Project 2 builds these in the `masonbair` Supabase project. Ta
 
 ## File Structure
 
-Paths are relative to the app root (see Open questions: where the app lives).
+Paths are relative to `apps/collector/`, except `shared/`, which is at the repo root and also imported by the site.
 
 ```
+../../shared/collector-contract.ts   RPC names, bucket names, argument types (site + app)
+../../shared/collector-contract.md   the contract table above
+metro.config.js               watchFolders includes ../../shared so Metro can import it
 app.config.ts                 config, permissions, FINE_LOCATION blocked
 index.js                      imports both background jobs before registering the app
 App.tsx                       the one screen: sign-in, health list, actions
@@ -76,30 +82,31 @@ src/health/health.ts          inputs -> HealthItem[] (pure)
 src/health/useHealth.ts       gathers inputs on screen
 modules/battery-status/       local Expo module: isIgnoringBatteryOptimizations, standbyBucket
 scripts/build-cities.ts       GeoNames -> cities.json + countries.json
-docs/server-contract.md       the table above
 docs/samsung-setup.md         the setup steps from Task 7
 ```
 
 ---
 
-### Task 1: App skeleton, sign-in, server contract
+### Task 1: App skeleton, GitHub sign-in, shared contract
 
 **Files:**
-- Create: `app.config.ts`, `index.js`, `App.tsx`, `src/lib/supabase.ts`, `src/lib/store.ts`, `docs/server-contract.md`, `jest.config.js`, `.env.example`
-- Test: `src/lib/__tests__/config.test.ts`, `src/lib/__tests__/store.test.ts`
+- Create: `app.config.ts`, `metro.config.js`, `index.js`, `App.tsx`, `src/lib/supabase.ts`, `src/lib/signIn.ts`, `src/lib/store.ts`, `jest.config.js`, `.env.example`, `../../shared/collector-contract.ts`, `../../shared/collector-contract.md`
+- Test: `src/lib/__tests__/config.test.ts`, `src/lib/__tests__/store.test.ts`, `src/lib/__tests__/signIn.test.ts`
 
 **Interfaces:**
-- Produces: `supabase` (SupabaseClient), `readJson<T>(key: string, fallback: T): Promise<T>`, `writeJson(key: string, value: unknown): Promise<void>`, `signedIn(): Promise<boolean>` in `src/lib/supabase.ts`.
+- Produces: `supabase` (SupabaseClient), `signedIn(): Promise<boolean>` in `src/lib/supabase.ts`; `signInWithGitHub(): Promise<'ok' | 'cancelled' | 'not-allowed' | 'error'>` and `signOut(): Promise<void>` in `src/lib/signIn.ts`; `readJson<T>(key: string, fallback: T): Promise<T>`, `writeJson(key: string, value: unknown): Promise<void>` in `src/lib/store.ts`; from `shared/collector-contract.ts`: `RPC` (the four RPC names as constants), `BUCKET` (`photos`, `daylio`), and argument types `ReportPlaceArgs`, `AddPhotoArgs`, `AddDaylioExportArgs`, `HeartbeatArgs` matching the contract table. Later tasks call RPCs only through these constants and types.
 
-- [ ] **Step 1:** Create the Expo app (`npx create-expo-app@latest --template blank-typescript`), pin SDK 56 to match where_are_my_friends, add `jest-expo`. Install the libraries in the Tech Stack line with `npx expo install`.
+- [ ] **Step 1:** Create the Expo app in `apps/collector` (`npx create-expo-app@latest apps/collector --template blank-typescript`), pin SDK 56 to match where_are_my_friends, add `jest-expo`. Install the libraries in the Tech Stack line plus `expo-auth-session` and `expo-web-browser` with `npx expo install`. Make sure the site's build ignores `apps/` (check the root `tsconfig.json` `exclude` and any lint config) so the Next.js build is unaffected.
 - [ ] **Step 2: Write the failing tests**
   - `config.test.ts`: the resolved config's `android.package === 'com.masonbair.collector'`; `android.blockedPermissions` contains `android.permission.ACCESS_FINE_LOCATION`; `android.permissions` contains `ACCESS_COARSE_LOCATION`, `ACCESS_BACKGROUND_LOCATION`, `READ_MEDIA_IMAGES`, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`; the `expo-location` plugin has `isAndroidBackgroundLocationEnabled: true` and `isAndroidForegroundServiceEnabled: false`.
   - `store.test.ts`: `readJson('missing', [])` returns `[]`; corrupt stored JSON returns the fallback; `writeJson` then `readJson` round-trips.
+  - `config.test.ts` also: `scheme === 'collector'`.
+  - `signIn.test.ts` (mock `supabase.auth` and `expo-web-browser`): `signInWithOAuth` is called with `provider: 'github'`, `options.redirectTo: 'collector://auth-callback'`, `skipBrowserRedirect: true`; a browser result of `success` with a `code` in the URL calls `exchangeCodeForSession(code)` and returns `'ok'`; `cancel`/`dismiss` returns `'cancelled'`; a session whose `user.user_metadata.user_name !== 'masonbair'` is signed out again and returns `'not-allowed'`.
 - [ ] **Step 3:** Run `npx jest src/lib` → FAIL.
-- [ ] **Step 4:** Implement. `supabase.ts` reads `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` (anon key only; never the service role key), `auth.storage = AsyncStorage`, `persistSession: true`, `autoRefreshToken: true`. `signedIn()` calls `supabase.auth.getSession()` (which refreshes an expired token) and returns whether a session exists. `App.tsx`: if signed out, an email field + "Send code" + 6-digit code field using `signInWithOtp` / `verifyOtp`; if signed in, a placeholder for the health list. `index.js` imports `./src/place/placeTask` and `./src/jobs/periodicTask` (empty stubs for now) before `registerRootComponent(App)`, with the same one-line reason as where_are_my_friends' `index.js`.
-- [ ] **Step 5:** Write `docs/server-contract.md` from the "What the app needs from Project 2" table above.
+- [ ] **Step 4:** Implement. `supabase.ts` reads `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` (anon key only; never the service role key), `auth.storage = AsyncStorage`, `persistSession: true`, `autoRefreshToken: true`, `flowType: 'pkce'`, `detectSessionInUrl: false`. `signedIn()` calls `supabase.auth.getSession()` (which refreshes an expired token) and returns whether a session exists. `signInWithGitHub()` opens the URL from `signInWithOAuth` with `WebBrowser.openAuthSessionAsync(url, 'collector://auth-callback')`. The `masonbair` check in the app is only for a clear message; the server's policies are the real gate. `App.tsx`: if signed out, one "Sign in with GitHub" button (and the `not-allowed` message when it applies); if signed in, a placeholder for the health list. `index.js` imports `./src/place/placeTask` and `./src/jobs/periodicTask` (empty stubs for now) before `registerRootComponent(App)`, with the same one-line reason as where_are_my_friends' `index.js`. `metro.config.js` adds the repo root's `shared/` to `watchFolders`.
+- [ ] **Step 5:** Write `shared/collector-contract.md` from the "What the app needs from Project 2" table above and `shared/collector-contract.ts` with the matching constants and types. If the site already has a contract file for the private side by then, put these next to it rather than starting a second one.
 - [ ] **Step 6:** Run `npx jest` → PASS. `npx tsc --noEmit` → no errors.
-- [ ] **Step 7:** Commit `feat: collector app skeleton, sign-in, server contract`.
+- [ ] **Step 7:** Commit `feat: collector app skeleton, GitHub sign-in, shared contract`.
 
 ### Task 2: City table with region and country
 
@@ -263,19 +270,20 @@ docs/samsung-setup.md         the setup steps from Task 7
 **Files:**
 - Create: `docs/device-check.md` (the results)
 
-- [ ] **Step 1:** Confirm Project 2's contract exists in `masonbair` (or apply the app repo's fallback migration, after telling Mason). Put the anon key and URL in `.env` (gitignored).
+- [ ] **Step 1:** Confirm Project 2's contract exists in `masonbair` (or apply the fallback migration, after telling Mason), and that `collector://auth-callback` is in Supabase's allowed redirect URLs. Put the anon key and URL in `apps/collector/.env` (gitignored).
 - [ ] **Step 2:** Build and install a release build over USB: `npx expo run:android --variant release --device` (phone serial `R5CTC1AW16P`). Use the `running-on-device` skill if it fits. Never run a Play upload.
-- [ ] **Step 3:** Mason does the `docs/samsung-setup.md` steps on the phone (ask him; do not change phone settings over adb). Then open the app: every health item is green. Screenshot it with `adb exec-out screencap -p`.
-- [ ] **Step 4: Location.** Press "Run now". In Supabase SQL: the newest place row has city and country, and the table has no numeric columns that could hold coordinates. Mark the current place private, run again: the new row has `city IS NULL` and a region.
-- [ ] **Step 5: Photos.** Create album `DCIM/Website` with one photo that has GPS (take one with location tagging on). Run now. Download the uploaded object and run `exiftool` on it: no GPS, no EXIF block. Its row exists in the photos table.
-- [ ] **Step 6: Daylio.** Export a CSV from Daylio into the picked folder. Run now. The file is in the `daylio` bucket under `exports/` and has a row.
-- [ ] **Step 7: Background, no screen.** Close the app (swipe away). Leave the phone on battery for 2 hours. `job-last-ok` ages on the heartbeat row stay under 30 minutes; `adb shell am get-standby-bucket com.masonbair.collector` reports 10 or 20 (not 45/50). Note the result honestly in `docs/device-check.md`, including any run that Android skipped.
-- [ ] **Step 8:** Commit `docs: device check results`. Report to Mason with the screenshots and the exiftool output.
+- [ ] **Step 3:** Mason signs in with GitHub, then does the `docs/samsung-setup.md` steps on the phone (ask him; do not change phone settings over adb). Then open the app: every health item is green. Screenshot it with `adb exec-out screencap -p`.
+- [ ] **Step 4: Private places (Mason marks them).** Day one: his home and his family's places (Mason). He marks each one himself with "Mark this place private", either while there or later when he visits; no city or coordinates are written into code, config, or docs. Record only the labels he chose and the count in `docs/device-check.md`. Ask him which ones are still to be marked on a later visit and list those as open.
+- [ ] **Step 5: Location.** Press "Run now". In Supabase SQL: the newest place row has city and country, and the table has no numeric columns that could hold coordinates. While inside a private place Mason has marked (or a temporary test place he marks and then removes), run again: the new row has `city IS NULL` and a region.
+- [ ] **Step 6: Photos.** Create album `DCIM/Website` with one photo that has GPS (take one with location tagging on). Run now. Download the uploaded object and run `exiftool` on it: no GPS, no EXIF block. Its row exists in the photos table.
+- [ ] **Step 7: Daylio.** Export a CSV from Daylio into the picked folder. Run now. The file is in the `daylio` bucket under `exports/` and has a row.
+- [ ] **Step 8: Background, no screen.** Close the app (swipe away). Leave the phone on battery for 2 hours. `job-last-ok` ages on the heartbeat row stay under 30 minutes; `adb shell am get-standby-bucket com.masonbair.collector` reports 10 or 20 (not 45/50). Note the result honestly in `docs/device-check.md`, including any run that Android skipped.
+- [ ] **Step 9:** Commit `docs: device check results`. Report to Mason with the screenshots and the exiftool output.
 
 ---
 
-## Open questions for Mason
+## Decisions (2026-11-04)
 
-1. **Where should the app's code live?** Option A: its own new repo, e.g. `~/Desktop/programming/masonbair-collector` (separate Expo toolchain, its own git history and hook allowance). Option B: a folder inside `myWebsite` (e.g. `apps/collector`), so the site and app share one repo and one contract file. The plan works either way; paths above are relative to the app root. Note the git hook allows Claude to commit only in allowed repos, so a new repo would need adding there.
-2. **Which email signs the app in?** The app signs in as Mason's Supabase user with an emailed code. Which address should that user be?
-3. **Private places to start with:** which places should be private on day one (for example home), so they can be marked during the device check?
+1. **Where the app lives:** inside `myWebsite` at `apps/collector` **(Mason)**. The data contract is shared with the site through `shared/collector-contract.ts` and `.md` at the repo root. The repo is already on the git hook's allowed list, so commits work there.
+2. **Sign-in:** GitHub OAuth through Supabase, the same as the website **(Claude's call)**. Replaces the emailed-code sign-in. Single allowed user: GitHub `masonbair`, enforced by the server's policies.
+3. **Private places on day one:** his home and his family's places **(Mason)**. Mason marks the exact places himself during phone setup (Task 9, Step 4). No city or coordinates are written into code, config, or docs.
