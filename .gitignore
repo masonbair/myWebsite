@@ -2,3 +2,14 @@
 .vercel
 .env*
 .superpowers/
+node_modules
+.next
+out
+test-results
+playwright-report
+next-env.d.ts
+*.tsbuildinfo
+.DS_Store
+supabase/.temp/
+.vitest/
+.playwright-mcp/

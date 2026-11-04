@@ -1,5 +1,3 @@
 {
-  "redirects": [
-    { "source": "/coffee", "destination": "https://calendar.app.google/suAxGdTVkbEB2GFN6", "permanent": false }
-  ]
+  "framework": "nextjs"
 }

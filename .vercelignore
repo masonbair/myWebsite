@@ -1,0 +1,7 @@
+.superpowers
+.playwright-mcp
+.vitest
+test-results
+playwright-report
+docs
+supabase/.temp

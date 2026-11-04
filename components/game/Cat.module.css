@@ -1,0 +1,378 @@
+/* Ported from the old style.css cat; sizes are the old 80px cat, colors moved to the new palette. */
+.cat {
+  --line: var(--color-surface);
+  --face: var(--color-night);
+  position: relative;
+  width: 80px;
+  height: 80px;
+  isolation: isolate;
+}
+
+@media (max-width: 500px) {
+  .cat {
+    transform: scale(0.72);
+    transform-origin: top left;
+  }
+}
+
+.body,
+.head {
+  position: absolute;
+  left: 50%;
+  translate: -50% 0;
+  background: var(--cat);
+  border: 2px solid var(--line);
+  border-radius: 50% 50% 40% 40%;
+  box-shadow: 0 10px 24px -10px rgb(31 29 51 / 0.45);
+}
+
+.body {
+  bottom: 10px;
+  width: 40px;
+  height: 30px;
+}
+
+.head {
+  bottom: 35px;
+  width: 35px;
+  height: 30px;
+}
+
+.feature {
+  position: absolute;
+  opacity: 0;
+  transition: opacity 500ms var(--ease-spring);
+}
+
+.ears {
+  top: -10px;
+  left: 0;
+  width: 100%;
+  /* Outline, so the ears stay visible when the cat passes over a tile of its own color. */
+  filter: drop-shadow(0 -1px 0 var(--line)) drop-shadow(1px 0 0 var(--line)) drop-shadow(-1px 0 0 var(--line));
+}
+
+.ear {
+  position: absolute;
+  transform: scale(0.6);
+  transform-origin: bottom center;
+  transition: transform 500ms var(--ease-spring);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 12px solid var(--cat);
+}
+
+.ear:first-child {
+  left: 1px;
+}
+
+.ear:last-child {
+  right: 1px;
+}
+
+/* Stage 0 is a sleeping cat: nub ears and closed eyes, so it reads as a cat before any feature is earned. */
+.ears,
+.sleepy {
+  opacity: 1;
+}
+
+.sleepy {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  width: 100%;
+  transition: opacity 400ms var(--ease-spring);
+}
+
+.lid {
+  position: absolute;
+  width: 7px;
+  height: 4px;
+  border-bottom: 1.5px solid var(--face);
+  border-radius: 0 0 50% 50%;
+}
+
+.lid:first-child {
+  left: 6px;
+}
+
+.lid:last-child {
+  right: 6px;
+}
+
+.s1 .ear {
+  transform: none;
+}
+
+.s2 .sleepy {
+  opacity: 0;
+}
+
+.eyes {
+  top: 9px;
+  left: 0;
+  width: 100%;
+}
+
+.eye {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--face);
+}
+
+.eye:first-child {
+  left: 8px;
+}
+
+.eye:last-child {
+  right: 8px;
+}
+
+.nose {
+  top: 15px;
+  left: 50%;
+  translate: -50% 0;
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 3px solid var(--face);
+}
+
+.whiskers {
+  top: 12px;
+  left: 0;
+  width: 100%;
+}
+
+.whisker {
+  position: absolute;
+  width: 12px;
+  height: 1px;
+  background: var(--face);
+  opacity: 0.55;
+}
+
+.whisker:nth-child(1) {
+  left: -6px;
+  top: 5px;
+}
+
+.whisker:nth-child(2) {
+  left: -6px;
+  top: 8px;
+}
+
+.whisker:nth-child(3) {
+  right: -6px;
+  top: 5px;
+}
+
+.whisker:nth-child(4) {
+  right: -6px;
+  top: 8px;
+}
+
+.tail {
+  bottom: 15px;
+  left: 57px;
+  width: 20px;
+  height: 4px;
+  border-radius: 10px;
+  background: var(--cat);
+  transform-origin: left center;
+  rotate: -25deg;
+}
+
+.spots {
+  top: 8px;
+  left: 12px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgb(253 252 255 / 0.8);
+}
+
+.spots::before,
+.spots::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  background: rgb(253 252 255 / 0.65);
+}
+
+.spots::before {
+  top: 10px;
+  left: 8px;
+  width: 3px;
+  height: 3px;
+}
+
+.spots::after {
+  top: 5px;
+  left: -8px;
+  width: 2px;
+  height: 2px;
+}
+
+.crown {
+  top: -19px;
+  left: 50%;
+  translate: -50% 0;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 8px solid #e9c46a;
+}
+
+.crown::before,
+.crown::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-bottom: 4px solid #e9c46a;
+}
+
+.crown::before {
+  left: 3px;
+}
+
+.crown::after {
+  left: -9px;
+}
+
+.wings {
+  top: 12px;
+  left: -12px;
+  width: calc(100% + 24px);
+  height: 12px;
+}
+
+.wings::before,
+.wings::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 12px;
+  background: linear-gradient(45deg, var(--color-tea), var(--color-rose));
+}
+
+.wings::before {
+  left: 0;
+  border-radius: 50% 20% 50% 20%;
+  transform: rotate(-20deg);
+}
+
+.wings::after {
+  right: 0;
+  border-radius: 20% 50% 20% 50%;
+  transform: rotate(20deg);
+}
+
+.sparkles {
+  top: -6px;
+  left: -10px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-snow);
+  box-shadow:
+    15px 5px 0 #e9c46a,
+    27px -4px 0 var(--color-tea),
+    39px 7px 0 var(--color-accent),
+    50px 1px 0 var(--color-rose);
+}
+
+/* Sits on the cat root, not the head: the head's translate makes its own stacking layer, so -1 there would still cover the face. */
+.aura {
+  top: -1px;
+  left: 12px;
+  width: 55px;
+  height: 55px;
+  z-index: -1;
+  border-radius: 50%;
+  background: conic-gradient(#f2a7a7, #f5d29a, #f3ef9e, #a9e3b6, #a5d3ef, #b9b1f2, #e8a9e3, #f2a7a7);
+  filter: blur(4px);
+}
+
+.s1 .ears,
+.s2 .eyes,
+.s3 .nose,
+.s4 .whiskers,
+.s5 .tail,
+.s6 .spots,
+.s7 .crown,
+.s8 .wings,
+.s9 .sparkles {
+  opacity: 1;
+}
+
+.s10 .aura {
+  opacity: 0.75;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .s5 .tail {
+    animation: tail-wag 2s ease-in-out infinite;
+  }
+
+  .s8 .wings {
+    animation: wing-flap 2s ease-in-out infinite;
+  }
+
+  .s9 .sparkles {
+    animation: sparkle 3s ease-in-out infinite;
+  }
+
+  .s10 .aura {
+    animation: aura 4s linear infinite;
+  }
+}
+
+@keyframes tail-wag {
+  0%,
+  100% {
+    transform: rotate(-10deg);
+  }
+  50% {
+    transform: rotate(10deg);
+  }
+}
+
+@keyframes wing-flap {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes sparkle {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.6;
+  }
+}
+
+@keyframes aura {
+  to {
+    transform: rotate(1turn);
+  }
+}

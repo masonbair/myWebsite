@@ -1,0 +1,8 @@
+{
+  "place": { "city": "Porto", "region": "Porto", "country": "Portugal", "private": false, "updatedAt": "2026-11-02T09:30:00Z", "lat": 41.1579, "lng": -8.6291 },
+  "lat": 41.1579,
+  "lng": -8.6291,
+  "countriesVisited": 22,
+  "bake": null,
+  "photos": []
+}

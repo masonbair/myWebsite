@@ -1,27 +1,27 @@
-This is the GitHUb Repo for my personal website, masonbair.com.
+# masonbair.com
 
-I am currently developing this site more and I am writing down the tools that I used to deploy it for future use.
+My personal website: a Next.js app (App Router, Tailwind CSS, TypeScript).
 
-I did a lot of stuff inside of AWS to make this all happen.
+## Deploy
 
-I firstly set up a ECR (Elastic container registry) to hold my Docker image for the server
-Then I set up an ECS (Elastic container service) to run the docker image that I created
-Inside of the ECS, I had to configure a few different things to make it work properly.
+The site is deployed on Vercel.
 
-I had to set up a load balancer (ALB) for the ECS, so I can set up and server HTTPS traffic over port 443. 
-The load balancer also needed me to set up a Target Group, which acts as a user in the internet traffic. It essentially is like, hey all internet traffic under this target group are able to access the port (80 and 443), in this case.
+## Local development
 
-The final thing I needed to do is to create a new IAM user in AWS. This user I connected to my Github Actions with specific permisions for managing an image inside of an ECR.
+Needs Node 24 (see the `engines` field in package.json).
 
-And to get the pipeline all finsihed, I built up a Github actions workflow based on AWS ECS and ECR. This allows for when I make a change to the github repo, it will make a new container and push it to the ECR and then the ECS updates to run off of the newly pushed container.
+```bash
+npm install
+npm run dev     # local server at http://localhost:3000
+npm test        # unit tests (Vitest)
+npm run e2e     # browser tests (Playwright)
+npm run build   # production build
+npm run lint    # ESLint
+```
 
-This is all the steps I have taken to make this websites CI/CD pipeline work.
+Optional settings go in `.env.local`:
 
-The next steps I am going to be doing is setting up some AI Agent tools for an MCP, so my coding agent can make changes to my website, commit and push automatically. THis essentially means I can update my website just by using natural langauge. I have no other steps involved. I just have to talk directly to an AI and boom. Website udpated!
+- `GITHUB_TOKEN` shows recent GitHub activity on the home page. Without it, the page links to GitHub instead.
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `LEADERBOARD_SALT` turn on the shared cat game leaderboard. Without them, scores save on the device only.
 
-# Tools for the MCP
-1. List of all my files
-2. Read a specific file
-3. Write to a specific file
-4. Add and commit  my code
-5. Push my code to the repo
+The "right now" board reads `content/now.json`.
