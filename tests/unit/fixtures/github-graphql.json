@@ -4,16 +4,61 @@
       "contributionsCollection": {
         "totalCommitContributions": 5,
         "commitContributionsByRepository": [
-          { "repository": { "name": "myWebsite" } },
-          { "repository": { "name": "side-project" } }
-        ]
+          {
+            "repository": {
+              "name": "myWebsite",
+              "isPrivate": false
+            }
+          },
+          {
+            "repository": {
+              "name": "side-project",
+              "isPrivate": false
+            }
+          },
+          {
+            "repository": {
+              "name": "secret-client-repo",
+              "isPrivate": true
+            }
+          }
+        ],
+        "restrictedContributionsCount": 7
       },
       "repositories": {
         "nodes": [
-          { "name": "myWebsite", "url": "https://github.com/masonbair/myWebsite", "homepageUrl": "", "description": "My site", "pushedAt": "2026-11-03T10:00:00Z", "isFork": false },
-          { "name": "forked-lib", "url": "https://github.com/masonbair/forked-lib", "homepageUrl": "https://forked.example.com", "description": null, "pushedAt": "2026-11-02T10:00:00Z", "isFork": true },
-          { "name": "side-project", "url": "https://github.com/masonbair/side-project", "homepageUrl": "https://example.dev", "description": "Live thing", "pushedAt": "2026-11-01T10:00:00Z", "isFork": false },
-          { "name": "old-thing", "url": "https://github.com/masonbair/old-thing", "homepageUrl": null, "description": null, "pushedAt": "2026-10-01T10:00:00Z", "isFork": false }
+          {
+            "name": "myWebsite",
+            "url": "https://github.com/masonbair/myWebsite",
+            "homepageUrl": "",
+            "description": "My site",
+            "pushedAt": "2026-11-03T10:00:00Z",
+            "isFork": false
+          },
+          {
+            "name": "forked-lib",
+            "url": "https://github.com/masonbair/forked-lib",
+            "homepageUrl": "https://forked.example.com",
+            "description": null,
+            "pushedAt": "2026-11-02T10:00:00Z",
+            "isFork": true
+          },
+          {
+            "name": "side-project",
+            "url": "https://github.com/masonbair/side-project",
+            "homepageUrl": "https://example.dev",
+            "description": "Live thing",
+            "pushedAt": "2026-11-01T10:00:00Z",
+            "isFork": false
+          },
+          {
+            "name": "old-thing",
+            "url": "https://github.com/masonbair/old-thing",
+            "homepageUrl": null,
+            "description": null,
+            "pushedAt": "2026-10-01T10:00:00Z",
+            "isFork": false
+          }
         ]
       }
     }

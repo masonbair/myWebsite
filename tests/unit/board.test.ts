@@ -4,7 +4,7 @@ import { parseNow, readNow } from "@/lib/now";
 import type { GithubActivity } from "@/lib/github";
 
 const now = parseNow({ countriesVisited: 21 });
-const github: GithubActivity = { commits30d: 4, repos30d: 2, recent: [], online: [] };
+const github: GithubActivity = { commits30d: 4, private30d: 0, total30d: 4, repos30d: 2, recent: [], online: [] };
 
 describe("getBoard", () => {
   it("getBoard merges sources", async () => {

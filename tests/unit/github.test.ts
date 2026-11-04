@@ -11,10 +11,25 @@ describe("getGithubActivity", () => {
     expect(r).not.toBeNull();
     expect(r!.commits30d).toBe(5);
     expect(r!.repos30d).toBe(2);
+    expect(r!.private30d).toBe(7);
+    expect(r!.total30d).toBe(12);
     expect(r!.recent.length).toBe(3);
     expect(r!.recent.map((x) => x.name)).not.toContain("forked-lib");
     expect(r!.online.map((x) => x.name)).toEqual(["side-project"]);
     expect(r!.online[0].homepage).toBe("https://example.dev");
+  });
+
+  it("never leaks a private repo name", async () => {
+    const r = await getGithubActivity("masonbair", ok(fixture), "fake-token");
+    expect(JSON.stringify(r)).not.toContain("secret-client-repo");
+  });
+
+  it("private30d is 0 when restrictedContributionsCount is missing", async () => {
+    const body = structuredClone(fixture) as { data: { user: { contributionsCollection: Record<string, unknown> } } };
+    delete body.data.user.contributionsCollection.restrictedContributionsCount;
+    const r = await getGithubActivity("masonbair", ok(body), "fake-token");
+    expect(r!.private30d).toBe(0);
+    expect(r!.total30d).toBe(5);
   });
 
   it("sends auth, user agent and revalidate hint", async () => {

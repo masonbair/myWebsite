@@ -26,7 +26,7 @@ export function GithubTile({ github }: { github: GithubActivity | null }) {
     );
   }
 
-  const { commits30d, repos30d, recent } = github;
+  const { total30d, commits30d, repos30d, recent } = github;
   return (
     <Tile core="flex flex-col justify-between gap-5 bg-surface p-6 md:p-7">
       <div>
@@ -34,12 +34,16 @@ export function GithubTile({ github }: { github: GithubActivity | null }) {
           <GithubLogo weight="light" size={28} className="text-ink" aria-label="GitHub profile" />
         </a>
         <p className="mt-4 flex items-baseline gap-2">
-          <span className="font-mono text-6xl leading-none font-medium tracking-tighter text-accent-ink">{commits30d}</span>
-          <span className="text-xl font-semibold text-ink">{plural(commits30d, "commit")}</span>
+          <span className="font-mono text-6xl leading-none font-medium tracking-tighter text-accent-ink">{total30d}</span>
+          <span className="text-xl font-semibold text-ink">{plural(total30d, "contribution")}</span>
         </p>
-        <p className="mt-1 text-sm text-mute">
-          across <span className="font-mono">{repos30d}</span> {plural(repos30d, "repo")}, last 30 days
-        </p>
+        <p className="mt-1 text-sm text-mute">last 30 days</p>
+        {commits30d > 0 && (
+          <p className="mt-1 text-sm text-mute">
+            <span className="font-mono">{commits30d}</span> public {plural(commits30d, "commit")} across{" "}
+            <span className="font-mono">{repos30d}</span> {plural(repos30d, "repo")}
+          </p>
+        )}
       </div>
       {recent.length > 0 && (
         <ul className="flex flex-col gap-1">

@@ -81,3 +81,12 @@ test.describe("without javascript", () => {
       .toBe(1);
   });
 });
+
+test("github tile shows the total and never ships a private repo name", async ({ page, request }) => {
+  await page.goto(fixtureUrl("github"));
+  await expect(page.getByText("12", { exact: true })).toBeVisible();
+  await expect(page.getByText("contributions", { exact: true })).toBeVisible();
+  await expect(page.getByText("public commits across")).toBeVisible();
+  const html = await (await request.get(fixtureUrl("github"))).text();
+  expect(html).not.toContain("secret-client-repo");
+});

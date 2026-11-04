@@ -25,6 +25,7 @@ const fixtureServers = FIXTURES.map((f) => ({
   env: {
     NOW_FIXTURE: `${f}.json`,
     GITHUB_TOKEN: "",
+    ...(f === "github" ? { GITHUB_FIXTURE: "github-graphql.json" } : {}),
     NEXT_DIST_DIR: `.next/e2e-${f}`,
     NEXT_TSCONFIG: fixtureTsconfig(f),
   },
