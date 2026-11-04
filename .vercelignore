@@ -3,6 +3,5 @@
 .vitest
 test-results
 playwright-report
-tests
 docs
 supabase/.temp
