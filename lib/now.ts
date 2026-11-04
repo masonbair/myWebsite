@@ -65,9 +65,20 @@ export function parseNow(raw: unknown): NowData {
   };
 }
 
+const FIXTURE_NAME = /^[a-z0-9-]+\.json$/;
+
+// Test-only override set by Playwright; the strict name check keeps it inside the fixtures folder.
+function nowPath(): string {
+  const fixture = process.env.NOW_FIXTURE;
+  if (fixture && process.env.NODE_ENV !== "production" && FIXTURE_NAME.test(fixture)) {
+    return path.join(process.cwd(), "tests", "e2e", "fixtures", fixture);
+  }
+  return path.join(process.cwd(), "content", "now.json");
+}
+
 export async function readNow(): Promise<NowData> {
   try {
-    const text = await readFile(path.join(process.cwd(), "content", "now.json"), "utf8");
+    const text = await readFile(nowPath(), "utf8");
     return parseNow(JSON.parse(text));
   } catch {
     return parseNow(null);

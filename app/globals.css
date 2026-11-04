@@ -10,6 +10,9 @@
   --color-accent-ink: #5b56b5;
   --color-rose: #aa9aba;
   --color-tea: #d1abad;
+  /* Fixed in both modes: text on photos and on the accent and tea tiles. */
+  --color-snow: #f7f6fd;
+  --color-night: #1f1d33;
 
   --shadow-tile: 0 12px 40px -12px rgb(135 131 209 / 0.28);
   --radius-tile: 1.5rem;
@@ -48,4 +51,12 @@ body::after {
   pointer-events: none;
   opacity: 0.03;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Motion writes inline styles; !important lets reduced motion win and show tiles static. */
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }

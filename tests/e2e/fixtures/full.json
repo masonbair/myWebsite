@@ -1,0 +1,9 @@
+{
+  "place": { "city": "Lisbon", "region": "Lisbon", "country": "Portugal", "private": false, "updatedAt": "2026-11-02T09:30:00Z" },
+  "countriesVisited": 22,
+  "bake": { "name": "Rosemary sourdough", "photo": null, "bakedAt": "2026-11-01T18:00:00Z" },
+  "photos": [
+    { "src": "/misc/Mason_traveling.webp", "alt": "Mason smiling in a red bucket hat and sunglasses, taking a selfie on a roadside with green mountains behind him" },
+    { "src": "/misc/MLH_hackcon_solo.webp", "alt": "Mason in a red bucket hat and colorful patchwork pants, arms crossed, in front of a wall of MLH logos" }
+  ]
+}
