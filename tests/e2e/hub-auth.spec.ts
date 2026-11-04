@@ -100,3 +100,23 @@ test.describe("signed in", () => {
     await expect(page.getByText("You are signed in.")).toHaveCount(0);
   });
 });
+
+test("a dead session cookie is cleared on the way to the login page", async ({ request }) => {
+  const supabase = localSupabaseEnv();
+  test.skip(!supabase.url, "needs local Supabase running (supabase start)");
+  const cookieName = `sb-${new URL(supabase.url).hostname.split(".")[0]}-auth-token`;
+  const deadSession = {
+    access_token: "not-a-jwt",
+    refresh_token: "no-such-refresh-token",
+    token_type: "bearer",
+    expires_in: 3600,
+    expires_at: 1,
+    user: { id: "00000000-0000-0000-0000-000000000000" },
+  };
+  const value = `base64-${Buffer.from(JSON.stringify(deadSession)).toString("base64url")}`;
+  const res = await request.get("/hub", { maxRedirects: 0, headers: { cookie: `${cookieName}=${value}` } });
+  expect(res.status()).toBe(307);
+  const cleared = res.headersArray().filter((h) => h.name.toLowerCase() === "set-cookie" && h.value.startsWith(`${cookieName}=`));
+  expect(cleared.length).toBeGreaterThan(0);
+  cleared.forEach((h) => expect(h.value).toMatch(/Max-Age=0/i));
+});

@@ -38,7 +38,10 @@ async function gateHubPage(request: NextRequest): Promise<NextResponse> {
     signedIn = !error && Boolean(data?.claims?.sub);
   }
   if (PUBLIC_HUB_PATHS.has(request.nextUrl.pathname) || signedIn) return response;
-  return NextResponse.redirect(new URL("/hub/login", request.url));
+  const redirect = NextResponse.redirect(new URL("/hub/login", request.url));
+  // Carry over cookies @supabase/ssr cleared for a dead session, or the browser keeps resending them.
+  for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie);
+  return redirect;
 }
 
 export async function proxy(request: NextRequest) {
