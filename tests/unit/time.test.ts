@@ -16,6 +16,11 @@ describe("timeAgo", () => {
     expect(timeAgo(ago(800 * D), now)).toBe("2 years ago");
   });
 
+  it("never renders 12 months", () => {
+    expect(timeAgo(ago(362 * D), now)).toBe("11 months ago");
+    expect(timeAgo(ago(365 * D), now)).toBe("1 year ago");
+  });
+
   it("uses singular forms", () => {
     expect(timeAgo(ago(1 * H), now)).toBe("1 hour ago");
     expect(timeAgo(ago(7 * D), now)).toBe("1 week ago");

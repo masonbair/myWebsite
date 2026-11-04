@@ -15,6 +15,6 @@ export function timeAgo(iso: string, now: Date = new Date()): string {
   if (s < DAY) return unit(Math.floor(s / HOUR), "hour");
   if (s < 7 * DAY) return unit(Math.floor(s / DAY), "day");
   if (s < 60 * DAY) return unit(Math.floor(s / (7 * DAY)), "week");
-  if (s < 365 * DAY) return unit(Math.floor(s / (30 * DAY)), "month");
+  if (s < 365 * DAY) return unit(Math.min(11, Math.floor(s / (30 * DAY))), "month");
   return unit(Math.floor(s / (365 * DAY)), "year");
 }

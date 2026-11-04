@@ -28,6 +28,17 @@ describe("getGithubActivity", () => {
     expect(init.next).toEqual({ revalidate: 3600 });
   });
 
+  it("sends identical bodies for calls within the same hour", async () => {
+    const f = ok(fixture);
+    await getGithubActivity("masonbair", f, "t", new Date("2026-11-04T12:05:01.123Z"));
+    await getGithubActivity("masonbair", f, "t", new Date("2026-11-04T12:58:59.999Z"));
+    const calls = (f as unknown as ReturnType<typeof vi.fn>).mock.calls as unknown as [string, RequestInit][];
+    expect(calls[0][1].body).toBe(calls[1][1].body);
+    const vars = JSON.parse(calls[0][1].body as string).variables;
+    expect(vars.to).toBe("2026-11-04T12:00:00.000Z");
+    expect(vars.from).toBe("2026-10-05T12:00:00.000Z");
+  });
+
   it("ignores non-https homepage", async () => {
     const body = structuredClone(fixture);
     body.data.user.repositories.nodes[0].homepageUrl = "javascript:alert(1)";

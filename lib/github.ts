@@ -47,10 +47,12 @@ export async function getGithubActivity(
   user = "masonbair",
   fetchImpl: typeof fetch = fetch,
   token = process.env.GITHUB_TOKEN,
+  now: Date = new Date(),
 ): Promise<GithubActivity | null> {
   if (!token) return null;
   try {
-    const to = new Date();
+    // Hour-aligned so the request body is stable and Next's fetch cache can hit.
+    const to = new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000);
     const from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
     const res = await fetchImpl("https://api.github.com/graphql", {
       method: "POST",
