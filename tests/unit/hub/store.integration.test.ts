@@ -1,20 +1,36 @@
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
+import { recordOwner } from "@/lib/auth/require-owner";
 import { ForbiddenError } from "@/lib/hub/rules";
 import { createHubStore } from "@/lib/hub/store";
 
-// Run with: HUB_TEST_DB_URL=1 HUB_TEST_SUPABASE_URL=http://127.0.0.1:54321 HUB_TEST_SERVICE_KEY=<local key from `supabase status -o env`>
+// Run with: HUB_TEST_DB_URL=1 HUB_TEST_SUPABASE_URL=http://127.0.0.1:54321 HUB_TEST_SERVICE_KEY=<SERVICE_ROLE_KEY> HUB_TEST_ANON_KEY=<ANON_KEY> (from `supabase status -o env`)
 // HUB_TEST_DB_URL is the gate flag; the suite also refuses to load unless the API URL is local, because test rows can never be deleted.
 const enabled = Boolean(process.env.HUB_TEST_DB_URL);
 const apiUrl = process.env.HUB_TEST_SUPABASE_URL ?? "";
 const serviceKey = process.env.HUB_TEST_SERVICE_KEY ?? "";
+const anonKey = process.env.HUB_TEST_ANON_KEY ?? "";
 if (enabled && !/^(127\.0\.0\.1|localhost)$/.test(new URL(apiUrl || "http://invalid").hostname)) {
   throw new Error("HUB_TEST_SUPABASE_URL must be a local Supabase (127.0.0.1 or localhost)");
 }
 
 describe.skipIf(!enabled)("hub store against local Supabase", () => {
-  const client = () => createClient(apiUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const noPersist = { auth: { persistSession: false, autoRefreshToken: false } };
+  const client = () => createClient(apiUrl, serviceKey, noPersist);
+
+  // The database only accepts the claude approval label from the signed-in owner, never the service role.
+  async function signedInOwnerClient() {
+    const email = `hub-${randomUUID()}@example.test`;
+    const password = randomUUID();
+    const { data, error } = await client().auth.admin.createUser({ email, password, email_confirm: true });
+    if (error) throw error;
+    await recordOwner(client(), data.user.id);
+    const owner = createClient(apiUrl, anonKey, noPersist);
+    const signIn = await owner.auth.signInWithPassword({ email, password });
+    if (signIn.error) throw signIn.error;
+    return owner;
+  }
   const agent = { kind: "agent", client: "integration" } as const;
   const worker = { kind: "worker", runId: "integration" } as const;
 
@@ -56,7 +72,7 @@ describe.skipIf(!enabled)("hub store against local Supabase", () => {
 
   it("archives with a note, claims once and writes audit rows", async () => {
     const store = createHubStore(client(), worker);
-    const keep = await createHubStore(client(), { kind: "mason" }).addItem({
+    const keep = await createHubStore(await signedInOwnerClient(), { kind: "mason" }).addItem({
       title: "integration keep",
       labels: ["claude"],
       source: "test",

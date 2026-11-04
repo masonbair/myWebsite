@@ -84,7 +84,18 @@ declare
   previous_state text := case when tg_op = 'UPDATE' then old.state else 'open' end;
   -- Any role can set request.jwt.claims on itself, so auth.uid() alone is only trusted for the authenticated role.
   caller_is_owner boolean := current_user = 'authenticated' and public.is_owner();
+  previous_labels text[] := case when tg_op = 'UPDATE' then old.labels else '{}' end;
+  had_claude boolean := 'claude' = any(previous_labels);
+  has_claude boolean := 'claude' = any(new.labels);
 begin
+  if has_claude and not had_claude and not caller_is_owner then
+    raise exception 'only the owner can approve an item for claude';
+  end if;
+  -- The worker drops claude only when it finishes or blocks (todo-hub lifecycle.ts finishLabels/blockLabels).
+  if had_claude and not has_claude and not caller_is_owner
+     and not new.labels && array['claude-done', 'claude-question'] then
+    raise exception 'only the owner can remove the claude label';
+  end if;
   if new.state = 'done' and previous_state <> 'done' and not caller_is_owner then
     raise exception 'only the owner can complete an item';
   end if;
@@ -118,12 +129,42 @@ create trigger items_guard_state before insert or update on public.items
   for each row execute function public.items_guard_state();
 create trigger comments_no_delete before delete on public.comments
   for each row execute function public.hub_no_delete();
+create trigger hub_owner_no_delete before delete on public.hub_owner
+  for each row execute function public.hub_no_delete();
+create trigger hub_state_no_delete before delete on public.hub_state
+  for each row execute function public.hub_no_delete();
+create trigger memo_files_no_delete before delete on public.memo_files
+  for each row execute function public.hub_no_delete();
+create trigger audit_log_no_delete before delete on public.audit_log
+  for each row execute function public.hub_no_delete();
 
 -- Statement-level guard too, since a row trigger never fires on truncate.
 create trigger items_no_truncate before truncate on public.items
   for each statement execute function public.hub_no_delete();
 create trigger comments_no_truncate before truncate on public.comments
   for each statement execute function public.hub_no_delete();
+create trigger hub_owner_no_truncate before truncate on public.hub_owner
+  for each statement execute function public.hub_no_delete();
+create trigger hub_state_no_truncate before truncate on public.hub_state
+  for each statement execute function public.hub_no_delete();
+create trigger memo_files_no_truncate before truncate on public.memo_files
+  for each statement execute function public.hub_no_delete();
+create trigger audit_log_no_truncate before truncate on public.audit_log
+  for each statement execute function public.hub_no_delete();
+
+create function public.comments_guard_author() returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  if new.author = 'mason' and not (current_user = 'authenticated' and public.is_owner()) then
+    raise exception 'only the signed-in owner can write as mason';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger comments_guard_author before insert or update of author on public.comments
+  for each row execute function public.comments_guard_author();
 
 create function public.hub_claim(p_item uuid, p_stale interval default '2 hours') returns boolean
 language sql set search_path = ''
@@ -133,6 +174,7 @@ as $$
     set labels = array_remove(array_remove(array_remove(labels, 'claude-done'), 'claude-question'), 'claude-working')
                  || array['claude-working']
     where id = p_item
+      and state = 'open'
       and labels @> '{claude}'
       and (not labels @> '{claude-working}' or updated_at < now() - p_stale)
     returning 1
