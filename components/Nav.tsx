@@ -1,4 +1,5 @@
 import { ArrowUpRight } from "@phosphor-icons/react/dist/ssr";
+import { ScorePill } from "./game/ScorePill";
 import { NavMenu, type NavLink } from "./NavMenu";
 
 const links: NavLink[] = [
@@ -14,11 +15,12 @@ const focusRing =
 
 export function Nav() {
   return (
-    <header className="fixed inset-x-0 top-3 z-50 flex justify-center px-4 md:top-5">
+    <header className="pointer-events-none fixed inset-x-0 top-3 z-50 flex justify-center px-4 md:top-5">
+      {/* Only the pill takes clicks, so game circles beside it stay reachable. */}
       {/* The blur sits on ::before because backdrop-filter on the nav itself would trap the fixed mobile overlay inside the pill. */}
       <nav
         aria-label="Main"
-        className="relative flex h-14 w-full items-center justify-between gap-6 rounded-full pr-2 pl-5 before:absolute before:inset-0 before:rounded-full before:bg-surface/75 before:shadow-tile before:ring-1 before:ring-ink/5 before:backdrop-blur-xl md:w-auto"
+        className="pointer-events-auto relative flex h-14 w-full items-center justify-between gap-6 rounded-full pr-2 pl-5 before:absolute before:inset-0 before:rounded-full before:bg-surface/75 before:shadow-tile before:ring-1 before:ring-ink/5 before:backdrop-blur-xl md:w-auto"
       >
         <a
           href="#"
@@ -32,7 +34,7 @@ export function Nav() {
               <a
                 href={href}
                 {...(external && { target: "_blank", rel: "noopener noreferrer" })}
-                className={`flex items-center gap-1 rounded-full px-3.5 py-2 text-sm font-medium whitespace-nowrap text-mute transition-colors duration-300 ease-spring hover:bg-ink/5 hover:text-ink ${focusRing}`}
+                className={`relative flex items-center gap-1 rounded-full px-3.5 py-2 text-sm font-medium whitespace-nowrap text-mute before:absolute before:inset-0 before:rounded-full before:bg-ink/5 before:opacity-0 before:transition-opacity before:duration-300 before:ease-spring hover:text-ink hover:before:opacity-100 ${focusRing}`}
               >
                 {label}
                 {external && <ArrowUpRight weight="light" size={13} aria-hidden />}
@@ -40,7 +42,10 @@ export function Nav() {
             </li>
           ))}
         </ul>
-        <NavMenu links={links} />
+        <div className="relative flex items-center gap-2">
+          <ScorePill />
+          <NavMenu links={links} />
+        </div>
       </nav>
     </header>
   );

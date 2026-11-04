@@ -2,7 +2,7 @@
 
 import { ArrowUpRight } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type NavLink = { label: string; href: string; external?: boolean };
 
@@ -11,6 +11,7 @@ const ease = [0.32, 0.72, 0, 1] as const;
 export function NavMenu({ links }: { links: NavLink[] }) {
   const [open, setOpen] = useState(false);
   const reduce = useReducedMotion();
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -19,10 +20,16 @@ export function NavMenu({ links }: { links: NavLink[] }) {
     const onWide = () => wide.matches && setOpen(false);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const header = buttonRef.current?.closest("header");
+    const behind = [...document.body.children].filter(
+      (el): el is HTMLElement => el instanceof HTMLElement && el !== header && !["SCRIPT", "NEXT-ROUTE-ANNOUNCER"].includes(el.tagName),
+    );
+    behind.forEach((el) => (el.inert = true));
     window.addEventListener("keydown", onKey);
     wide.addEventListener("change", onWide);
     return () => {
       document.body.style.overflow = previousOverflow;
+      behind.forEach((el) => (el.inert = false));
       window.removeEventListener("keydown", onKey);
       wide.removeEventListener("change", onWide);
     };
@@ -34,6 +41,7 @@ export function NavMenu({ links }: { links: NavLink[] }) {
   return (
     <>
       <button
+        ref={buttonRef}
         type="button"
         aria-expanded={open}
         aria-controls="mobile-menu"
@@ -48,6 +56,9 @@ export function NavMenu({ links }: { links: NavLink[] }) {
         {open && (
           <motion.div
             id="mobile-menu"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

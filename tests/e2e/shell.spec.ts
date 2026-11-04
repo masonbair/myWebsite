@@ -40,8 +40,11 @@ test("mobile menu opens and closes", async ({ page }, testInfo) => {
   await expect(resume).toBeHidden();
   await page.getByRole("button", { name: "Open menu" }).click();
   await expect(resume).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Menu" })).toBeVisible();
+  await expect(page.locator("main")).toHaveJSProperty("inert", true);
   await page.keyboard.press("Escape");
   await expect(resume).toBeHidden();
+  await expect(page.locator("main")).toHaveJSProperty("inert", false);
 });
 
 test("no em dashes", async ({ page }) => {
