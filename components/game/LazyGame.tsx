@@ -18,12 +18,17 @@ const listeners = new Set<() => void>();
 function loadGame() {
   if (started) return;
   started = true;
-  Promise.all([import("./ScorePill"), import("./CatGame")]).then(([pill, cat]) => {
-    loaded = { ScorePill: pill.ScorePill, CatGame: cat.CatGame };
-    // Read before the swap: removing a focused node may fire blur, and focus then sits on <body>.
-    game.setPlaceholderFocused(document.activeElement?.hasAttribute("data-pill-placeholder") ?? false);
-    listeners.forEach((l) => l());
-  });
+  Promise.all([import("./ScorePill"), import("./CatGame")])
+    .then(([pill, cat]) => {
+      loaded = { ScorePill: pill.ScorePill, CatGame: cat.CatGame };
+      // Read before the swap: removing a focused node may fire blur, and focus then sits on <body>.
+      game.setPlaceholderFocused(document.activeElement?.hasAttribute("data-pill-placeholder") ?? false);
+      listeners.forEach((l) => l());
+    })
+    .catch(() => {
+      // A failed chunk (e.g. a flaky network) leaves the placeholder, and its next click tries again.
+      started = false;
+    });
 }
 
 function useLoadedGame() {

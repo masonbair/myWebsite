@@ -170,3 +170,23 @@ test("keyboard focus stays on the pill when the game loads", async ({ page }) =>
   await expect(pill).toBeFocused();
   await expect(page.getByRole("dialog", { name: "Leaderboard" })).toHaveCount(0);
 });
+
+test("a failed game download retries on the next click", async ({ page, request }) => {
+  // Chunk names are hashed, so any script the first HTML doesn't name is a lazy chunk, i.e. the game.
+  // Scripts only: Turbopack never retries a failed CSS chunk, so that case can't recover in-page.
+  const html = await (await request.get("/")).text();
+  await page.route("**/_next/static/chunks/**/*.js", (route) => {
+    const file = new URL(route.request().url()).pathname.split("/").pop()!;
+    const lazy = !html.includes(file) && !html.includes(decodeURIComponent(file)) && !file.includes("hmr-client");
+    return lazy ? route.abort() : route.continue();
+  });
+  await page.goto("/");
+  await page.waitForLoadState("load");
+  // Long enough for the idle-time import to fail, short of the 4 s fallback.
+  await page.waitForTimeout(1500);
+  await page.unroute("**/_next/static/chunks/**/*.js");
+  await expect(page.getByRole("button", { name: "Start the cat game" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Score 0, leaderboard" }).click();
+  await expect(page.getByRole("dialog", { name: "Leaderboard" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start the cat game" })).toBeVisible();
+});
