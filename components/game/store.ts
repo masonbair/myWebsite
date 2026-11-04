@@ -16,6 +16,8 @@ const serverState: GameState = { score: 0, playing: false, leaderboardOpen: fals
 
 // Module-level store: the score pill lives in the server-rendered Nav, the cat in the page.
 let state = serverState;
+// Not render state: only read once, when the real pill replaces the static one.
+let placeholderFocused = false;
 const listeners = new Set<() => void>();
 
 function set(patch: Partial<GameState>) {
@@ -38,5 +40,14 @@ export const game = {
   togglePlay: () => set({ playing: !state.playing }),
   setLeaderboardOpen: (leaderboardOpen: boolean) => set({ leaderboardOpen }),
   isLeaderboardOpen: () => state.leaderboardOpen,
+  setPlaceholderFocused: (focused: boolean) => {
+    placeholderFocused = focused;
+  },
+  /** True once, if the static pill had focus when the real one replaced it. */
+  takePlaceholderFocus: () => {
+    const had = placeholderFocused;
+    placeholderFocused = false;
+    return had;
+  },
   newPlayerName: () => set({ playerName: randomPlayerName() }),
 };

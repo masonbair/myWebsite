@@ -14,12 +14,15 @@ for (const colorScheme of ["light", "dark"] as const) {
 
     test("home page has no serious a11y violations", async ({ page }) => {
       await page.goto("/");
+      // The game mounts after load; scan it too, not just the static shell.
+      await expect(page.getByRole("button", { name: "Start the cat game" })).toBeVisible();
       expect(await serious(page)).toEqual([]);
     });
 
     test("mobile menu open has no serious a11y violations", async ({ page }, testInfo) => {
       test.skip(testInfo.project.name !== "mobile", "menu button is mobile only");
       await page.goto("/");
+      await expect(page.getByRole("button", { name: "Start the cat game" })).toBeVisible();
       await page.getByRole("button", { name: "Open menu" }).click();
       await expect(page.getByRole("button", { name: "Close menu" })).toBeVisible();
       expect(await serious(page)).toEqual([]);

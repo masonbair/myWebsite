@@ -3,8 +3,9 @@ import { preload } from "react-dom";
 import { Tile } from "../Tile";
 
 // Below this width the tile is taller than wide, so a portrait crop shows the same view at about a third of the bytes.
-const PHONE = "(max-width: 479px)";
-const WIDER = "(min-width: 480px)";
+// Range syntax so fractional viewport widths (e.g. 479.5px) still match one of the two.
+const PHONE = "(width < 480px)";
+const WIDER = "(width >= 480px)";
 
 const alt = "Mason standing on a glass ledge high above the Manhattan skyline";
 
@@ -15,12 +16,12 @@ const { props: wide } = getImageProps({
   fill: true,
   sizes: "(min-width: 1024px) 1024px, 860px",
 });
-// The 4:5 crop shows 384px wide in the 480px-tall tile; 360px lands phones at DPR 1.75 on the 640w file, about 20% lighter than 750w.
+// The 4:5 crop fills the tile width (viewport minus page and tile padding) on phones from about 430px up; below that it shows 384px wide.
 const { props: phone } = getImageProps({
   src: "/misc/Mason_web_portrait.webp",
   alt,
   fill: true,
-  sizes: "360px",
+  sizes: "calc(100vw - 32px)",
 });
 
 export function HelloTile() {

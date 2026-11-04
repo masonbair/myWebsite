@@ -154,3 +154,19 @@ test("pill clicked before the game loads still opens the leaderboard", async ({ 
   await page.getByRole("button", { name: "Score 0, leaderboard" }).click();
   await expect(page.getByRole("button", { name: "Close leaderboard" })).toBeFocused();
 });
+
+test("keyboard focus stays on the pill when the game loads", async ({ page }) => {
+  // Hold back the game so focus lands on the static pill first.
+  let loaded = false;
+  page.on("load", () => (loaded = true));
+  await page.route("**/_next/static/chunks/**", async (route) => {
+    if (loaded) await new Promise((r) => setTimeout(r, 1500));
+    await route.fallback();
+  });
+  await page.goto("/");
+  const pill = page.getByRole("button", { name: /^Score \d+, leaderboard$/ });
+  await pill.focus();
+  await expect(page.getByRole("button", { name: "Start the cat game" })).toBeVisible();
+  await expect(pill).toBeFocused();
+  await expect(page.getByRole("dialog", { name: "Leaderboard" })).toHaveCount(0);
+});
