@@ -5,3 +5,4 @@ test-results
 playwright-report
 docs
 supabase/.temp
+.env*
