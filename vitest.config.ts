@@ -7,5 +7,6 @@ export default defineConfig({
   },
   test: {
     include: ["tests/unit/**/*.test.ts"],
+    passWithNoTests: true,
   },
 });
