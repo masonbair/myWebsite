@@ -1,0 +1,12 @@
+{
+  "place": null,
+  "countriesVisited": 21,
+  "bake": null,
+  "photos": [
+    { "src": "/misc/Mason_traveling.webp", "alt": "Mason smiling in a red bucket hat and sunglasses, taking a selfie on a roadside with green mountains and a river valley behind him" },
+    { "src": "/misc/Mason_networking_at_hackathon_horizontal.webp", "alt": "Mason in a red bucket hat and yellow hoodie standing next to a student in front of a Rocket recruiting banner at a hackathon" },
+    { "src": "/misc/MLH_hackcon_solo.webp", "alt": "Mason in a red bucket hat and colorful patchwork pants, arms crossed, in front of a wall of MLH logos" },
+    { "src": "/misc/Mason_infront_of_hacksu_sign.webp", "alt": "Mason crouching with a yellow crown headband in front of a HackKSU table while other students stand behind it" },
+    { "src": "/misc/Mason_with_nexhacks_team.webp", "alt": "Mason and three teammates posing at night around a bronze terrier statue in a brick courtyard" }
+  ]
+}
