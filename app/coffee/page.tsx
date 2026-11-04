@@ -72,7 +72,7 @@ export default function CoffeePage() {
                 <CalendarPlus weight="light" size={18} aria-hidden />
               </span>
             </a>
-            <dl className="mt-auto grid grid-cols-3 gap-4 pt-12">
+            <dl className="mt-auto flex flex-wrap gap-x-12 gap-y-4 pt-12">
               {coffee.format.map(({ label, value }) => (
                 <div key={label}>
                   <dt className="text-sm text-mute">{label}</dt>
