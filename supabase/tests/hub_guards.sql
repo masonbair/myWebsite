@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(36);
+select plan(38);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000a', 'owner@example.com'),
@@ -91,6 +91,15 @@ set local request.jwt.claims = '{"role":"service_role"}';
 select throws_ok(
   $$ update public.items set state = 'open' where id = '10000000-0000-0000-0000-000000000002' $$,
   'P0001', null, 'service_role cannot reopen a done item');
+select throws_ok(
+  $$ update public.items set state = 'archived', archived_reason = 'memo-split' where id = '10000000-0000-0000-0000-000000000002' $$,
+  'P0001', null, 'service_role cannot archive a done item');
+
+set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}';
+select throws_ok(
+  $$ update public.items set state = 'done' where id = '10000000-0000-0000-0000-000000000001' $$,
+  'P0001', null, 'service_role with forged owner claims cannot complete an item');
+set local request.jwt.claims = '{"role":"service_role"}';
 
 reset role;
 set local role authenticated;

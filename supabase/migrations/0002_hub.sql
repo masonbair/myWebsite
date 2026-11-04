@@ -82,12 +82,14 @@ language plpgsql set search_path = ''
 as $$
 declare
   previous_state text := case when tg_op = 'UPDATE' then old.state else 'open' end;
+  -- Any role can set request.jwt.claims on itself, so auth.uid() alone is only trusted for the authenticated role.
+  caller_is_owner boolean := current_user = 'authenticated' and public.is_owner();
 begin
-  if new.state = 'done' and previous_state <> 'done' and not public.is_owner() then
+  if new.state = 'done' and previous_state <> 'done' and not caller_is_owner then
     raise exception 'only the owner can complete an item';
   end if;
-  if previous_state = 'done' and new.state = 'open' and not public.is_owner() then
-    raise exception 'only the owner can reopen a done item';
+  if previous_state = 'done' and new.state <> 'done' and not caller_is_owner then
+    raise exception 'only the owner can move an item out of done';
   end if;
   if new.state = 'archived' then
     if new.archived_reason is null then
