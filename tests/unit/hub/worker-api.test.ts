@@ -223,3 +223,45 @@ describe("items, comments and state", () => {
     expect((await call(h, "state/k", { method: "PUT", body: JSON.stringify({}) })).status).toBe(400);
   });
 });
+
+describe("memo routes", () => {
+  it("adds an item with a due date and a client key, once per key", async () => {
+    const h = workerHarness();
+    const body = { title: "Call the dentist", labels: ["hidock"], due: { date: "2026-10-25", time: null }, clientKey: "hidock:f.hda#todo:0" };
+    const first = await (await call(h, "item", post(body))).json();
+    const again = await (await call(h, "item", post(body))).json();
+    expect(first).toMatchObject({ due: { date: "2026-10-25", time: null }, list: "inbox" });
+    expect(again.id).toBe(first.id);
+    expect((await call(h, "item", post({ ...body, clientKey: "has space" }))).status).toBe(400);
+  });
+
+  it("archives a memo as memo-split with the note, and a retry adds nothing", async () => {
+    const h = workerHarness();
+    const memo = seedItem(h.rows, { labels: ["hidock-memo"] });
+    expect((await call(h, `item/${memo.id}/split`, post({ note: "split into 1 items:\nurl" }))).status).toBe(200);
+    expect((await call(h, `item/${memo.id}/split`, post({ note: "split into 1 items:\nurl" }))).status).toBe(200);
+    expect(h.rows.items.get(memo.id)).toMatchObject({ state: "archived", mergedInto: null });
+    expect(h.rows.archivedReasons.get(memo.id)).toBe("memo-split");
+    expect(h.rows.comments.map((c) => c.body)).toEqual(["split into 1 items:\nurl"]);
+  });
+
+  it("refuses to split a non-memo, a done memo, or without a note", async () => {
+    const h = workerHarness();
+    const plain = seedItem(h.rows, { labels: ["todo"] });
+    const done = seedItem(h.rows, { labels: ["hidock-memo"], state: "done" });
+    const open = seedItem(h.rows, { labels: ["hidock-memo"] });
+    expect((await call(h, `item/${plain.id}/split`, post({ note: "n" }))).status).toBe(409);
+    expect((await call(h, `item/${done.id}/split`, post({ note: "n" }))).status).toBe(409);
+    expect((await call(h, `item/${open.id}/split`, post({ note: " " }))).status).toBe(400);
+    expect(h.rows.items.get(done.id)!.state).toBe("done");
+  });
+
+  it("seeds memo file names, counting ones already known, and refuses a bad name", async () => {
+    const h = workerHarness();
+    const seed = (files: unknown) => call(h, "memo-files", post({ files }));
+    expect(await (await seed(["a.hda", "b.hda"])).json()).toEqual({ seeded: 2, known: 0 });
+    expect(await (await seed(["b.hda", "c.hda"])).json()).toEqual({ seeded: 1, known: 1 });
+    expect((await seed(["../x"])).status).toBe(400);
+    expect((await seed("a.hda")).status).toBe(400);
+  });
+});

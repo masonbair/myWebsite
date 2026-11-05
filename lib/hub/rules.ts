@@ -21,6 +21,7 @@ const ALLOWED: Record<HubAction, Actor["kind"][]> = {
   claim: ["worker"],
   "set-status-labels": ["worker"],
   "hub-state": ["worker"],
+  "memo-files": ["worker"],
 };
 
 export function assertAllowed(actor: Actor, action: HubAction): void {

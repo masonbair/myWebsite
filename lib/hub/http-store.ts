@@ -66,6 +66,8 @@ export function createHttpStore(baseUrl: string, token: string, runId: string, f
     },
     report: (id, outcome, comment) => call<Item>("POST", item(id, `/${outcome}`), { comment }),
     merge: (id, into, note) => call<Item>("POST", item(id, "/merge"), { into, note }),
+    archiveSplitMemo: (id, note) => call<Item>("POST", item(id, "/split"), { note }),
+    seedMemoFiles: (files) => call<{ seeded: number; known: number }>("POST", "memo-files", { files }),
     addComment: (id, body) => call<Comment>("POST", item(id, "/comment"), { body }),
     async getState(key) {
       return (await call<{ value: unknown }>("GET", `state/${encodeURIComponent(key)}`)).value;

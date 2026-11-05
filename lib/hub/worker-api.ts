@@ -1,12 +1,13 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { tokenMatches } from "./bearer";
 import { MAX_WORKER_COMMENT, parseItemPatch } from "./input";
 import { isClaimable } from "./lifecycle";
+import { MEMO_FILE } from "./memo";
 import { ForbiddenError, assertArchiveArgs } from "./rules";
 import type { Comment, HubStore, Item, ItemPatch, ItemQuery } from "./types";
 
 export type WorkerView = "inbox" | "approved" | "laptop" | "to-schedule" | "memos" | "hidock" | "dated";
 export type Outcome = "finish" | "block";
-export type NewWorkerItem = { title: string; description?: string; labels?: string[] };
+export type NewWorkerItem = { title: string; description?: string; labels?: string[]; due?: Item["due"]; clientKey?: string };
 
 /** Everything the worker may do; there is deliberately no complete, reopen or delete. */
 export interface HubWorker {
@@ -19,6 +20,8 @@ export interface HubWorker {
   claim(id: string): Promise<boolean>;
   report(id: string, outcome: Outcome, comment: string): Promise<Item>;
   merge(id: string, into: string, note: string): Promise<Item>;
+  archiveSplitMemo(id: string, note: string): Promise<Item>;
+  seedMemoFiles(files: string[]): Promise<{ seeded: number; known: number }>;
   addComment(id: string, body: string): Promise<Comment>;
   getState(key: string): Promise<unknown | null>;
   setState(key: string, value: unknown): Promise<void>;
@@ -36,6 +39,8 @@ const VIEW_LIMIT = 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RUN_ID = /^[A-Za-z0-9._-]{1,64}$/;
 const STATE_KEY = /^[a-z0-9:-]{1,100}$/;
+const CLIENT_KEY = /^[A-Za-z0-9._:#-]{1,200}$/;
+const MAX_SEED_FILES = 10_000;
 const UNSORTED = ["todo", "idea", "thought", "hidock-memo", "claude", "claude-working", "claude-done", "claude-question"];
 
 const VIEWS: Record<WorkerView, ItemQuery> = {
@@ -119,6 +124,24 @@ async function merge(ctx: Context): Promise<Response> {
   return json(await store.archive(newer.id, "merged", older.id, `merged into ${older.url}`));
 }
 
+async function archiveSplitMemo(ctx: Context): Promise<Response> {
+  const { store, params } = ctx;
+  const note = requireText((await ctx.body()).note, "note").trim();
+  const memo = await need(store, params.id);
+  if (!memo.labels.includes("hidock-memo")) throw new ApiError(409, `item ${memo.id} is not a HiDock memo`);
+  if (memo.state === "archived" && memo.mergedInto === null) return json(memo);
+  if (memo.state !== "open") throw new ApiError(409, `item ${memo.id} is ${memo.state}`);
+  return json(await store.archive(memo.id, "memo-split", null, note));
+}
+
+async function seedMemoFiles(ctx: Context): Promise<Response> {
+  const { files } = await ctx.body();
+  if (!Array.isArray(files) || files.length > MAX_SEED_FILES || !files.every((f) => typeof f === "string" && MEMO_FILE.test(f))) {
+    throw new ApiError(400, `files must be up to ${MAX_SEED_FILES} plain device file names`);
+  }
+  return json(await ctx.store.seedMemoFiles(files));
+}
+
 const viewRoutes: Route[] = (Object.keys(VIEWS) as WorkerView[]).map((name) => ({
   method: "GET",
   path: [name],
@@ -152,9 +175,13 @@ export const WORKER_ROUTES: readonly Route[] = [
     path: ["item"],
     async run({ store, body }) {
       const raw = await body();
-      const patch = parsePatch({ title: raw.title, description: raw.description, labels: raw.labels });
+      const patch = parsePatch({ title: raw.title, description: raw.description, labels: raw.labels, due: raw.due });
       if (patch.title === undefined) throw new ApiError(400, "title is required");
-      return json(await store.addItem({ ...patch, title: patch.title, list: "inbox", source: "worker" }), 201);
+      if (raw.clientKey !== undefined && (typeof raw.clientKey !== "string" || !CLIENT_KEY.test(raw.clientKey))) {
+        throw new ApiError(400, "clientKey must be 1 to 200 of A-Z a-z 0-9 . _ : # -");
+      }
+      const clientKey = raw.clientKey as string | undefined;
+      return json(await store.addItem({ ...patch, title: patch.title, list: "inbox", source: "worker", clientKey }), 201);
     },
   },
   {
@@ -178,6 +205,8 @@ export const WORKER_ROUTES: readonly Route[] = [
   { method: "POST", path: ["item", ":id", "finish"], run: (ctx) => report(ctx, "finish") },
   { method: "POST", path: ["item", ":id", "block"], run: (ctx) => report(ctx, "block") },
   { method: "POST", path: ["item", ":id", "merge"], run: merge },
+  { method: "POST", path: ["item", ":id", "split"], run: archiveSplitMemo },
+  { method: "POST", path: ["memo-files"], run: seedMemoFiles },
   {
     method: "POST",
     path: ["item", ":id", "comment"],
@@ -203,12 +232,6 @@ export const WORKER_ROUTES: readonly Route[] = [
     },
   },
 ];
-
-function tokenMatches(header: string | null, expected: string): boolean {
-  const given = header?.match(/^Bearer (\S+)$/)?.[1] ?? "";
-  const digest = (s: string) => createHash("sha256").update(s).digest();
-  return timingSafeEqual(digest(given), digest(expected)) && given.length > 0;
-}
 
 function match(method: string, segments: string[]): { route: Route; params: Record<string, string> } | null {
   for (const route of WORKER_ROUTES) {

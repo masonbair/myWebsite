@@ -18,6 +18,8 @@ type Rows = {
   comments: Comment[];
   state: Map<string, unknown>;
   archivedReasons: Map<string, ArchiveReason>;
+  /** File name to memo item id; null for a seeded file. */
+  memoFiles: Map<string, string | null>;
 };
 
 export type FakeStore = HubStore & { rows: Rows };
@@ -30,6 +32,7 @@ export function createFakeStore(actor: Actor, rows?: Rows, now: () => Date = () 
     comments: [],
     state: new Map(),
     archivedReasons: new Map(),
+    memoFiles: new Map(),
   };
   let counter = data.items.size + data.comments.length;
   const nextId = () => `00000000-0000-4000-8000-${String(++counter).padStart(12, "0")}`;
@@ -162,6 +165,26 @@ export function createFakeStore(actor: Actor, rows?: Rows, now: () => Date = () 
       assertAllowed(actor, "hub-state");
       assertHubStateKey(key);
       data.state.set(key, value);
+    },
+    async acceptMemo(memo) {
+      assertAllowed(actor, "memo-files");
+      if (data.memoFiles.has(memo.file)) return { id: data.memoFiles.get(memo.file)!, duplicate: true };
+      const item = await this.addItem({
+        title: memo.title,
+        description: memo.description,
+        labels: ["hidock-memo"],
+        source: `memo:${memo.device}`,
+      });
+      for (const body of memo.transcriptParts) await this.addComment(item.id, body);
+      data.memoFiles.set(memo.file, item.id);
+      return { id: item.id, duplicate: false };
+    },
+    async seedMemoFiles(files) {
+      assertAllowed(actor, "memo-files");
+      const unique = [...new Set(files)];
+      const fresh = unique.filter((file) => !data.memoFiles.has(file));
+      for (const file of fresh) data.memoFiles.set(file, null);
+      return { seeded: fresh.length, known: unique.length - fresh.length };
     },
   };
 }

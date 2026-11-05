@@ -59,11 +59,25 @@ export type HubAction =
   | "archive"
   | "claim"
   | "set-status-labels"
-  | "hub-state";
+  | "hub-state"
+  | "memo-files";
 
 export type StatusLabel = "claude-working" | "claude-done" | "claude-question";
 
 export type ArchiveReason = "merged" | "memo-split";
+
+/** A HiDock memo ready to file: the item text plus the transcript already cut into comment parts. */
+export type NewMemo = {
+  file: string;
+  recorded: string;
+  device: "phone" | "mac";
+  title: string;
+  description: string;
+  transcriptParts: string[];
+};
+
+/** `id` is null for a file seeded as already filed before the hub existed. */
+export type AcceptedMemo = { id: string | null; duplicate: boolean };
 
 export interface HubStore {
   getItem(id: string): Promise<Item | null>;
@@ -80,4 +94,8 @@ export interface HubStore {
   listComments(itemId: string): Promise<Comment[]>;
   getHubState(key: string): Promise<unknown | null>;
   setHubState(key: string, value: unknown): Promise<void>;
+  /** Files the memo item, its transcript comments and its memo_files row together, once per file name. */
+  acceptMemo(memo: NewMemo): Promise<AcceptedMemo>;
+  /** Marks file names as already filed so an upload of them makes no item. */
+  seedMemoFiles(files: string[]): Promise<{ seeded: number; known: number }>;
 }

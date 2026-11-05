@@ -268,6 +268,36 @@ export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
       if (error) throw error;
       await audit("update", null, { hubState: key });
     },
+
+    async acceptMemo(memo) {
+      assertAllowed(actor, "memo-files");
+      const { data, error } = await client.rpc("hub_accept_memo", {
+        p_file: memo.file,
+        p_recorded: memo.recorded,
+        p_device: memo.device,
+        p_title: memo.title,
+        p_description: memo.description,
+        p_transcript_parts: memo.transcriptParts,
+        p_actor: auditActor(actor),
+      });
+      if (error) throw error;
+      const [row] = data as { item_id: string | null; duplicate: boolean }[];
+      return { id: row.item_id, duplicate: row.duplicate };
+    },
+
+    async seedMemoFiles(files) {
+      assertAllowed(actor, "memo-files");
+      const unique = [...new Set(files)];
+      if (unique.length === 0) return { seeded: 0, known: 0 };
+      const { data, error } = await client
+        .from("memo_files")
+        .upsert(unique.map((file) => ({ file })), { onConflict: "file", ignoreDuplicates: true })
+        .select("file");
+      if (error) throw error;
+      const seeded = data.length;
+      await audit("memo-files", null, { seeded });
+      return { seeded, known: unique.length - seeded };
+    },
   };
 }
 

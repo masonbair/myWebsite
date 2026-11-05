@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runCli, type CliDeps } from "@/lib/hub/cli";
 import type { Message } from "@/lib/hub/notify";
+import { memoItem } from "@/lib/hub/memo";
 import type { HubStore, Item } from "@/lib/hub/types";
 import { minutesAgo, NOW, seedItem, workerHarness } from "./worker-harness";
 
@@ -25,6 +26,7 @@ function harness(overrides: Overrides = {}) {
     notify: overrides.notify ?? (async (m) => void sent.push(m)),
     now: () => NOW,
     timeZone: "America/Denver",
+    projects: () => ["ledger", "todo-hub"],
     out: (s) => out.push(s),
     err: (s) => err.push(s),
   };
@@ -427,11 +429,58 @@ describe("runCli", () => {
     expect(h.item(b.id)).toMatchObject({ title: "Book b", due: null, labels: ["hidock", "todo", "to-schedule"] });
   });
 
-  it("memos lists open hidock-memo items", async () => {
-    const h = harness();
-    const memo = seedItem(h.rows, { labels: ["hidock-memo"] });
-    seedItem(h.rows, { labels: ["hidock"] });
-    expect(await runCli(["memos"], h.deps)).toBe(0);
-    expect(JSON.parse(h.out[0]).map((i: Item) => i.id)).toEqual([memo.id]);
+  describe("memos", () => {
+    const FILE = "2026Oct22-183504-Rec22.hda";
+    function seedMemo(h: ReturnType<typeof harness>) {
+      const m = memoItem({ file: FILE, recorded: "2026-10-22T18:35:04", transcript: "Call the dentist." });
+      const memo = seedItem(h.rows, { title: m.title, description: m.description, labels: ["hidock-memo"] });
+      h.rows.comments.push({ id: "c-memo", itemId: memo.id, body: m.transcriptParts[0], author: "worker", createdAt: NOW.toISOString() });
+      return memo;
+    }
+
+    it("memos prints open memos with their transcripts and reports unreadable ones", async () => {
+      const h = harness();
+      const memo = seedMemo(h);
+      const broken = seedItem(h.rows, { labels: ["hidock-memo"] });
+      seedItem(h.rows, { labels: ["hidock"] });
+      expect(await runCli(["memos"], h.deps)).toBe(0);
+      expect(JSON.parse(h.out[0])).toEqual([{ id: memo.id, file: FILE, recorded: "2026-10-22T18:35:04", transcript: "Call the dentist." }]);
+      expect(h.err).toEqual([`skipped ${broken.id}: not a readable HiDock memo`]);
+    });
+
+    it("memo-split files the pieces and archives the memo", async () => {
+      const h = harness();
+      const memo = seedMemo(h);
+      const pieces = { todos: [{ text: "Call the dentist", source: "Call the dentist.", date: null, time: null, project: "ledger" }], notes: [], ideas: [] };
+      expect(await runCli(["memo-split", memo.id, "--pieces", tempFile(JSON.stringify(pieces))], h.deps)).toBe(0);
+      expect(h.out).toEqual(["filed 1 pieces"]);
+      expect(h.item(memo.id).state).toBe("archived");
+      const piece = [...h.rows.items.values()].find((i) => i.labels.includes("hidock"))!;
+      expect(piece.labels).toEqual(["hidock", "ledger", "to-schedule"]);
+    });
+
+    it("memo-split exits 2 on a bad pieces file and changes nothing", async () => {
+      const h = harness();
+      const memo = seedMemo(h);
+      expect(await runCli(["memo-split", memo.id, "--pieces", tempFile("{\"todos\": 1}")], h.deps)).toBe(2);
+      expect(h.err[0]).toMatch(/^bad pieces: /);
+      expect(h.item(memo.id).state).toBe("open");
+      expect(h.rows.items.size).toBe(1);
+    });
+
+    it("memo-seed marks file names as already filed", async () => {
+      const h = harness();
+      expect(await runCli(["memo-seed", tempFile("a.hda\n\n b.hda \n")], h.deps)).toBe(0);
+      expect(await runCli(["memo-seed", tempFile("b.hda\nc.hda\n")], h.deps)).toBe(0);
+      expect(h.out).toEqual(["seeded 2, already known 0", "seeded 1, already known 1"]);
+    });
+
+    it("memo-seed sends a long list in batches the API accepts", async () => {
+      const h = harness();
+      const files = Array.from({ length: 10_000 }, (_, i) => `2026Oct22-${String(i).padStart(6, "0")}-Rec${i}.hda`);
+      expect(await runCli(["memo-seed", tempFile(files.join("\n"))], h.deps)).toBe(0);
+      expect(h.out).toEqual(["seeded 10000, already known 0"]);
+      expect(h.rows.memoFiles.size).toBe(10_000);
+    });
   });
 });

@@ -3,3 +3,5 @@ export const HUB_PORT = 3110;
 export const HUB_LIVE_PORT = 3111;
 // Only the local hub servers in playwright.config.ts accept this; it is not a secret.
 export const HUB_E2E_WORKER_TOKEN = "hub-e2e-worker-token-local-only";
+// Only the local hub servers accept this memo upload token; it is not a secret.
+export const HUB_E2E_MEMO_TOKEN = "hub-e2e-memo-token-local-only";

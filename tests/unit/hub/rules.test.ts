@@ -17,6 +17,7 @@ const table: Record<HubAction, [boolean, boolean, boolean]> = {
   claim: [false, true, false],
   "set-status-labels": [false, true, false],
   "hub-state": [false, true, false],
+  "memo-files": [false, true, false],
 };
 
 describe("assertAllowed", () => {

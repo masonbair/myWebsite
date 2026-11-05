@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createHttpStore, HubApiError } from "./http-store";
 import { LABEL_PATTERN, MAX_WORKER_COMMENT } from "./input";
 import { lateTasks, migrateLate } from "./late-migrate";
+import { listMemos, parsePieces, splitMemo } from "./memo-split";
 import { notify, type Message } from "./notify";
 import { applySchedule, offsetMinutesAt, parsePlan, scheduleInput } from "./schedule";
 import type { Item } from "./types";
@@ -16,6 +17,8 @@ export type CliDeps = {
   now: () => Date;
   /** IANA zone Mason is in; scheduling uses it the way todo-hub used the Todoist account's zone. */
   timeZone: string;
+  /** Project label keys a memo piece may carry; anything else is dropped or filed as an idea. */
+  projects: () => string[];
   out: (s: string) => void;
   err: (s: string) => void;
 };
@@ -39,9 +42,9 @@ const USAGE = `usage: hub <command>
   alert <message>                     ping phone with a hub problem
   granola-since                       time of the last Granola sweep (default 48h ago)
   granola-done <iso time>             record a finished Granola sweep
-  memos                               JSON of open HiDock memos
-  memo-split <id> --pieces <path>     file a memo's pieces (arrives with the memo relay)
-  memo-seed <list-file>               mark HiDock files as already filed (arrives with the memo relay)
+  memos                               JSON of open HiDock memos with transcripts
+  memo-split <id> --pieces <path>     file a memo's pieces, then archive it (exit 2: bad pieces)
+  memo-seed <list-file>               mark HiDock file names (one per line) as already filed
   to-schedule                         JSON of the scheduling horizon and to-dos waiting for a date
   schedule --plan <path>              estimate and date waiting to-dos (exit 2: bad plan)
   late-migrate [--apply [--keep ids]] list old "(late)" memo items; --apply re-spreads them`;
@@ -50,6 +53,8 @@ const GRANOLA_KEY = "granola-swept-until";
 const DEFAULT_SWEEP_MS = 48 * 60 * 60 * 1000;
 const KINDS = ["todo", "idea", "thought"];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+// Keeps each request well under the worker API's 256 KB body cap.
+const SEED_BATCH = 1000;
 
 const summary = (t: Item) => ({ id: t.id, title: t.title, url: t.url, updatedAt: t.updatedAt });
 
@@ -136,9 +141,14 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         deps.out(JSON.stringify((await deps.hub.view("laptop")).map(summary)));
         return 0;
       case "inbox":
-      case "memos":
         deps.out(JSON.stringify(await deps.hub.view(cmd)));
         return 0;
+      case "memos": {
+        const { memos, skipped } = await listMemos(deps.hub);
+        for (const skippedId of skipped) deps.err(`skipped ${skippedId}: not a readable HiDock memo`);
+        deps.out(JSON.stringify(memos));
+        return 0;
+      }
       case "item": {
         if (!id) break;
         const item = await deps.hub.getItem(id);
@@ -196,10 +206,32 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         if (!id || Number.isNaN(Date.parse(id))) break;
         await deps.hub.setState(GRANOLA_KEY, new Date(id).toISOString());
         return 0;
-      case "memo-split":
-      case "memo-seed":
-        deps.err(`${cmd} is not available until the memo relay is on the hub; nothing was changed`);
-        return 1;
+      case "memo-split": {
+        const file = flag(rest, "--pieces");
+        if (!id || !file) break;
+        let pieces;
+        try {
+          pieces = parsePieces(JSON.parse(readFileSync(file, "utf8")), deps.projects());
+        } catch (e) {
+          deps.err(`bad pieces: ${(e as Error).message}`);
+          return 2;
+        }
+        deps.out(`filed ${await splitMemo(deps.hub, id, pieces)} pieces`);
+        return 0;
+      }
+      case "memo-seed": {
+        if (!id) break;
+        const files = readFileSync(id, "utf8").split("\n").map((l) => l.trim()).filter(Boolean);
+        let seeded = 0;
+        let known = 0;
+        for (let at = 0; at < files.length; at += SEED_BATCH) {
+          const counts = await deps.hub.seedMemoFiles(files.slice(at, at + SEED_BATCH));
+          seeded += counts.seeded;
+          known += counts.known;
+        }
+        deps.out(`seeded ${seeded}, already known ${known}`);
+        return 0;
+      }
       case "to-schedule":
         deps.out(JSON.stringify(await scheduleInput(deps.hub, deps.now(), offset())));
         return 0;
@@ -250,6 +282,12 @@ export function loadEnv(path = join(homedir(), ".config/hub/env")): void {
   }
 }
 
+/** Keys of a `{ "label": "owner/repo" }` projects file; none when the file is missing. */
+export function loadProjects(path = process.env.HUB_PROJECTS_FILE || join(homedir(), ".config/hub/projects.json")): string[] {
+  if (!existsSync(path)) return [];
+  return Object.keys(JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>);
+}
+
 export async function main(argv: string[]): Promise<number> {
   loadEnv();
   for (const key of ["HUB_URL", "HUB_WORKER_TOKEN", "NTFY_TOPIC"]) {
@@ -264,6 +302,7 @@ export async function main(argv: string[]): Promise<number> {
     notify: (msg) => notify(topic, msg),
     now: () => new Date(),
     timeZone: process.env.HUB_TIME_ZONE || "America/Denver",
+    projects: () => loadProjects(),
     out: (s) => console.log(s),
     err: (s) => console.error(s),
   });
