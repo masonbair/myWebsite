@@ -5,3 +5,5 @@ export const HUB_LIVE_PORT = 3111;
 export const HUB_E2E_WORKER_TOKEN = "hub-e2e-worker-token-local-only";
 // Only the local hub servers accept this memo upload token; it is not a secret.
 export const HUB_E2E_MEMO_TOKEN = "hub-e2e-memo-token-local-only";
+// Only the local hub servers accept this agent connector token; it is not a secret.
+export const HUB_E2E_AGENT_TOKEN = "hub-e2e-agent-token-local-only";

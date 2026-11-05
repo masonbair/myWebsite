@@ -76,8 +76,14 @@ function toPatchColumns(rawPatch: ItemPatch): Record<string, unknown> {
   return columns;
 }
 
-function quoteArrayLabel(label: string): string {
-  return `"${label.replace(/["\\]/g, "\\$&")}"`;
+// PostgREST rewrites * to % inside like and ilike patterns, so a literal search uses a fully escaped regex instead.
+function escapeRegex(text: string): string {
+  return text.replace(/[!-/:-@[-`{-~]/g, "\\$&");
+}
+
+// PostgREST reads commas, braces and parentheses in a filter value as syntax unless the value is double-quoted.
+function quoteFilterValue(value: string): string {
+  return `"${value.replace(/["\\]/g, "\\$&")}"`;
 }
 
 export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
@@ -136,12 +142,16 @@ export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
       if (q.state) query = query.eq("state", q.state);
       if (q.withLabels?.length) query = query.contains("labels", q.withLabels);
       for (const label of q.withoutLabels ?? []) {
-        query = query.not("labels", "cs", `{${quoteArrayLabel(label)}}`);
+        query = query.not("labels", "cs", `{${quoteFilterValue(label)}}`);
       }
       if (q.updatedBefore) query = query.lt("updated_at", q.updatedBefore);
       if (q.mergedInto) query = query.eq("merged_into", q.mergedInto);
       if (q.hasDue) query = query.not("due_date", "is", null);
       if (q.clientKey) query = query.eq("client_key", q.clientKey);
+      if (q.text) {
+        const pattern = quoteFilterValue(escapeRegex(q.text));
+        query = query.or(`title.imatch.${pattern},description.imatch.${pattern}`);
+      }
       const { data, error } = await query.order("created_at", { ascending: false }).limit(q.limit ?? DEFAULT_LIMIT);
       if (error) throw error;
       return (data as ItemRow[]).map(toItem);

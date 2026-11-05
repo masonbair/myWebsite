@@ -35,6 +35,8 @@ export type ItemQuery = {
   mergedInto?: string;
   hasDue?: boolean;
   clientKey?: string;
+  /** Case-insensitive literal match in the title or description. */
+  text?: string;
   limit?: number;
 };
 
