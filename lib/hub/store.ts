@@ -140,7 +140,7 @@ export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
       let query = client.from("items").select("*");
       if (q.list) query = query.eq("list", q.list);
       if (q.state) query = query.eq("state", q.state);
-      if (q.withLabels?.length) query = query.contains("labels", q.withLabels);
+      if (q.withLabels?.length) query = query.filter("labels", "cs", `{${q.withLabels.map(quoteFilterValue).join(",")}}`);
       for (const label of q.withoutLabels ?? []) {
         query = query.not("labels", "cs", `{${quoteFilterValue(label)}}`);
       }

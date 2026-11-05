@@ -56,6 +56,16 @@ describe.skipIf(!enabled)("hub store against local Supabase", () => {
     await expect(store.addItem({ title: "integration claude", labels: ["claude"], source: "test" })).rejects.toThrow(ForbiddenError);
   });
 
+  it("matches labels with filter syntax in them literally in both label filters", async () => {
+    const store = createHubStore(client(), worker);
+    const odd = `odd,{x}"${randomUUID().slice(0, 8)}"\\`;
+    const item = await store.addItem({ title: "integration odd label", labels: [odd, "plain"], source: "test", clientKey: randomUUID() });
+    expect((await store.listItems({ withLabels: [odd] })).map((i) => i.id)).toEqual([item.id]);
+    expect((await store.listItems({ withLabels: [odd, "plain"] })).map((i) => i.id)).toEqual([item.id]);
+    const others = await store.listItems({ withLabels: ["plain"], withoutLabels: [odd] });
+    expect(others.map((i) => i.id)).not.toContain(item.id);
+  });
+
   it("limits hub state to the worker", async () => {
     await expect(createHubStore(client(), agent).getHubState("x")).rejects.toThrow(ForbiddenError);
     const key = `reminded:${randomUUID()}`;

@@ -68,3 +68,21 @@ node scripts/hub-restore.ts hub-backups-2026-11-05.json --target postgresql://po
 - It restores items (with archive reason, client key and completed time), comments, `hub_state` and `memo_files`.
 - `audit_log` is not in the backups at all, so its history is lost if the database is.
 - It does not restore `hub_owner` (sign in again and you are recorded), `audit_log` (history only), auth users, or the `updated_at` time of `hub_state` rows. The now place and bake tables join the backup when they exist.
+
+## Agent connector (MCP)
+
+Claude Code and the cloud worker reach the hub through `https://masonbair.com/api/mcp/mcp`. It only offers find, read, add, update, comment, merge-duplicate and the public now board; nothing can complete, delete, email, buy, book, deploy or merge.
+
+- `HUB_AGENT_TOKEN` (already set in Vercel) is the bearer token. If it is unset the connector answers 503; a missing or wrong token gets 401.
+- Requests carrying an `Origin` header (browsers) get 403, and bodies over 1 MB get 413.
+- `X-Client-Name` names the agent in `audit_log` and in an added item's source (`agent:<name>`); letters, digits, `.`, `_`, `-`, up to 40 characters, otherwise `unknown`.
+
+Production:
+```sh
+claude mcp add --transport http hub https://masonbair.com/api/mcp/mcp --header "Authorization: Bearer <HUB_AGENT_TOKEN>" --header "X-Client-Name: claude-code"
+```
+
+Local (`npm run dev`, with `HUB_AGENT_TOKEN` in `.env.local`):
+```sh
+claude mcp add --transport http hub-local http://localhost:3000/api/mcp/mcp --header "Authorization: Bearer $HUB_AGENT_TOKEN" --header "X-Client-Name: claude-code"
+```

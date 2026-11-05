@@ -18,7 +18,9 @@ test.describe("hub agent connector", () => {
     const client = new Client({ name: "e2e", version: "1.0.0" });
     await client.connect(transport);
     const { tools } = await client.listTools();
-    console.log(`tools: ${tools.map((t) => t.name).join(", ")}`);
+    expect(tools.map((t) => t.name).sort()).toEqual(
+      ["add_comment", "add_item", "find_items", "get_item", "get_now", "list_comments", "merge_duplicate", "update_item"],
+    );
     const title = `e2e mcp ${randomUUID().slice(0, 8)}`;
     const result = await client.callTool({ name: "add_item", arguments: { title } });
     expect(result.isError).toBeFalsy();
@@ -39,5 +41,13 @@ test.describe("hub agent connector", () => {
     const headers = { accept: "application/json, text/event-stream" };
     expect((await request.post(MCP_URL, { data: body, headers })).status()).toBe(401);
     expect((await request.post(MCP_URL, { data: body, headers: { ...headers, authorization: "Bearer wrong" } })).status()).toBe(401);
+  });
+
+  test("refuses a browser origin and a body over 1 MB before anything else", async ({ request }) => {
+    const auth = { authorization: `Bearer ${HUB_E2E_AGENT_TOKEN}`, accept: "application/json, text/event-stream" };
+    const body = { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} };
+    expect((await request.post(MCP_URL, { data: body, headers: { ...auth, origin: "http://evil.test" } })).status()).toBe(403);
+    const big = { ...body, params: { pad: "x".repeat(1024 * 1024) } };
+    expect((await request.post(MCP_URL, { data: big, headers: auth })).status()).toBe(413);
   });
 });
