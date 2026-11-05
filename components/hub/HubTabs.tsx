@@ -9,6 +9,7 @@ const TABS = [
   { href: "/hub", label: "Inbox" },
   { href: "/hub/list/todo", label: "Todo" },
   { href: "/hub/list/ideas", label: "Ideas" },
+  { href: "/hub/now", label: "Now" },
 ];
 
 export function HubTabs() {
@@ -23,7 +24,7 @@ export function HubTabs() {
               <Link
                 href={tab.href}
                 aria-current={current ? "page" : undefined}
-                className={`block rounded-full px-4 py-1.5 text-sm font-medium transition-colors duration-300 ease-spring ${
+                className={`block rounded-full px-3 py-1.5 sm:px-4 text-sm font-medium transition-colors duration-300 ease-spring ${
                   current ? "bg-surface text-ink shadow-sm ring-1 ring-ink/5" : "text-mute hover:text-ink"
                 } ${focusRing}`}
               >

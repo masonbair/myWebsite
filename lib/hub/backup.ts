@@ -15,13 +15,16 @@ export type BackupMemoFile = {
   acceptedAt: string | null;
 };
 
+export type BackupNowPlace = { id: number; city: string; region: string; country: string; private: boolean; updatedAt: string };
+export type BackupNowBake = { id: number; name: string; photo: string | null; bakedAt: string };
+
 export type Snapshot = {
   items: BackupItem[];
   comments: Comment[];
   hubState: Record<string, unknown>;
   memoFiles: BackupMemoFile[];
-  nowPlace: unknown[];
-  nowBake: unknown[];
+  nowPlace: BackupNowPlace[];
+  nowBake: BackupNowBake[];
   takenAt: string;
 };
 
@@ -30,6 +33,8 @@ export interface SnapshotSource {
   comments(): Promise<Comment[]>;
   hubState(): Promise<Record<string, unknown>>;
   memoFiles(): Promise<BackupMemoFile[]>;
+  nowPlace(): Promise<BackupNowPlace[]>;
+  nowBake(): Promise<BackupNowBake[]>;
 }
 
 /** The blob calls a backup needs, so tests can swap in memory. */
@@ -47,11 +52,13 @@ const PAGE = 1000;
 
 export async function snapshot(source: SnapshotSource, now: Date = new Date()): Promise<Snapshot> {
   // Items last: they are never deleted, so every item a comment or memo file points at is already there.
+  const nowPlace = await source.nowPlace();
+  const nowBake = await source.nowBake();
   const hubState = await source.hubState();
   const memoFiles = await source.memoFiles();
   const comments = await source.comments();
   const items = await source.items();
-  return { items, comments, hubState, memoFiles, nowPlace: [], nowBake: [], takenAt: now.toISOString() };
+  return { items, comments, hubState, memoFiles, nowPlace, nowBake, takenAt: now.toISOString() };
 }
 
 export function backupPath(now: Date): string {
@@ -152,6 +159,17 @@ export function createSnapshotSource(client: SupabaseClient): SnapshotSource {
         accepted_at: string | null;
       }>("memo_files", "file");
       return rows.map((r) => ({ file: r.file, recorded: r.recorded, device: r.device, itemId: r.item_id, acceptedAt: r.accepted_at }));
+    },
+    async nowPlace() {
+      const rows = await all<{ id: number; city: string; region: string; country: string; private: boolean; updated_at: string }>(
+        "now_place",
+        "id",
+      );
+      return rows.map((r) => ({ id: r.id, city: r.city, region: r.region, country: r.country, private: r.private, updatedAt: r.updated_at }));
+    },
+    async nowBake() {
+      const rows = await all<{ id: number; name: string; photo: string | null; baked_at: string }>("now_bake", "id");
+      return rows.map((r) => ({ id: r.id, name: r.name, photo: r.photo, bakedAt: r.baked_at }));
     },
   };
 }

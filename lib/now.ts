@@ -1,12 +1,14 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { serviceClient } from "@/lib/supabase/server";
 
 export type Place = { city: string; region: string; country: string; private: boolean; updatedAt: string };
 export type Bake = { name: string; photo: string | null; bakedAt: string };
 export type Photo = { src: string; alt: string };
 export type NowData = { place: Place | null; countriesVisited: number; bake: Bake | null; photos: Photo[] };
 
-const PHOTO_SRC = /^\/misc\/[A-Za-z0-9._-]+\.(webp|jpe?g|png)$/;
+export const PHOTO_SRC = /^\/misc\/[A-Za-z0-9._-]+\.(webp|jpe?g|png)$/;
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === "string" && v.trim() !== "" ? v : null);
@@ -14,7 +16,7 @@ const isoDate = (v: unknown): string | null => {
   const s = str(v);
   return s !== null && !Number.isNaN(Date.parse(s)) ? s : null;
 };
-const photoSrc = (v: unknown): string | null => {
+export const photoSrc = (v: unknown): string | null => {
   const s = str(v);
   return s !== null && PHOTO_SRC.test(s) && !s.includes("..") ? s : null;
 };
@@ -83,4 +85,46 @@ export async function readNow(): Promise<NowData> {
   } catch {
     return parseNow(null);
   }
+}
+
+/** The newest place and latest bake from the database; null fields mean the tables have none yet. */
+export type NowRows = { place: Place | null; bake: Bake | null };
+
+/** Reads the now tables as the service role; callers must keep a private place's city off public pages. */
+export async function readNowRows(client: SupabaseClient): Promise<NowRows> {
+  const [place, bake] = await Promise.all([
+    client.from("now_place").select("city, region, country, private, updated_at").order("id", { ascending: false }).limit(1).maybeSingle(),
+    client
+      .from("now_bake")
+      .select("name, photo, baked_at")
+      .order("baked_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  if (place.error) throw place.error;
+  if (bake.error) throw bake.error;
+  return {
+    place: place.data ? parsePlace({ ...place.data, updatedAt: place.data.updated_at }) : null,
+    bake: bake.data ? parseBake({ ...bake.data, bakedAt: bake.data.baked_at }) : null,
+  };
+}
+
+async function databaseRows(): Promise<NowRows | null> {
+  // Empty on the e2e site servers and in tests, so they never read a real database.
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
+  return readNowRows(serviceClient());
+}
+
+type LoadNowDeps = { file?: () => Promise<NowData>; rows?: () => Promise<NowRows | null> };
+
+/** The board's now data: database rows first, then content/now.json for any field the database has none of or fails on. */
+export async function loadNow(deps: LoadNowDeps = {}): Promise<NowData> {
+  const [file, rows] = await Promise.all([
+    (deps.file ?? readNow)(),
+    Promise.resolve()
+      .then(deps.rows ?? databaseRows)
+      .catch(() => null),
+  ]);
+  return { ...file, place: rows?.place ?? file.place, bake: rows?.bake ?? file.bake };
 }

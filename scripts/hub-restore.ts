@@ -36,7 +36,9 @@ function assertSnapshot(value: unknown): asserts value is Snapshot {
     Array.isArray(s.comments) &&
     typeof s.hubState === "object" &&
     s.hubState !== null &&
-    (s.memoFiles === undefined || Array.isArray(s.memoFiles));
+    (s.memoFiles === undefined || Array.isArray(s.memoFiles)) &&
+    (s.nowPlace === undefined || Array.isArray(s.nowPlace)) &&
+    (s.nowBake === undefined || Array.isArray(s.nowBake));
   if (!ok) throw new RestoreError("the file is not a hub snapshot");
 }
 
@@ -62,6 +64,20 @@ const MEMO_FILES_SQL = `
   insert into public.memo_files (file, recorded, device, item_id, accepted_at)
   select file, recorded, device, item_id, accepted_at
   from jsonb_to_recordset($1::jsonb) as r(file text, recorded timestamp, device text, item_id uuid, accepted_at timestamptz)`;
+
+// Ids are kept so a later backup lines up, then each identity sequence moves past them so new rows never collide.
+const NOW_PLACE_SQL = `
+  insert into public.now_place (id, city, region, country, private, updated_at)
+  select id, city, region, country, private, updated_at
+  from jsonb_to_recordset($1::jsonb) as r(id bigint, city text, region text, country text, private boolean, updated_at timestamptz)`;
+
+const NOW_BAKE_SQL = `
+  insert into public.now_bake (id, name, photo, baked_at)
+  select id, name, photo, baked_at
+  from jsonb_to_recordset($1::jsonb) as r(id bigint, name text, photo text, baked_at timestamptz)`;
+
+const syncIdentity = (table: string) =>
+  `select setval(pg_get_serial_sequence('public.${table}', 'id'), coalesce((select max(id) from public.${table}), 0) + 1, false)`;
 
 async function restore(snapshot: Snapshot, target: string): Promise<Record<string, number>> {
   const db = new pg.Client({ connectionString: target });
@@ -108,9 +124,29 @@ async function restore(snapshot: Snapshot, target: string): Promise<Record<strin
     await db.query(ITEMS_SQL, [JSON.stringify(items)]);
     await db.query(COMMENTS_SQL, [JSON.stringify(comments)]);
     await db.query(HUB_STATE_SQL, [JSON.stringify(snapshot.hubState)]);
+    const nowPlace = (snapshot.nowPlace ?? []).map((p) => ({
+      id: p.id,
+      city: p.city,
+      region: p.region,
+      country: p.country,
+      private: p.private,
+      updated_at: p.updatedAt,
+    }));
+    const nowBake = (snapshot.nowBake ?? []).map((b) => ({ id: b.id, name: b.name, photo: b.photo, baked_at: b.bakedAt }));
     await db.query(MEMO_FILES_SQL, [JSON.stringify(memoFiles)]);
+    await db.query(NOW_PLACE_SQL, [JSON.stringify(nowPlace)]);
+    await db.query(NOW_BAKE_SQL, [JSON.stringify(nowBake)]);
+    await db.query(syncIdentity("now_place"));
+    await db.query(syncIdentity("now_bake"));
     await db.query("commit");
-    return { items: items.length, comments: comments.length, hubState: Object.keys(snapshot.hubState).length, memoFiles: memoFiles.length };
+    return {
+      items: items.length,
+      comments: comments.length,
+      hubState: Object.keys(snapshot.hubState).length,
+      memoFiles: memoFiles.length,
+      nowPlace: nowPlace.length,
+      nowBake: nowBake.length,
+    };
   } catch (e) {
     await db.query("rollback");
     throw e;

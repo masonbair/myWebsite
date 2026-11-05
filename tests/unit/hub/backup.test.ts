@@ -38,6 +38,8 @@ const emptySource: SnapshotSource = {
   comments: async () => [],
   hubState: async () => ({}),
   memoFiles: async () => [],
+  nowPlace: async () => [],
+  nowBake: async () => [],
 };
 
 function fakeBlobs(initial: string[]) {
@@ -66,9 +68,16 @@ function fakeBlobs(initial: string[]) {
 const dayPath = (daysBefore: number) => backupPath(new Date(Date.UTC(2026, 10, 5) - daysBefore * 86_400_000));
 
 describe("snapshot", () => {
-  it("holds every table plus empty now data until the now tables exist", async () => {
+  it("holds every table, the now place and bake tables included", async () => {
+    const place = { id: 7, city: "Kent", region: "Ohio", country: "United States", private: true, updatedAt: "2026-11-01T00:00:00Z" };
+    const bake = { id: 3, name: "Sourdough", photo: null, bakedAt: "2026-11-02T00:00:00Z" };
     const shot = await snapshot(
-      { ...emptySource, hubState: async () => ({ "reminded:x": "2026-11-05T10:00:00" }) },
+      {
+        ...emptySource,
+        hubState: async () => ({ "reminded:x": "2026-11-05T10:00:00" }),
+        nowPlace: async () => [place],
+        nowBake: async () => [bake],
+      },
       new Date("2026-11-05T03:00:00Z"),
     );
     expect(shot).toEqual({
@@ -76,8 +85,8 @@ describe("snapshot", () => {
       comments: [],
       hubState: { "reminded:x": "2026-11-05T10:00:00" },
       memoFiles: [],
-      nowPlace: [],
-      nowBake: [],
+      nowPlace: [place],
+      nowBake: [bake],
       takenAt: "2026-11-05T03:00:00.000Z",
     });
   });
@@ -173,6 +182,9 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
     await store.addComment(older.id, "backup comment");
     await store.archive(newer.id, "merged", older.id, "merged in the backup test");
     await store.setHubState(`reminded:${older.id}`, "2026-11-05T09:30:00");
+    const place = await client.from("now_place").insert({ city: "Backupville", region: "Ohio", country: "United States", private: true });
+    const bake = await client.from("now_bake").insert({ name: "backup loaf", photo: "/misc/Mason_traveling.webp" });
+    if (place.error || bake.error) throw place.error ?? bake.error;
 
     shot = await snapshot(createSnapshotSource(client));
     file = join(await mkdtemp(join(tmpdir(), "hub-backup-")), "snapshot.json");
@@ -180,7 +192,7 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
 
     await withDb(`${LOCAL_DB}/postgres`, (db) => db.query(`create database ${scratch}`));
     const migrations = await Promise.all(
-      ["0002_hub.sql", "0003_hub_memo.sql"].map((name) => readFile(join(__dirname, "../../../supabase/migrations", name), "utf8")),
+      ["0002_hub.sql", "0003_hub_memo.sql", "0005_now.sql"].map((name) => readFile(join(__dirname, "../../../supabase/migrations", name), "utf8")),
     );
     await withDb(scratchUrl, async (db) => {
       await db.query(AUTH_STUB);
@@ -208,6 +220,15 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
       expect(ids(comments)).toEqual(shot.comments.map((c) => c.id).sort());
       expect(ids(state)).toEqual(Object.keys(shot.hubState).sort());
       expect(ids(memoFiles)).toEqual(shot.memoFiles.map((m) => m.file).sort());
+      const nowPlace = (await db.query("select id::int, city, private from public.now_place order by id")).rows;
+      const nowBake = (await db.query("select id::int, name, photo from public.now_bake order by id")).rows;
+      expect(shot.nowPlace.length).toBeGreaterThan(0);
+      expect(shot.nowBake.length).toBeGreaterThan(0);
+      expect(nowPlace).toEqual(shot.nowPlace.map((p) => ({ id: Number(p.id), city: p.city, private: p.private })));
+      expect(nowBake).toEqual(shot.nowBake.map((b) => ({ id: Number(b.id), name: b.name, photo: b.photo })));
+      // The identity sequence moved past the restored ids, so the next bake gets a fresh one.
+      const next = (await db.query("insert into public.now_bake (name) values ('after restore') returning id::int")).rows[0];
+      expect(next.id).toBeGreaterThan(Math.max(...shot.nowBake.map((b) => Number(b.id))));
 
       const merged = shot.items.find((i) => i.title === "backup duplicate" && i.state === "archived")!;
       expect(items.find((r) => r.id === merged.id)).toMatchObject({ merged_into: merged.mergedInto, archived_reason: "merged" });
