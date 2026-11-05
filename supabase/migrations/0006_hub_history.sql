@@ -12,23 +12,40 @@ create table public.items_history (
 
 create index items_history_item_id_idx on public.items_history (item_id, changed_at);
 
--- Runs as the caller so current_user still says who made the change; an after trigger records only updates that happened.
+-- Security definer so it is the only writer; the owner check lives in WHEN, which runs as the caller, and SET ROLE names the caller here.
 create function public.items_keep_history() returns trigger
-language plpgsql set search_path = ''
+language plpgsql security definer set search_path = ''
 as $$
 begin
-  if not (current_user = 'authenticated' and public.is_owner()) then
-    insert into public.items_history (item_id, title, description, changed_by)
-    values (old.id, old.title, old.description, current_user);
-  end if;
+  insert into public.items_history (item_id, title, description, changed_by)
+  values (old.id, old.title, old.description,
+          coalesce(nullif(pg_catalog.current_setting('role', true), 'none'), session_user));
   return null;
 end;
 $$;
 
+revoke execute on function public.items_keep_history() from public, anon, authenticated, service_role;
+
 create trigger items_keep_history after update of title, description on public.items
   for each row
-  when (old.title is distinct from new.title or old.description is distinct from new.description)
+  when ((old.title is distinct from new.title or old.description is distinct from new.description)
+        and not (current_user = 'authenticated' and public.is_owner()))
   execute function public.items_keep_history();
+
+-- Backs up the app's check-then-act rule: only the signed-in owner changes a done or archived item.
+create function public.items_guard_closed() returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  if old.state <> 'open' and not (current_user = 'authenticated' and public.is_owner()) then
+    raise exception 'only the owner can change a % item', old.state;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger items_guard_closed before update on public.items
+  for each row execute function public.items_guard_closed();
 
 create trigger items_history_no_update before update on public.items_history
   for each row execute function public.now_no_update();
@@ -42,9 +59,6 @@ alter table public.items_history enable row level security;
 create policy items_history_owner_read on public.items_history
   for select to authenticated using (public.is_owner());
 
-revoke all on table public.items_history from anon, authenticated, service_role;
-revoke all on sequence public.items_history_id_seq from anon, authenticated, service_role;
+revoke all on table public.items_history from public, anon, authenticated, service_role;
+revoke all on sequence public.items_history_id_seq from public, anon, authenticated, service_role;
 grant select on table public.items_history to authenticated, service_role;
--- The service role edits items for the worker and agents, so the trigger inserts as it.
-grant insert on table public.items_history to service_role;
-grant usage on sequence public.items_history_id_seq to service_role;

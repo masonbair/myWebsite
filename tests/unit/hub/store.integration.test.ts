@@ -114,6 +114,8 @@ describe.skipIf(!enabled)("hub store against local Supabase", () => {
     expect(history).toEqual([expect.objectContaining({ title: "integration history", description: "Mason's words", changedBy: "service_role" })]);
     const { data } = await createClient(apiUrl, anonKey, noPersist).from("items_history").select("id").eq("item_id", item.id);
     expect(data ?? []).toEqual([]);
+    const forged = await client().from("items_history").insert({ item_id: item.id, title: "fake", description: "", changed_by: "x" });
+    expect(forged.error?.code).toBe("42501");
   });
 
   it("refuses an agent or worker edit of a done item", async () => {
@@ -123,6 +125,8 @@ describe.skipIf(!enabled)("hub store against local Supabase", () => {
     for (const actor of [agent, worker]) {
       await expect(createHubStore(client(), actor).updateItem(item.id, { description: "" })).rejects.toThrow(ItemNotOpenError);
     }
+    const direct = await client().from("items").update({ description: "" }).eq("id", item.id);
+    expect(direct.error?.message).toMatch(/only the owner can change a done item/);
     expect((await owner.getItem(item.id))?.description).toBe("keep me");
   });
 

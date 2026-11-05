@@ -114,7 +114,7 @@ select throws_ok(
   'P0001', null, 'service_role cannot rewrite a comment body');
 
 select throws_ok(
-  $$ update public.items set labels = array['todo', null] where id = '10000000-0000-0000-0000-000000000003' $$,
+  $$ update public.items set labels = array['todo', null] where id = '10000000-0000-0000-0000-000000000001' $$,
   '23514', null, 'labels cannot hold a null element');
 
 -- Drop the check (rolled back) to prove the trigger alone also refuses the null-element paths.
