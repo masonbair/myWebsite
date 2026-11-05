@@ -141,6 +141,7 @@ export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
       if (q.updatedBefore) query = query.lt("updated_at", q.updatedBefore);
       if (q.mergedInto) query = query.eq("merged_into", q.mergedInto);
       if (q.hasDue) query = query.not("due_date", "is", null);
+      if (q.clientKey) query = query.eq("client_key", q.clientKey);
       const { data, error } = await query.order("created_at", { ascending: false }).limit(q.limit ?? DEFAULT_LIMIT);
       if (error) throw error;
       return (data as ItemRow[]).map(toItem);

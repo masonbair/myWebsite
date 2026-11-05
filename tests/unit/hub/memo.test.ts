@@ -34,7 +34,7 @@ describe("handleMemo", () => {
     const store = relay();
     const res = await send(BODY, { store });
     const [item] = itemsOf(store);
-    expect(res).toEqual({ status: 201, json: { id: item.id } });
+    expect(res).toEqual({ status: 201, json: { status: "created", id: item.id, taskId: item.id } });
     expect(item).toMatchObject({
       title: "HiDock memo 2026Oct22-183504-Rec22",
       description: `Source: HiDock ${FILE}, recorded 2026-10-22T18:35:04\nhidock-file: ${FILE}`,
@@ -52,7 +52,10 @@ describe("handleMemo", () => {
     const store = relay();
     const first = await send(BODY, { store });
     const second = await send({ ...BODY, device: "mac" }, { store });
-    expect(second).toEqual({ status: 200, json: { duplicate: true, id: first.json.id } });
+    expect(second).toEqual({
+      status: 200,
+      json: { status: "duplicate", duplicate: true, id: first.json.id, taskId: first.json.id },
+    });
     expect(itemsOf(store)).toHaveLength(1);
     expect(store.rows.comments).toHaveLength(1);
   });
@@ -60,7 +63,10 @@ describe("handleMemo", () => {
   it("treats a seeded file as a duplicate with no item id", async () => {
     const store = relay();
     await store.seedMemoFiles([FILE]);
-    expect(await send(BODY, { store })).toEqual({ status: 200, json: { duplicate: true, id: null } });
+    expect(await send(BODY, { store })).toEqual({
+      status: 200,
+      json: { status: "duplicate", duplicate: true, id: null, taskId: null },
+    });
     expect(itemsOf(store)).toHaveLength(0);
   });
 
@@ -81,6 +87,8 @@ describe("handleMemo", () => {
   it.each([
     ["unknown device", { ...BODY, device: "tablet" }],
     ["recorded without seconds", { ...BODY, recorded: "2026-10-22 18:35" }],
+    ["recorded on a day that does not exist", { ...BODY, recorded: "2026-02-30T12:00:00" }],
+    ["recorded at an hour that does not exist", { ...BODY, recorded: "2026-10-22T25:00:00" }],
     ["file with a path", { ...BODY, file: "../x" }],
     ["empty file name", { ...BODY, file: "" }],
     ["blank transcript", { ...BODY, transcript: "  \n" }],
@@ -131,6 +139,13 @@ describe("memoItem", () => {
       "transcript (part 3 of 3):",
     ]);
     expect(m.transcriptParts.map((c) => c.slice(c.indexOf("\n") + 1)).join("")).toBe(transcript);
+  });
+
+  it("never cuts an emoji in half at a part boundary", () => {
+    const transcript = `${"a".repeat(14_999)}😀${"b".repeat(10)}`;
+    const parts = memoItem({ file: FILE, recorded: "r", transcript }).transcriptParts.map((c) => c.slice(c.indexOf("\n") + 1));
+    expect(parts).toEqual(["a".repeat(14_999), `😀${"b".repeat(10)}`]);
+    expect(parts.join("")).toBe(transcript);
   });
 
   it("trims the transcript", () => {

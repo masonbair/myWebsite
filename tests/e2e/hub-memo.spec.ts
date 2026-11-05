@@ -39,10 +39,11 @@ test("the same file from the phone and then the Mac gives one item", async () =>
   const file = newFile();
   const first = await upload(file, "phone");
   expect(first.status).toBe(201);
-  const { id } = (await first.json()) as { id: string };
+  const { id, ...rest } = (await first.json()) as { id: string };
+  expect(rest).toEqual({ status: "created", taskId: id });
   const second = await upload(file, "mac");
   expect(second.status).toBe(200);
-  expect(await second.json()).toEqual({ duplicate: true, id });
+  expect(await second.json()).toEqual({ status: "duplicate", duplicate: true, id, taskId: id });
   expect(await memoItems(file)).toEqual([{ id, state: "open", archived_reason: null, labels: ["hidock-memo"] }]);
 });
 

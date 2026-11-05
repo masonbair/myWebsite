@@ -228,8 +228,11 @@ describe("memo routes", () => {
   it("adds an item with a due date and a client key, once per key", async () => {
     const h = workerHarness();
     const body = { title: "Call the dentist", labels: ["hidock"], due: { date: "2026-10-25", time: null }, clientKey: "hidock:f.hda#todo:0" };
-    const first = await (await call(h, "item", post(body))).json();
-    const again = await (await call(h, "item", post(body))).json();
+    const firstRes = await call(h, "item", post(body));
+    const againRes = await call(h, "item", post(body));
+    expect([firstRes.status, againRes.status]).toEqual([201, 200]);
+    const first = await firstRes.json();
+    const again = await againRes.json();
     expect(first).toMatchObject({ due: { date: "2026-10-25", time: null }, list: "inbox" });
     expect(again.id).toBe(first.id);
     expect((await call(h, "item", post({ ...body, clientKey: "has space" }))).status).toBe(400);

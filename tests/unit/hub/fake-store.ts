@@ -66,6 +66,7 @@ export function createFakeStore(actor: Actor, rows?: Rows, now: () => Date = () 
         .filter((i) => (q.updatedBefore ? i.updatedAt < q.updatedBefore : true))
         .filter((i) => (q.mergedInto ? i.mergedInto === q.mergedInto : true))
         .filter((i) => (q.hasDue ? i.due !== null : true))
+        .filter((i) => (q.clientKey ? data.clientKeys.get(q.clientKey) === i.id : true))
         .slice(0, q.limit ?? 200);
     },
     async addItem(input) {

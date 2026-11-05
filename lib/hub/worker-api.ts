@@ -181,6 +181,8 @@ export const WORKER_ROUTES: readonly Route[] = [
         throw new ApiError(400, "clientKey must be 1 to 200 of A-Z a-z 0-9 . _ : # -");
       }
       const clientKey = raw.clientKey as string | undefined;
+      const [existing] = clientKey ? await store.listItems({ clientKey, limit: 1 }) : [];
+      if (existing) return json(existing);
       return json(await store.addItem({ ...patch, title: patch.title, list: "inbox", source: "worker", clientKey }), 201);
     },
   },

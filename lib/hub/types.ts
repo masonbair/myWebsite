@@ -34,6 +34,7 @@ export type ItemQuery = {
   updatedBefore?: string;
   mergedInto?: string;
   hasDue?: boolean;
+  clientKey?: string;
   limit?: number;
 };
 
