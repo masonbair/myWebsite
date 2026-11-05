@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(51);
+select plan(57);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a1', 'now-owner@example.com'),
@@ -148,10 +148,25 @@ insert into public.now_place (city, region, country, private) values ('Columbus'
 select is((select private from public.now_current_place()), true, 'region is ignored, so any private rule for the city wins');
 insert into public.now_place (city, region, country, private) values ('Columbus', '', 'Canada', false);
 select is((select private from public.now_current_place()), false, 'a city of the same name in another country is not hidden');
+
+insert into public.now_place_privacy (city, region, country, private) values ('Portland', 'Oregon', 'United States', true);
+insert into public.now_place_privacy (city, region, country, private) values ('Portland', 'Maine', 'United States', false);
+insert into public.now_place (city, region, country, private) values ('Portland', 'Oregon', 'United States', false);
+select is((select private from public.now_current_place()), true, 'marking Portland, Maine public keeps Portland, Oregon private');
+insert into public.now_place (city, region, country, private) values ('Portland', 'Maine', 'US', false);
+select is((select private from public.now_current_place()), false, 'a ping from Portland, Maine shows the city');
+insert into public.now_place (city, region, country, private) values ('Portland', '', 'US', false);
+select is((select private from public.now_current_place()), true, 'a Portland ping with no region stays private');
+insert into public.now_place_privacy (city, region, country, private) values ('Salem', '', 'United States', true);
+insert into public.now_place_privacy (city, region, country, private) values ('Salem', 'Massachusetts', 'United States', false);
+insert into public.now_place (city, region, country, private) values ('Salem', 'Oregon', 'United States', false);
+select is((select private from public.now_current_place()), true, 'a public mark elsewhere leaves a blank-region private rule in force');
 select is(public.now_country_code(' The  Netherlands '), 'nl', 'country names with odd spacing still map to a code');
 select is(public.now_country_code('Atlantis'), 'atlantis', 'an unknown country falls back to its normalized name');
 
 reset role;
+select ok(not has_function_privilege('anon', 'public.now_norm_text(text)', 'execute'), 'anon cannot call now_norm_text');
+select ok(not has_function_privilege('anon', 'public.now_country_code(text)', 'execute'), 'anon cannot call now_country_code');
 select throws_ok($$ truncate public.now_bake $$, null, null, 'now_bake cannot be truncated');
 select throws_ok($$ truncate public.now_place $$, null, null, 'now_place cannot be truncated');
 select throws_ok($$ truncate public.now_place_privacy $$, null, null, 'now_place_privacy cannot be truncated');

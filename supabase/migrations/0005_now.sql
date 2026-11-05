@@ -147,8 +147,9 @@ revoke all on table public.now_place, public.now_bake, public.now_place_privacy 
 revoke all on sequence public.now_place_id_seq, public.now_bake_id_seq, public.now_place_privacy_id_seq from anon, authenticated;
 grant insert on table public.now_place, public.now_bake, public.now_place_privacy to authenticated;
 
--- The newest place with its effective privacy: its own flag, or the newest privacy row for the same city and country.
--- Region is ignored on purpose ("OH", "Ohio" and blank all match), so any private rule for that city wins.
+-- The newest place with its effective privacy: its own flag, or the newest privacy rule that reaches it.
+-- A private rule reaches every region of its city ("OH", "Ohio" and blank all match), but a public rule only reaches
+-- pings from its own region, so marking Portland, Maine public can never un-hide Portland, Oregon.
 create function public.now_current_place()
 returns table (city text, region text, country text, private boolean, sent_private boolean, updated_at timestamptz)
 language sql stable set search_path = ''
@@ -158,6 +159,7 @@ as $$
            select v.private from public.now_place_privacy v
            where public.now_norm_text(v.city) = public.now_norm_text(p.city)
              and public.now_country_code(v.country) = public.now_country_code(p.country)
+             and (v.private or v.region = public.now_norm_text(p.region))
            order by v.id desc
            limit 1
          ), false),
@@ -169,4 +171,7 @@ as $$
 $$;
 
 revoke execute on function public.now_current_place() from public, anon, authenticated;
+-- Mason's session keeps execute: inserting a privacy row evaluates now_place_privacy_place_idx, which calls both.
+revoke execute on function public.now_norm_text(text), public.now_country_code(text) from public, anon;
+grant execute on function public.now_norm_text(text), public.now_country_code(text) to authenticated, service_role;
 grant execute on function public.now_current_place() to service_role;

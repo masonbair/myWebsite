@@ -12,6 +12,27 @@ function isCapturePage(response) {
 }
 
 const samePath = (path) => decodeURI(path);
+const CACHED_AT = "x-hub-cached-at";
+// Code can fetch a script after the HTML was read, so a build file cached this recently is never pruned.
+const KEEP_FRESH_MS = 10 * 60 * 1000;
+
+async function putStamped(cache, request, response) {
+  const headers = new Headers(response.headers);
+  headers.set(CACHED_AT, String(Date.now()));
+  const body = await response.blob();
+  await cache.put(request, new Response(body, { status: response.status, statusText: response.statusText, headers }));
+}
+
+async function cacheAsset(cache, path) {
+  const response = await fetch(path);
+  if (response.ok) await putStamped(cache, path, response);
+}
+
+async function isFresh(cache, request) {
+  const cached = await cache.match(request);
+  const at = Number(cached?.headers.get(CACHED_AT));
+  return at > 0 && Date.now() - at < KEEP_FRESH_MS;
+}
 
 // Caches the capture page plus the scripts and styles it names, then drops build files it no longer names so old deploys don't pile up.
 async function cacheCapture(response) {
@@ -19,13 +40,15 @@ async function cacheCapture(response) {
   const html = await response.clone().text();
   await cache.put(CAPTURE, response);
   const assets = [...new Set((html.match(STATIC_ASSET) ?? []).map((path) => `/_next/${path}`))];
-  await Promise.all(assets.map((path) => cache.add(path).catch(() => undefined)));
+  await Promise.all(assets.map((path) => cacheAsset(cache, path).catch(() => undefined)));
   const keep = new Set(assets.map(samePath));
-  const stale = (await cache.keys()).filter((request) => {
+  const unnamed = (await cache.keys()).filter((request) => {
     const path = new URL(request.url).pathname;
     return path.startsWith("/_next/static/") && !keep.has(samePath(path));
   });
-  await Promise.all(stale.map((request) => cache.delete(request)));
+  for (const request of unnamed) {
+    if (!(await isFresh(cache, request))) await cache.delete(request);
+  }
 }
 
 self.addEventListener("install", (event) => {
@@ -63,7 +86,7 @@ async function staticAsset(request) {
     const response = await fetch(request);
     if (response.ok) {
       const copy = response.clone();
-      caches.open(CACHE).then((cache) => cache.put(request, copy));
+      caches.open(CACHE).then((cache) => putStamped(cache, request, copy));
     }
     return response;
   } catch (error) {
