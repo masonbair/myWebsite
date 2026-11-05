@@ -1,8 +1,10 @@
 import { tokenMatches } from "./bearer";
+import { readCappedBody } from "./capped-body";
 import { MAX_WORKER_COMMENT, parseItemPatch } from "./input";
 import { isClaimable } from "./lifecycle";
 import { MEMO_FILE } from "./memo";
-import { ForbiddenError, assertArchiveArgs } from "./rules";
+import { mergeDuplicate } from "./merge";
+import { ForbiddenError, ItemNotOpenError } from "./rules";
 import type { Comment, HubStore, Item, ItemPatch, ItemQuery } from "./types";
 
 export type WorkerView = "inbox" | "approved" | "laptop" | "to-schedule" | "memos" | "hidock" | "dated";
@@ -39,7 +41,7 @@ const VIEW_LIMIT = 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RUN_ID = /^[A-Za-z0-9._-]{1,64}$/;
 const STATE_KEY = /^[a-z0-9:-]{1,100}$/;
-const CLIENT_KEY = /^[A-Za-z0-9._:#-]{1,200}$/;
+export const CLIENT_KEY = /^[A-Za-z0-9._:#-]{1,200}$/;
 const MAX_SEED_FILES = 10_000;
 const UNSORTED = ["todo", "idea", "thought", "hidock-memo", "claude", "claude-working", "claude-done", "claude-question"];
 
@@ -112,16 +114,8 @@ async function merge(ctx: Context): Promise<Response> {
   const newer = await need(store, params.id);
   const body = await ctx.body();
   if (typeof body.into !== "string" || !UUID.test(body.into)) throw new ApiError(400, "into must be an item id");
-  const note = requireText(body.note, "note").trim();
-  assertArchiveArgs("merged", body.into, newer.id);
-  if (newer.state === "archived" && newer.mergedInto === body.into) return json(newer);
-  if (newer.state !== "open") throw new ApiError(409, `item ${newer.id} is ${newer.state}`);
-  const older = await need(store, body.into);
-  if (older.state === "archived") throw new ApiError(409, `item ${older.id} is archived`);
-  // The note lands on the survivor first, so a crash before the archive leaves both items open and a retry adds nothing twice.
-  const last = (await store.listComments(older.id)).at(-1);
-  if (last?.body.trim() !== note) await store.addComment(older.id, note);
-  return json(await store.archive(newer.id, "merged", older.id, `merged into ${older.url}`));
+  const note = requireText(body.note, "note");
+  return json(await mergeDuplicate(store, newer, await need(store, body.into), note));
 }
 
 async function archiveSplitMemo(ctx: Context): Promise<Response> {
@@ -191,8 +185,9 @@ export const WORKER_ROUTES: readonly Route[] = [
     path: ["item", ":id"],
     async run({ store, params, body }) {
       const item = await need(store, params.id);
-      if (item.state !== "open") throw new ApiError(409, `item ${item.id} is ${item.state}`);
-      return json(await store.updateItem(item.id, parsePatch(await body(), item.labels)));
+      const patch = parsePatch(await body(), item.labels);
+      if (Object.keys(patch).length === 0) throw new ApiError(400, "nothing to change");
+      return json(await store.updateItem(item.id, patch));
     },
   },
   {
@@ -250,25 +245,8 @@ function match(method: string, segments: string[]): { route: Route; params: Reco
 
 async function readBody(request: Request): Promise<Record<string, unknown>> {
   if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) throw new ApiError(413, "body too large");
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  const reader = request.body?.getReader();
-  while (reader) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > MAX_BODY_BYTES) {
-      await reader.cancel();
-      throw new ApiError(413, "body too large");
-    }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
+  const bytes = await readCappedBody(request, MAX_BODY_BYTES);
+  if (!bytes) throw new ApiError(413, "body too large");
   let parsed: unknown;
   try {
     parsed = JSON.parse(new TextDecoder().decode(bytes) || "{}");
@@ -298,6 +276,7 @@ export async function handleWorkerRequest(request: Request, segments: string[], 
     });
   } catch (e) {
     if (e instanceof ApiError) return json({ error: e.message }, e.status);
+    if (e instanceof ItemNotOpenError) return json({ error: e.message }, 409);
     if (e instanceof ForbiddenError) return json({ error: e.message }, 403);
     console.error("hub worker api", request.method, segments.join("/"), e);
     return json({ error: "server error" }, 500);

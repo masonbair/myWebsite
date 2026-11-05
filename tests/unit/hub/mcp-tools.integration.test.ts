@@ -51,7 +51,7 @@ describe.skipIf(!enabled)("mcp tools against local Supabase", () => {
     const { data, error } = await db().from("audit_log").select("action, item_id").eq("actor", `agent:${clientName}`);
     if (error) throw error;
     const rows = data.map((row) => `${row.action} ${row.item_id === older.id ? "older" : "newer"}`).sort();
-    expect(rows).toEqual(["add newer", "add older", "archive newer", "comment older", "update older"]);
+    expect(rows).toEqual(["add newer", "add older", "archive newer", "comment older", "comment older", "update older"]);
   });
 
   it("refuses the claude label on update and leaves the row unchanged", async () => {

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import { recordOwner } from "@/lib/auth/require-owner";
-import { ForbiddenError } from "@/lib/hub/rules";
+import { ForbiddenError, ItemNotOpenError } from "@/lib/hub/rules";
 import { createHubStore } from "@/lib/hub/store";
 
 // Run with: HUB_TEST_DB_URL=1 HUB_TEST_SUPABASE_URL=http://127.0.0.1:54321 HUB_TEST_SERVICE_KEY=<SERVICE_ROLE_KEY> HUB_TEST_ANON_KEY=<ANON_KEY> (from `supabase status -o env`)
@@ -101,5 +101,36 @@ describe.skipIf(!enabled)("hub store against local Supabase", () => {
     const { data } = await client().from("audit_log").select("actor, action").eq("item_id", keep.id);
     expect(data?.every((row) => row.actor === "worker:integration")).toBe(true);
     expect(data?.map((row) => row.action)).toEqual(expect.arrayContaining(["claim", "set-status-labels"]));
+  });
+
+  it("keeps the old text when an agent rewrites an item, and shows it only to the owner", async () => {
+    const store = createHubStore(client(), agent);
+    const item = await store.addItem({ title: "integration history", description: "Mason's words", source: "test", clientKey: randomUUID() });
+    await store.updateItem(item.id, { description: "" });
+    await store.updateItem(item.id, { labels: ["todo"] });
+    const owner = createHubStore(await signedInOwnerClient(), { kind: "mason" });
+    await owner.updateItem(item.id, { title: "integration history by mason" });
+    const history = await owner.listItemHistory(item.id);
+    expect(history).toEqual([expect.objectContaining({ title: "integration history", description: "Mason's words", changedBy: "service_role" })]);
+    const { data } = await createClient(apiUrl, anonKey, noPersist).from("items_history").select("id").eq("item_id", item.id);
+    expect(data ?? []).toEqual([]);
+  });
+
+  it("refuses an agent or worker edit of a done item", async () => {
+    const owner = createHubStore(await signedInOwnerClient(), { kind: "mason" });
+    const item = await owner.addItem({ title: "integration finished", description: "keep me", source: "test", clientKey: randomUUID() });
+    await owner.complete(item.id);
+    for (const actor of [agent, worker]) {
+      await expect(createHubStore(client(), actor).updateItem(item.id, { description: "" })).rejects.toThrow(ItemNotOpenError);
+    }
+    expect((await owner.getItem(item.id))?.description).toBe("keep me");
+  });
+
+  it("counts every match even past the list limit", async () => {
+    const store = createHubStore(client(), worker);
+    const label = `count-${randomUUID().slice(0, 8)}`;
+    for (let n = 0; n < 3; n++) await store.addItem({ title: `integration count ${n}`, labels: [label], source: "test", clientKey: randomUUID() });
+    expect(await store.listItems({ withLabels: [label], limit: 2 })).toHaveLength(2);
+    expect(await store.countItems({ withLabels: [label] })).toBe(3);
   });
 });

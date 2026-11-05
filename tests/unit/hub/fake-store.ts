@@ -4,13 +4,14 @@ import {
   assertArchiveArgs,
   assertHubStateKey,
   assertLabelChangeAllowed,
+  assertOpenForEdit,
   assertStateChange,
   assertStatusLabel,
   pickPatch,
 } from "@/lib/hub/rules";
 import { claimLabels, isClaimable, labelsForStatus } from "@/lib/hub/lifecycle";
 import { ITEM_URL_BASE } from "@/lib/hub/store";
-import type { Actor, ArchiveReason, Comment, HubStore, Item } from "@/lib/hub/types";
+import type { Actor, ArchiveReason, Comment, HubStore, Item, ItemQuery, ItemVersion } from "@/lib/hub/types";
 
 type Rows = {
   items: Map<string, Item>;
@@ -20,6 +21,8 @@ type Rows = {
   archivedReasons: Map<string, ArchiveReason>;
   /** File name to memo item id; null for a seeded file. */
   memoFiles: Map<string, string | null>;
+  /** Mirrors 0006's items_history trigger: old text kept when anyone but Mason rewrites it. */
+  history?: ItemVersion[];
 };
 
 export type FakeStore = HubStore & { rows: Rows };
@@ -43,8 +46,33 @@ export function createFakeStore(actor: Actor, rows?: Rows, now: () => Date = () 
     return item;
   }
 
+  function matching(q: ItemQuery): Item[] {
+    return [...data.items.values()]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .filter((i) => (q.list ? i.list === q.list : true))
+      .filter((i) => (q.state ? i.state === q.state : true))
+      .filter((i) => (q.withLabels ?? []).every((l) => i.labels.includes(l)))
+      .filter((i) => (q.withoutLabels ?? []).every((l) => !i.labels.includes(l)))
+      .filter((i) => (q.updatedBefore ? i.updatedAt < q.updatedBefore : true))
+      .filter((i) => (q.mergedInto ? i.mergedInto === q.mergedInto : true))
+      .filter((i) => (q.hasDue ? i.due !== null : true))
+      .filter((i) => (q.clientKey ? data.clientKeys.get(q.clientKey) === i.id : true))
+      .filter((i) => (q.text ? `${i.title}\n${i.description}`.toLowerCase().includes(q.text.toLowerCase()) : true));
+  }
+
   function save(item: Item, changes: Partial<Item>): Item {
     const next = { ...item, ...changes, updatedAt: new Date().toISOString() };
+    if (actor.kind !== "mason" && (next.title !== item.title || next.description !== item.description)) {
+      data.history ??= [];
+      data.history.push({
+        id: data.history.length + 1,
+        itemId: item.id,
+        title: item.title,
+        description: item.description,
+        changedBy: actor.kind,
+        changedAt: next.updatedAt,
+      });
+    }
     data.items.set(item.id, next);
     return next;
   }
@@ -57,18 +85,15 @@ export function createFakeStore(actor: Actor, rows?: Rows, now: () => Date = () 
     },
     async listItems(q) {
       assertAllowed(actor, "read");
-      return [...data.items.values()]
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .filter((i) => (q.list ? i.list === q.list : true))
-        .filter((i) => (q.state ? i.state === q.state : true))
-        .filter((i) => (q.withLabels ?? []).every((l) => i.labels.includes(l)))
-        .filter((i) => (q.withoutLabels ?? []).every((l) => !i.labels.includes(l)))
-        .filter((i) => (q.updatedBefore ? i.updatedAt < q.updatedBefore : true))
-        .filter((i) => (q.mergedInto ? i.mergedInto === q.mergedInto : true))
-        .filter((i) => (q.hasDue ? i.due !== null : true))
-        .filter((i) => (q.clientKey ? data.clientKeys.get(q.clientKey) === i.id : true))
-        .filter((i) => (q.text ? `${i.title}\n${i.description}`.toLowerCase().includes(q.text.toLowerCase()) : true))
-        .slice(0, q.limit ?? 200);
+      return matching(q).slice(0, q.limit ?? 200);
+    },
+    async countItems(q) {
+      assertAllowed(actor, "read");
+      return matching(q).length;
+    },
+    async listItemHistory(itemId) {
+      assertAllowed(actor, "read");
+      return (data.history ?? []).filter((v) => v.itemId === itemId);
     },
     async addItem(input) {
       assertAllowed(actor, "add");
@@ -100,6 +125,7 @@ export function createFakeStore(actor: Actor, rows?: Rows, now: () => Date = () 
     async updateItem(id, patch) {
       assertAllowed(actor, "update");
       const item = need(id);
+      assertOpenForEdit(actor, item);
       if (patch.labels) assertLabelChangeAllowed(actor, item.labels, patch.labels);
       return save(item, pickPatch(patch));
     },

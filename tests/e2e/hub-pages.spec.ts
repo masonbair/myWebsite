@@ -194,6 +194,22 @@ test.describe("hub pages", () => {
     await expect(page).toHaveURL(/\/hub\/login$/);
   });
 
+  test("an item rewritten by the worker shows its earlier text, collapsed", async ({ page }) => {
+    const item = await seedItem({ list: "todo" });
+    const { error } = await serviceClient().from("items").update({ title: `${item.title} reworded` }).eq("id", item.id);
+    if (error) throw error;
+
+    await page.goto(`/hub/item/${item.id}`);
+    await expect(page.getByRole("heading", { level: 1, name: `${item.title} reworded` })).toBeVisible();
+    const earlier = page.getByText("Earlier versions");
+    await expect(earlier).toBeVisible();
+    const oldTitle = page.getByText(item.title, { exact: true });
+    await expect(oldTitle).toBeHidden();
+    await earlier.click();
+    await expect(oldTitle).toBeVisible();
+    expect(await serious(page)).toEqual([]);
+  });
+
   test("an unknown list or item is a 404", async ({ page }) => {
     expect((await page.goto("/hub/list/someday"))?.status()).toBe(404);
     expect((await page.goto(`/hub/item/${randomUUID()}`))?.status()).toBe(404);

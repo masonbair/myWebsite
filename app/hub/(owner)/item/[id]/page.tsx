@@ -13,10 +13,11 @@ export default async function ItemPage({ params }: PageProps<"/hub/item/[id]">) 
   const store = await masonStore();
   const item = await store.getItem(id);
   if (!item) hubMissing();
-  const [comments, mergedFrom, mergedInto] = await Promise.all([
+  const [comments, mergedFrom, mergedInto, history] = await Promise.all([
     store.listComments(id),
     store.listItems({ mergedInto: id, state: "archived" }),
     item.mergedInto ? store.getItem(item.mergedInto) : null,
+    store.listItemHistory(id),
   ]);
 
   return (
@@ -26,6 +27,7 @@ export default async function ItemPage({ params }: PageProps<"/hub/item/[id]">) 
         comments={comments}
         mergedFrom={mergedFrom}
         mergedInto={mergedInto}
+        history={history}
         workerLive={process.env.HUB_WORKER_LIVE === "true"}
       />
     </main>

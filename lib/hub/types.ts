@@ -26,6 +26,16 @@ export type Comment = {
   createdAt: string;
 };
 
+/** An item's title and description as they were before an agent or the worker changed them. */
+export type ItemVersion = {
+  id: number;
+  itemId: string;
+  title: string;
+  description: string;
+  changedBy: string;
+  changedAt: string;
+};
+
 export type ItemQuery = {
   list?: Item["list"];
   state?: Item["state"];
@@ -85,6 +95,10 @@ export type AcceptedMemo = { id: string | null; duplicate: boolean };
 export interface HubStore {
   getItem(id: string): Promise<Item | null>;
   listItems(q: ItemQuery): Promise<Item[]>;
+  /** How many items match, ignoring `limit`. */
+  countItems(q: ItemQuery): Promise<number>;
+  /** Earlier versions of the item's text, oldest first. */
+  listItemHistory(itemId: string): Promise<ItemVersion[]>;
   addItem(i: NewItem): Promise<Item>;
   updateItem(id: string, p: ItemPatch): Promise<Item>;
   complete(id: string): Promise<Item>;

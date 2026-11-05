@@ -5,7 +5,8 @@ import { formatLocation } from "@/lib/location";
 import type { NowData } from "@/lib/now";
 import { tokenMatches } from "./bearer";
 import { MAX_COMMENT, MAX_DESCRIPTION, MAX_LABEL_LENGTH, MAX_LABELS, MAX_TITLE, parseItemPatch } from "./input";
-import { ForbiddenError } from "./rules";
+import { mergeDuplicate } from "./merge";
+import { assertOpenForEdit, ForbiddenError } from "./rules";
 import type { HubStore, Item, ItemPatch } from "./types";
 
 /** The whole agent surface. There is deliberately no complete, delete, email, purchase, booking, deploy or merge-code tool. */
@@ -167,7 +168,9 @@ export function registerHubTools(server: McpServer, store: HubStore, client: str
   server.registerTool(
     "update_item",
     {
-      description: toolDescription("Change an item's title, description, labels, list or due date. Agents cannot add or remove claude or claude-* labels."),
+      description: toolDescription(
+        "Change an open item's title, description, labels, list or due date. Agents cannot add or remove claude or claude-* labels. Earlier text is kept for Mason.",
+      ),
       inputSchema: updateInput,
     },
     ({ id, ...fields }) =>
@@ -181,26 +184,25 @@ export function registerHubTools(server: McpServer, store: HubStore, client: str
 
   server.registerTool(
     "add_comment",
-    { description: toolDescription("Add a comment to a hub item."), inputSchema: commentInput },
-    ({ id, body }) => run(async () => store.addComment((await need(store, id)).id, body)),
+    { description: toolDescription("Add a comment to an open hub item."), inputSchema: commentInput },
+    ({ id, body }) =>
+      run(async () => {
+        const item = await need(store, id);
+        assertOpenForEdit({ kind: "agent", client }, item);
+        return store.addComment(item.id, body);
+      }),
   );
 
   server.registerTool(
     "merge_duplicate",
     {
-      description: toolDescription("Archive the newer of two duplicate items, pointing it at the older one that survives. Nothing is deleted."),
+      description: toolDescription(
+        "Archive the newer of two duplicate items, pointing it at the older one that survives. The note is added to the older item. Nothing is deleted.",
+      ),
       inputSchema: mergeInput,
     },
     ({ newer, older, note }) =>
-      run(async () => {
-        if (newer === older) throw new ToolError("an item cannot be merged into itself");
-        const duplicate = await need(store, newer);
-        const survivor = await need(store, older);
-        if (duplicate.state === "archived" && duplicate.mergedInto === survivor.id) return duplicate;
-        if (duplicate.state !== "open") throw new ToolError(`item ${duplicate.id} is ${duplicate.state}`);
-        if (survivor.state === "archived") throw new ToolError(`item ${survivor.id} is archived`);
-        return store.archive(duplicate.id, "merged", survivor.id, `merged into ${survivor.url}\n\n${note}`);
-      }),
+      run(async () => mergeDuplicate(store, await need(store, newer), await need(store, older), note)),
   );
 
   server.registerTool(

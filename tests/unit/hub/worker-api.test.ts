@@ -205,6 +205,17 @@ describe("items, comments and state", () => {
     }
   });
 
+  it("answers 400 to an empty patch and 409 to a done item, leaving the text alone", async () => {
+    const h = workerHarness();
+    const open = seedItem(h.rows);
+    const empty = await call(h, `item/${open.id}`, { method: "PATCH", body: "{}" });
+    expect(empty.status).toBe(400);
+    expect(await empty.json()).toEqual({ error: "nothing to change" });
+    const done = seedItem(h.rows, { title: "Finished", description: "notes", state: "done" });
+    expect((await call(h, `item/${done.id}`, { method: "PATCH", body: JSON.stringify({ description: "" }) })).status).toBe(409);
+    expect(h.rows.items.get(done.id)).toMatchObject({ title: "Finished", description: "notes" });
+  });
+
   it("reads an item and its comments", async () => {
     const h = workerHarness();
     const item = seedItem(h.rows);

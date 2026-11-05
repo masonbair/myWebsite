@@ -118,9 +118,32 @@ describe("mcp agent connector", () => {
     expect(result.isError).toBeFalsy();
     expect(rows.items.get(newer.id)).toMatchObject({ state: "archived", mergedInto: older.id });
     expect(rows.archivedReasons.get(newer.id)).toBe("merged");
-    const note = rows.comments.find((c) => c.itemId === newer.id)?.body ?? "";
-    expect(note).toContain(older.url);
-    expect(note).toContain("same task");
+    expect(rows.comments.find((c) => c.itemId === newer.id)?.body).toBe(`merged into ${older.url}`);
+    expect(rows.comments.filter((c) => c.itemId === older.id).map((c) => c.body)).toEqual(["same task"]);
+    const again = await client.callTool({ name: "merge_duplicate", arguments: { newer: newer.id, older: older.id, note: "same task" } });
+    expect(again.isError).toBeFalsy();
+    expect(rows.comments.filter((c) => c.itemId === older.id)).toHaveLength(1);
+  });
+
+  it("update_item and add_comment refuse a done or archived item and keep its text", async () => {
+    const { client, rows } = await connect();
+    for (const state of ["done", "archived"] as const) {
+      const item = seedItem(rows, { title: "Mason's words", description: "kept", state });
+      const update = await client.callTool({ name: "update_item", arguments: { id: item.id, description: "" } });
+      expect(update.isError).toBe(true);
+      expect(text(update)).toBe(`item ${item.id} is ${state}`);
+      const comment = await client.callTool({ name: "add_comment", arguments: { id: item.id, body: "hi" } });
+      expect(comment.isError).toBe(true);
+      expect(rows.items.get(item.id)).toMatchObject({ title: "Mason's words", description: "kept" });
+      expect(rows.comments.filter((c) => c.itemId === item.id)).toEqual([]);
+    }
+  });
+
+  it("an agent rewrite of an open item keeps the old text in history", async () => {
+    const { client, rows } = await connect();
+    const item = seedItem(rows, { title: "Call mom", description: "about the trip" });
+    expect((await client.callTool({ name: "update_item", arguments: { id: item.id, description: "" } })).isError).toBeFalsy();
+    expect(rows.history).toEqual([expect.objectContaining({ itemId: item.id, title: "Call mom", description: "about the trip" })]);
   });
 
   it("merge_duplicate refuses a done item and a missing older item", async () => {

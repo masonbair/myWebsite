@@ -6,12 +6,13 @@ import {
   assertArchiveArgs,
   assertHubStateKey,
   assertLabelChangeAllowed,
+  assertOpenForEdit,
   assertStateChange,
   assertStatusLabel,
   auditActor,
   pickPatch,
 } from "./rules";
-import type { Actor, Comment, HubAction, HubStore, Item, ItemPatch, ItemQuery } from "./types";
+import type { Actor, Comment, HubAction, HubStore, Item, ItemPatch, ItemQuery, ItemVersion } from "./types";
 
 export const ITEM_URL_BASE = "https://masonbair.com/hub/item/";
 
@@ -58,6 +59,26 @@ function toItem(row: ItemRow): Item {
   };
 }
 
+type HistoryRow = {
+  id: number;
+  item_id: string;
+  title: string;
+  description: string;
+  changed_by: string;
+  changed_at: string;
+};
+
+function toVersion(row: HistoryRow): ItemVersion {
+  return {
+    id: row.id,
+    itemId: row.item_id,
+    title: row.title,
+    description: row.description,
+    changedBy: row.changed_by,
+    changedAt: row.changed_at,
+  };
+}
+
 function toComment(row: CommentRow): Comment {
   return { id: row.id, itemId: row.item_id, body: row.body, author: row.author, createdAt: row.created_at };
 }
@@ -84,6 +105,26 @@ function escapeRegex(text: string): string {
 // PostgREST reads commas, braces and parentheses in a filter value as syntax unless the value is double-quoted.
 function quoteFilterValue(value: string): string {
   return `"${value.replace(/["\\]/g, "\\$&")}"`;
+}
+
+type ItemFilter = ReturnType<ReturnType<SupabaseClient["from"]>["select"]>;
+
+function matching<Query extends ItemFilter>(query: Query, q: ItemQuery): Query {
+  if (q.list) query = query.eq("list", q.list);
+  if (q.state) query = query.eq("state", q.state);
+  if (q.withLabels?.length) query = query.filter("labels", "cs", `{${q.withLabels.map(quoteFilterValue).join(",")}}`);
+  for (const label of q.withoutLabels ?? []) {
+    query = query.not("labels", "cs", `{${quoteFilterValue(label)}}`);
+  }
+  if (q.updatedBefore) query = query.lt("updated_at", q.updatedBefore);
+  if (q.mergedInto) query = query.eq("merged_into", q.mergedInto);
+  if (q.hasDue) query = query.not("due_date", "is", null);
+  if (q.clientKey) query = query.eq("client_key", q.clientKey);
+  if (q.text) {
+    const pattern = quoteFilterValue(escapeRegex(q.text));
+    query = query.or(`title.imatch.${pattern},description.imatch.${pattern}`);
+  }
+  return query;
 }
 
 export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
@@ -137,24 +178,29 @@ export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
 
     async listItems(q: ItemQuery) {
       assertAllowed(actor, "read");
-      let query = client.from("items").select("*");
-      if (q.list) query = query.eq("list", q.list);
-      if (q.state) query = query.eq("state", q.state);
-      if (q.withLabels?.length) query = query.filter("labels", "cs", `{${q.withLabels.map(quoteFilterValue).join(",")}}`);
-      for (const label of q.withoutLabels ?? []) {
-        query = query.not("labels", "cs", `{${quoteFilterValue(label)}}`);
-      }
-      if (q.updatedBefore) query = query.lt("updated_at", q.updatedBefore);
-      if (q.mergedInto) query = query.eq("merged_into", q.mergedInto);
-      if (q.hasDue) query = query.not("due_date", "is", null);
-      if (q.clientKey) query = query.eq("client_key", q.clientKey);
-      if (q.text) {
-        const pattern = quoteFilterValue(escapeRegex(q.text));
-        query = query.or(`title.imatch.${pattern},description.imatch.${pattern}`);
-      }
+      const query = matching(client.from("items").select("*"), q);
       const { data, error } = await query.order("created_at", { ascending: false }).limit(q.limit ?? DEFAULT_LIMIT);
       if (error) throw error;
       return (data as ItemRow[]).map(toItem);
+    },
+
+    async countItems(q: ItemQuery) {
+      assertAllowed(actor, "read");
+      const { count, error } = await matching(client.from("items").select("*", { count: "exact", head: true }), q);
+      if (error) throw error;
+      return count ?? 0;
+    },
+
+    async listItemHistory(itemId) {
+      assertAllowed(actor, "read");
+      const { data, error } = await client
+        .from("items_history")
+        .select("*")
+        .eq("item_id", itemId)
+        .order("changed_at", { ascending: true })
+        .order("id", { ascending: true });
+      if (error) throw error;
+      return (data as HistoryRow[]).map(toVersion);
     },
 
     async addItem(input) {
@@ -192,9 +238,10 @@ export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
 
     async updateItem(id, patch) {
       assertAllowed(actor, "update");
-      if (patch.labels) {
+      if (patch.labels || actor.kind !== "mason") {
         const current = await requireItem(id);
-        assertLabelChangeAllowed(actor, current.labels, patch.labels);
+        assertOpenForEdit(actor, current);
+        if (patch.labels) assertLabelChangeAllowed(actor, current.labels, patch.labels);
       }
       const item = await updateColumns(id, toPatchColumns(patch));
       await audit("update", id, { fields: Object.keys(patch) });

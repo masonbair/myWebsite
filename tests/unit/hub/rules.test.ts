@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ForbiddenError, assertAllowed } from "@/lib/hub/rules";
+import { ForbiddenError, ItemNotOpenError, assertAllowed, assertOpenForEdit } from "@/lib/hub/rules";
 import type { Actor, HubAction } from "@/lib/hub/types";
 
 const mason: Actor = { kind: "mason" };
@@ -29,4 +29,19 @@ describe("assertAllowed", () => {
       });
     }
   }
+});
+
+describe("assertOpenForEdit", () => {
+  for (const state of ["done", "archived"] as const) {
+    it(`lets only Mason change a ${state} item`, () => {
+      const item = { id: "i1", state };
+      expect(() => assertOpenForEdit(mason, item)).not.toThrow();
+      expect(() => assertOpenForEdit(worker, item)).toThrow(ItemNotOpenError);
+      expect(() => assertOpenForEdit(agent, item)).toThrow(`item i1 is ${state}`);
+    });
+  }
+
+  it("lets anyone change an open item", () => {
+    for (const actor of [mason, worker, agent]) expect(() => assertOpenForEdit(actor, { id: "i1", state: "open" })).not.toThrow();
+  });
 });

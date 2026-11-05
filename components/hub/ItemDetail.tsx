@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { approveItem, completeItem, reopenItem } from "@/app/hub/actions";
 import { formatDue, LIST_NAMES, listHref, needsYouReason } from "@/lib/hub/format";
 import { CLAUDE_LABEL } from "@/lib/hub/rules";
-import type { Comment, Item } from "@/lib/hub/types";
+import type { Comment, Item, ItemVersion } from "@/lib/hub/types";
 import { timeAgo } from "@/lib/time";
 import { CommentForm } from "./CommentForm";
 import { DueEditor, ListPicker } from "./ItemFields";
@@ -19,10 +19,11 @@ type Props = {
   comments: Comment[];
   mergedFrom: Item[];
   mergedInto: Item | null;
+  history: ItemVersion[];
   workerLive: boolean;
 };
 
-export function ItemDetail({ item, comments, mergedFrom, mergedInto, workerLive }: Props) {
+export function ItemDetail({ item, comments, mergedFrom, mergedInto, history, workerLive }: Props) {
   const due = formatDue(item.due);
   const reason = item.state === "open" ? needsYouReason(item.labels) : null;
   const archived = item.state === "archived";
@@ -140,6 +141,8 @@ export function ItemDetail({ item, comments, mergedFrom, mergedInto, workerLive 
         </section>
       )}
 
+      {history.length > 0 && <EarlierVersions history={history} />}
+
       <section aria-labelledby="comments" className="mt-10">
         <h2 id="comments" className="mb-4 flex items-baseline gap-2 px-1 text-sm font-semibold text-ink">
           Comments
@@ -166,6 +169,32 @@ function Field({ label, children }: { label: ReactNode; children: ReactNode }) {
       <dt className="text-sm font-medium text-mute sm:pt-2">{label}</dt>
       <dd className="min-w-0">{children}</dd>
     </div>
+  );
+}
+
+function EarlierVersions({ history }: { history: ItemVersion[] }) {
+  return (
+    <details className="mt-10 px-1">
+      <summary className={`cursor-pointer rounded-full text-sm font-semibold text-ink ${focusRing}`}>
+        Earlier versions <span className="font-normal text-mute">{history.length}</span>
+      </summary>
+      <p className="mt-2 text-xs text-mute">Kept whenever the worker or an agent changed the title or description.</p>
+      <ol className="mt-4 flex flex-col gap-5">
+        {[...history].reverse().map((version) => (
+          <li key={version.id} className="border-l-2 border-ink/10 pl-4">
+            <p className="text-xs text-mute">
+              Before the edit <time dateTime={version.changedAt}>{timeAgo(version.changedAt)}</time>
+            </p>
+            <p className="mt-1 text-sm font-semibold break-words text-ink">{version.title}</p>
+            {version.description && (
+              <p className="mt-1 max-w-[65ch] text-sm leading-relaxed break-words whitespace-pre-wrap text-ink/85">
+                {version.description}
+              </p>
+            )}
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }
 

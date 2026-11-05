@@ -7,6 +7,14 @@ export class ForbiddenError extends Error {
   }
 }
 
+/** An agent or the worker tried to change an item that is no longer open. */
+export class ItemNotOpenError extends ForbiddenError {
+  constructor(item: Pick<Item, "id" | "state">) {
+    super(`item ${item.id} is ${item.state}`);
+    this.name = "ItemNotOpenError";
+  }
+}
+
 export const CLAUDE_LABEL = "claude";
 export const STATUS_LABELS: readonly StatusLabel[] = ["claude-working", "claude-done", "claude-question"];
 
@@ -44,6 +52,11 @@ export function assertLabelChangeAllowed(actor: Actor, before: string[], after: 
   if (touched.length > 0) {
     throw new ForbiddenError(`${actor.kind} may not change the label ${touched[0]}`);
   }
+}
+
+/** Only Mason edits or comments on a done or archived item, so nothing finished is rewritten after the fact. */
+export function assertOpenForEdit(actor: Actor, item: Pick<Item, "id" | "state">): void {
+  if (actor.kind !== "mason" && item.state !== "open") throw new ItemNotOpenError(item);
 }
 
 export function assertStatusLabel(status: string): asserts status is StatusLabel {
