@@ -1,4 +1,5 @@
 import { HubHeader } from "@/components/hub/HubHeader";
+import { OutboxFlusher } from "@/components/hub/OutboxFlusher";
 import { requireOwner } from "@/lib/auth/require-owner";
 
 // Pages under here must also call requireOwner(), since a layout does not re-run on every navigation.
@@ -7,6 +8,7 @@ export default async function OwnerLayout({ children }: LayoutProps<"/hub">) {
   return (
     <>
       <HubHeader />
+      <OutboxFlusher />
       {children}
     </>
   );

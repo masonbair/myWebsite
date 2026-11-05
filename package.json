@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:hub": "E2E_SERVERS=hub playwright test --project=hub",
+    "e2e:site": "E2E_SERVERS=site playwright test --project=desktop --project=mobile"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

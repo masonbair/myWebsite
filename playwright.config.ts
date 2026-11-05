@@ -6,6 +6,21 @@ import { localSupabaseEnv } from "./tests/e2e/local-supabase";
 
 const PORT = 3100;
 const HUB_SPECS = /hub-.*\.spec\.ts/;
+// Each dev server is slow to start on a busy machine, so a run starts only the set it needs.
+const SERVER_SETS = ["hub", "site"] as const;
+type ServerSet = (typeof SERVER_SETS)[number];
+const SERVER_TIMEOUT = 300_000;
+
+function selectedServerSets(): readonly ServerSet[] {
+  const value = process.env.E2E_SERVERS;
+  if (!value) return SERVER_SETS;
+  if (!(SERVER_SETS as readonly string[]).includes(value)) {
+    throw new Error(`E2E_SERVERS must be one of ${SERVER_SETS.join(", ")} or unset, got "${value}"`);
+  }
+  return [value as ServerSet];
+}
+
+const serverSets = selectedServerSets();
 
 // Next rewrites the tsconfig it is given to include its distDir, so each fixture
 // server gets a throwaway tsconfig in .next instead of dirtying the real one.
@@ -24,7 +39,7 @@ const fixtureServers = FIXTURES.map((f) => ({
   url: `http://localhost:${fixturePort(f)}`,
   // Never reuse: a stray server on this port could have the real GitHub token.
   reuseExistingServer: false,
-  timeout: 120_000,
+  timeout: SERVER_TIMEOUT,
   env: {
     // The github server shows the full board plus fixture GitHub data.
     NOW_FIXTURE: f === "github" ? "full.json" : `${f}.json`,
@@ -44,7 +59,7 @@ function hubServer(port: number, name: "hub" | "hub-live", workerLive: boolean) 
     command: `npx next dev -p ${port}`,
     url: `http://localhost:${port}`,
     reuseExistingServer: false,
-    timeout: 120_000,
+    timeout: SERVER_TIMEOUT,
     env: {
       GITHUB_TOKEN: "",
       NEXT_PUBLIC_SUPABASE_URL: localSupabase.url,
@@ -88,17 +103,20 @@ export default defineConfig({
     },
   ],
   webServer: [
-    {
-      command: `npx next dev -p ${PORT}`,
-      url: `http://localhost:${PORT}`,
-      // Never reuse: a stray server here could have the real GitHub token or Supabase keys.
-      reuseExistingServer: false,
-      timeout: 120_000,
-      // Empty beats .env.local, so e2e never calls live GitHub or writes to the real leaderboard.
-      env: { GITHUB_TOKEN: "", SUPABASE_URL: "" },
-    },
-    ...fixtureServers,
-    hubServer(HUB_PORT, "hub", false),
-    hubServer(HUB_LIVE_PORT, "hub-live", true),
+    ...(serverSets.includes("site")
+      ? [
+          {
+            command: `npx next dev -p ${PORT}`,
+            url: `http://localhost:${PORT}`,
+            // Never reuse: a stray server here could have the real GitHub token or Supabase keys.
+            reuseExistingServer: false,
+            timeout: SERVER_TIMEOUT,
+            // Empty beats .env.local, so e2e never calls live GitHub or writes to the real leaderboard.
+            env: { GITHUB_TOKEN: "", SUPABASE_URL: "" },
+          },
+          ...fixtureServers,
+        ]
+      : []),
+    ...(serverSets.includes("hub") ? [hubServer(HUB_PORT, "hub", false), hubServer(HUB_LIVE_PORT, "hub-live", true)] : []),
   ],
 });

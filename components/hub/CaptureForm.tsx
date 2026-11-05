@@ -5,81 +5,16 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { splitCapture } from "@/lib/hub/capture";
 import { MAX_DESCRIPTION } from "@/lib/hub/input";
-import { createOutbox, type Outbox, type OutboxEntry, type OutboxStatus } from "@/lib/hub/outbox";
+import { outboxSnapshot, retryFailedInOutbox, saveToOutbox, subscribeOutbox } from "./outbox-store";
 import { focusRing, smallButton } from "./styles";
 import { useVoice } from "./useVoice";
 
-let sharedOutbox: Outbox | null = null;
-
-function memoryStorage(): Pick<Storage, "getItem" | "setItem"> {
-  const data = new Map<string, string>();
-  return { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => void data.set(key, value) };
-}
-
-// One outbox per tab, so every flush in this tab shares the same in-progress guard.
-function outbox(): Outbox {
-  if (sharedOutbox) return sharedOutbox;
-  let storage: Pick<Storage, "getItem" | "setItem">;
-  try {
-    window.localStorage.setItem("hub-outbox-probe", "1");
-    storage = window.localStorage;
-  } catch {
-    storage = memoryStorage();
-  }
-  sharedOutbox = createOutbox(storage);
-  return sharedOutbox;
-}
-
-const statusListeners = new Set<() => void>();
-let statusSnapshot: OutboxStatus | null = null;
-
-function publishStatus() {
-  statusSnapshot = outbox().status();
-  for (const listener of statusListeners) listener();
-}
-
-function subscribeStatus(listener: () => void) {
-  statusListeners.add(listener);
-  return () => statusListeners.delete(listener);
-}
-
-function currentStatus(): OutboxStatus {
-  statusSnapshot ??= outbox().status();
-  return statusSnapshot;
-}
-
-function flush() {
-  publishStatus();
-  void outbox().flush(send).finally(publishStatus);
-}
-
-async function send(entry: OutboxEntry): Promise<number> {
-  const response = await fetch("/api/hub/capture", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title: entry.title, description: entry.description, clientKey: entry.clientKey }),
-  });
-  return response.status;
-}
-
 export function CaptureForm({ shared }: { shared: boolean }) {
   const field = useRef<HTMLTextAreaElement>(null);
-  const status = useSyncExternalStore(subscribeStatus, currentStatus, () => null);
+  const status = useSyncExternalStore(subscribeOutbox, outboxSnapshot, () => null);
   const [savedCount, setSavedCount] = useState(0);
   const [saveTooLong, setSaveTooLong] = useState(false);
-
-  useEffect(() => {
-    flush();
-    const onVisible = () => document.visibilityState === "visible" && flush();
-    window.addEventListener("online", flush);
-    window.addEventListener("storage", publishStatus);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.removeEventListener("online", flush);
-      window.removeEventListener("storage", publishStatus);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, []);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   useEffect(() => {
     if (savedCount === 0) return;
@@ -105,11 +40,14 @@ export function CaptureForm({ shared }: { shared: boolean }) {
       return;
     }
     setSaveTooLong(false);
-    outbox().enqueue({ clientKey: crypto.randomUUID(), title, description, createdAt: new Date().toISOString() });
+    if (!saveToOutbox({ title, description })) {
+      setSaveFailed(true);
+      return;
+    }
+    setSaveFailed(false);
     box.value = "";
     box.focus();
     setSavedCount((count) => count + 1);
-    flush();
   }
 
   const waiting = status?.waiting ?? 0;
@@ -196,12 +134,23 @@ export function CaptureForm({ shared }: { shared: boolean }) {
             Sign in again to send
           </Link>
         )}
+        {saveFailed && (
+          <span role="alert" className="font-medium text-accent-ink">
+            Could not save on this phone. Copy your text.
+          </span>
+        )}
         {saveTooLong && (
           <span role="alert" className="font-medium text-accent-ink">
             That is too long to save. Keep it under 10,000 characters.
           </span>
         )}
       </div>
+
+      {status?.memoryOnly && (
+        <p className="mt-2 rounded-2xl bg-ink/5 px-4 py-3 text-sm text-ink">
+          This browser is not letting the hub store anything. Captures last only while this tab is open.
+        </p>
+      )}
 
       {failed.length > 0 && (
         <section aria-labelledby="not-sent" className="mt-8">
@@ -219,10 +168,7 @@ export function CaptureForm({ shared }: { shared: boolean }) {
           <button
             type="button"
             className={`${smallButton} mt-3`}
-            onClick={() => {
-              outbox().retryFailed();
-              flush();
-            }}
+            onClick={retryFailedInOutbox}
           >
             Try again
           </button>

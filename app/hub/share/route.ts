@@ -11,7 +11,8 @@ function field(form: FormData, name: string): string | undefined {
 
 /** Android's share sheet posts here (manifest share_target); the shared text and link become one inbox item. */
 export async function POST(request: NextRequest) {
-  if (!isSameOriginRequest(request)) return new NextResponse("Forbidden", { status: 403 });
+  // Null Origin is allowed for Android shares; a forged cross-site POST still arrives signed out because the session cookie is SameSite=Lax, and checkOwner() refuses it.
+  if (!isSameOriginRequest(request, { allowNullOrigin: true })) return new NextResponse("Forbidden", { status: 403 });
   const owner = await checkOwner();
   if (!owner.ok && owner.reason === "signed-out") return NextResponse.redirect(new URL("/hub/login", request.url), 303);
   if (!owner.ok) return new NextResponse("Not found", { status: 404 });

@@ -122,6 +122,76 @@ test.describe("quick capture", () => {
       expect(items[0].description).toContain(url);
     });
 
+    test("a share with Origin null, as Android sends it, is accepted", async ({ page }) => {
+      const title = `null origin ${randomUUID().slice(0, 8)}`;
+      const url = `https://example.com/${randomUUID()}`;
+      const res = await page.request.post("/hub/share", {
+        multipart: { title, url },
+        headers: { origin: "null" },
+        maxRedirects: 0,
+      });
+      expect(res.status()).toBe(303);
+      const items = await itemsTitled(title);
+      expect(items).toHaveLength(1);
+      expect(items[0].description).toContain(url);
+    });
+
+    test("the capture api still refuses Origin null", async ({ page }) => {
+      const res = await page.request.post("/api/hub/capture", {
+        data: { title: `null ${randomUUID().slice(0, 8)}`, clientKey: randomUUID() },
+        headers: { origin: "null" },
+      });
+      expect(res.status()).toBe(403);
+    });
+
+    test("a waiting capture is sent from any hub page, not only the capture page", async ({ page }) => {
+      const title = `elsewhere ${randomUUID().slice(0, 8)}`;
+      await page.goto("/hub/login");
+      await page.evaluate((entry) => localStorage.setItem("hub-outbox", JSON.stringify([entry])), {
+        clientKey: randomUUID(),
+        title,
+        description: "",
+        createdAt: new Date().toISOString(),
+      });
+      await page.goto("/hub");
+      await expect.poll(async () => (await itemsTitled(title)).length).toBe(1);
+      await expect.poll(() => page.evaluate(() => localStorage.getItem("hub-outbox"))).toBe("[]");
+    });
+
+    test("when the phone cannot store a capture, Save says so and keeps the text", async ({ page }) => {
+      await page.addInitScript(() => {
+        const setItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key: string, value: string) {
+          if (key === "hub-outbox") throw new DOMException("full", "QuotaExceededError");
+          return setItem.call(this, key, value);
+        };
+      });
+      const title = `full ${randomUUID().slice(0, 8)}`;
+      await page.goto("/hub/capture");
+      const field = page.getByRole("textbox", { name: "Capture" });
+      await field.fill(title);
+      await page.getByRole("button", { name: "Save" }).click();
+      await expect(page.getByText("Could not save on this phone. Copy your text.")).toBeVisible();
+      await expect(field).toHaveValue(title);
+      await expect(page.getByText("Saved", { exact: true })).toHaveCount(0);
+    });
+
+    test("when storage is blocked, captures still send and a notice explains they last only while the tab is open", async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        Storage.prototype.setItem = () => {
+          throw new DOMException("blocked", "SecurityError");
+        };
+      });
+      const title = `memory ${randomUUID().slice(0, 8)}`;
+      await page.goto("/hub/capture");
+      await expect(page.getByText("Captures last only while this tab is open.", { exact: false })).toBeVisible();
+      await page.getByRole("textbox", { name: "Capture" }).fill(title);
+      await page.getByRole("button", { name: "Save" }).click();
+      await expect.poll(async () => (await itemsTitled(title)).length).toBe(1);
+    });
+
     test("the share page says the shared item was saved", async ({ page }) => {
       await page.goto("/hub/capture?shared=1");
       await expect(page.getByText("Shared item saved")).toBeVisible();
