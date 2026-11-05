@@ -9,6 +9,8 @@ export const MAX_LABEL_LENGTH = 60;
 const MAX_LABELS = 50;
 export const MAX_DESCRIPTION = 10_000;
 export const MAX_COMMENT = 10_000;
+// Worker write-ups (research, plans) run longer than anything typed in the hub UI.
+export const MAX_WORKER_COMMENT = 50_000;
 
 function fail(message: string): never {
   throw new Error(`bad item patch: ${message}`);

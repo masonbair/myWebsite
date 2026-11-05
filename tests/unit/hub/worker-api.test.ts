@@ -58,12 +58,11 @@ describe("worker api surface", () => {
     expect((await call(h, "item/not-a-uuid")).status).toBe(400);
   });
 
-  it("refuses a body over 64 KB and bad JSON", async () => {
+  it("refuses a body over 256 KB and bad JSON", async () => {
     const h = workerHarness();
     const item = seedItem(h.rows);
-    expect((await call(h, `item/${item.id}/comment`, post({ body: "x".repeat(70_000) }))).status).toBe(413);
+    expect((await call(h, `item/${item.id}/comment`, post({ body: "x".repeat(300_000) }))).status).toBe(413);
     expect((await call(h, `item/${item.id}/comment`, { method: "POST", body: "{nope" })).status).toBe(400);
-    expect((await call(h, `item/${item.id}/comment`, post({ body: "x".repeat(10_001) }))).status).toBe(400);
     expect((await call(h, `item/${item.id}/comment`, post({ body: "  " }))).status).toBe(400);
   });
 });
@@ -81,7 +80,9 @@ describe("worker api views", () => {
   it("inbox lists only open, unsorted items no run holds", async () => {
     const h = workerHarness();
     const raw = seedItem(h.rows, { labels: ["laptop"] });
-    for (const labels of [["todo"], ["idea"], ["thought"], ["hidock-memo"], ["claude"], ["claude-working"]]) seedItem(h.rows, { labels });
+    for (const labels of [["todo"], ["idea"], ["thought"], ["hidock-memo"], ["claude"], ["claude-working"], ["claude-done"], ["claude-question"]]) {
+      seedItem(h.rows, { labels });
+    }
     seedItem(h.rows, { list: "todo" });
     seedItem(h.rows, { state: "archived" });
     expect((await (await call(h, "inbox")).json()).map((i: { id: string }) => i.id)).toEqual([raw.id]);
@@ -107,12 +108,38 @@ describe("claim, finish, block", () => {
     expect((await call(h, `item/${item.id}/claim`, post({}))).status).toBe(409);
   });
 
-  it("a retried finish does not post the same comment twice", async () => {
+  it("a finish retried after a failed label change does not post the same comment twice", async () => {
+    let fail = true;
+    const h = workerHarness({
+      async setStatusLabels() {
+        if (fail) throw new Error("db down");
+      },
+    });
+    const item = seedItem(h.rows, { labels: ["claude", "claude-working"] });
+    expect((await call(h, `item/${item.id}/finish`, post({ comment: "Done it" }))).status).toBe(500);
+    fail = false;
+    expect((await call(h, `item/${item.id}/finish`, post({ comment: "Done it\n" }))).status).toBe(200);
+    expect(h.rows.comments.filter((c) => c.itemId === item.id)).toHaveLength(1);
+  });
+
+  it("finish and block need a claim, so no run can clear an approval it never took", async () => {
+    const h = workerHarness();
+    for (const labels of [["claude"], ["claude", "claude-done"], ["todo"]]) {
+      const item = seedItem(h.rows, { labels });
+      for (const outcome of ["finish", "block"]) {
+        expect((await call(h, `item/${item.id}/${outcome}`, post({ comment: "x" }))).status).toBe(409);
+      }
+      expect(h.rows.items.get(item.id)!.labels).toEqual(labels);
+      expect(h.rows.comments.filter((c) => c.itemId === item.id)).toEqual([]);
+    }
+  });
+
+  it("takes worker comments up to 50,000 characters", async () => {
     const h = workerHarness();
     const item = seedItem(h.rows, { labels: ["claude", "claude-working"] });
-    await call(h, `item/${item.id}/finish`, post({ comment: "Done it" }));
-    await call(h, `item/${item.id}/finish`, post({ comment: "Done it\n" }));
-    expect(h.rows.comments.filter((c) => c.itemId === item.id)).toHaveLength(1);
+    expect((await call(h, `item/${item.id}/comment`, post({ body: "é".repeat(50_000) }))).status).toBe(201);
+    expect((await call(h, `item/${item.id}/comment`, post({ body: "x".repeat(50_001) }))).status).toBe(400);
+    expect((await call(h, `item/${item.id}/finish`, post({ comment: "x".repeat(50_000) }))).status).toBe(200);
   });
 
   it("block drops claude and adds claude-question", async () => {
@@ -191,6 +218,7 @@ describe("items, comments and state", () => {
     expect(await (await call(h, "state/granola-swept-until")).json()).toEqual({ value: null });
     expect((await call(h, "state/granola-swept-until", { method: "PUT", body: JSON.stringify({ value: "2026-10-23T11:00:00.000Z" }) })).status).toBe(200);
     expect(await (await call(h, "state/granola-swept-until")).json()).toEqual({ value: "2026-10-23T11:00:00.000Z" });
+    expect((await call(h, "state/other", { method: "PUT", body: JSON.stringify({ value: 1 }) })).status).toBe(403);
     expect((await call(h, "state/Bad%20Key")).status).toBe(400);
     expect((await call(h, "state/k", { method: "PUT", body: JSON.stringify({}) })).status).toBe(400);
   });

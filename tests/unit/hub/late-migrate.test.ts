@@ -19,8 +19,8 @@ describe("lateTasks", () => {
       task("d", "Carry the recorder (late)", ["hidock", "thought"]),
     ];
     expect(lateTasks(tasks)).toEqual([
-      { id: "a", content: "Book LA (late)", quote: "quote a", due: "2026-10-26", todo: true },
-      { id: "d", content: "Carry the recorder (late)", quote: "quote d", due: "2026-10-26", todo: false },
+      { id: "a", title: "Book LA (late)", quote: "quote a", due: "2026-10-26", todo: true },
+      { id: "d", title: "Carry the recorder (late)", quote: "quote d", due: "2026-10-26", todo: false },
     ]);
   });
 });

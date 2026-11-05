@@ -58,7 +58,7 @@ describe.skipIf(!enabled)("hub store against local Supabase", () => {
 
   it("limits hub state to the worker", async () => {
     await expect(createHubStore(client(), agent).getHubState("x")).rejects.toThrow(ForbiddenError);
-    const key = `integration-${randomUUID()}`;
+    const key = `reminded:${randomUUID()}`;
     await createHubStore(client(), worker).setHubState(key, { ok: true });
     expect(await createHubStore(client(), worker).getHubState(key)).toEqual({ ok: true });
   });

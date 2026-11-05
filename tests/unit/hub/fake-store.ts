@@ -2,6 +2,7 @@ import {
   assertAllowed,
   assertArchiveAllowed,
   assertArchiveArgs,
+  assertHubStateKey,
   assertLabelChangeAllowed,
   assertStateChange,
   assertStatusLabel,
@@ -159,6 +160,7 @@ export function createFakeStore(actor: Actor, rows?: Rows, now: () => Date = () 
     },
     async setHubState(key, value) {
       assertAllowed(actor, "hub-state");
+      assertHubStateKey(key);
       data.state.set(key, value);
     },
   };

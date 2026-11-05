@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { MAX_COMMENT, parseItemPatch } from "./input";
+import { MAX_WORKER_COMMENT, parseItemPatch } from "./input";
 import { isClaimable } from "./lifecycle";
 import { ForbiddenError, assertArchiveArgs } from "./rules";
 import type { Comment, HubStore, Item, ItemPatch, ItemQuery } from "./types";
@@ -30,12 +30,13 @@ export type WorkerApiDeps = {
   now: () => Date;
 };
 
-export const MAX_BODY_BYTES = 64 * 1024;
+// Room for a full-length comment even when every character takes 4 bytes in UTF-8.
+export const MAX_BODY_BYTES = 256 * 1024;
 const VIEW_LIMIT = 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RUN_ID = /^[A-Za-z0-9._-]{1,64}$/;
 const STATE_KEY = /^[a-z0-9:-]{1,100}$/;
-const UNSORTED = ["todo", "idea", "thought", "hidock-memo", "claude", "claude-working"];
+const UNSORTED = ["todo", "idea", "thought", "hidock-memo", "claude", "claude-working", "claude-done", "claude-question"];
 
 const VIEWS: Record<WorkerView, ItemQuery> = {
   inbox: { list: "inbox", state: "open", withoutLabels: UNSORTED },
@@ -73,8 +74,8 @@ async function need(store: HubStore, id: string): Promise<Item> {
 }
 
 function requireText(value: unknown, field: string): string {
-  if (typeof value !== "string" || !value.trim() || value.length > MAX_COMMENT) {
-    throw new ApiError(400, `${field} must be text of 1 to ${MAX_COMMENT} characters`);
+  if (typeof value !== "string" || !value.trim() || value.length > MAX_WORKER_COMMENT) {
+    throw new ApiError(400, `${field} must be text of 1 to ${MAX_WORKER_COMMENT} characters`);
   }
   return value;
 }
@@ -92,6 +93,8 @@ async function report(ctx: Context, outcome: Outcome): Promise<Response> {
   const comment = requireText((await ctx.body()).comment, "comment").trim();
   const item = await need(store, params.id);
   if (item.state !== "open") throw new ApiError(409, `item ${item.id} is ${item.state}`);
+  // Without a claim a run could clear an approval it never took.
+  if (!item.labels.includes("claude-working")) throw new ApiError(409, `item ${item.id} is not claimed by a run`);
   const last = (await store.listComments(item.id)).at(-1);
   // A retry after a failed label change must not post the result twice.
   if (last?.body.trim() !== comment) await store.addComment(item.id, comment);

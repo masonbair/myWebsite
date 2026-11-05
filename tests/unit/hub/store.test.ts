@@ -117,12 +117,20 @@ describe("fake store rules", () => {
 
   it("limits hub state to the worker", async () => {
     const shared = createFakeStore(worker);
-    await shared.setHubState("k", { a: 1 });
-    expect(await shared.getHubState("k")).toEqual({ a: 1 });
+    await shared.setHubState("granola-swept-until", { a: 1 });
+    expect(await shared.getHubState("granola-swept-until")).toEqual({ a: 1 });
     for (const actor of [mason, agent]) {
       const other = createFakeStore(actor, shared.rows);
-      await expect(other.getHubState("k")).rejects.toThrow(ForbiddenError);
-      await expect(other.setHubState("k", 1)).rejects.toThrow(ForbiddenError);
+      await expect(other.getHubState("granola-swept-until")).rejects.toThrow(ForbiddenError);
+      await expect(other.setHubState("granola-swept-until", 1)).rejects.toThrow(ForbiddenError);
+    }
+  });
+
+  it("lets the worker write only allowlisted hub state keys", async () => {
+    const store = createFakeStore(worker);
+    await store.setHubState("reminded:00000000-0000-4000-8000-000000000001", true);
+    for (const key of ["k", "reminded:x", "granola-swept-until-x", "reminded:00000000-0000-4000-8000-000000000001x"]) {
+      await expect(store.setHubState(key, 1)).rejects.toThrow(ForbiddenError);
     }
   });
 

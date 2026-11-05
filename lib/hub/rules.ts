@@ -49,6 +49,13 @@ export function assertStatusLabel(status: string): asserts status is StatusLabel
   if (!(STATUS_LABELS as readonly string[]).includes(status)) throw new ForbiddenError(`${status} is not a status label`);
 }
 
+// The worker's own bookkeeping only: the Granola sweep mark and Task 8's per-item reminder flags.
+const HUB_STATE_KEYS = /^(granola-swept-until|reminded:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
+export function assertHubStateKey(key: string): void {
+  if (!HUB_STATE_KEYS.test(key)) throw new ForbiddenError(`hub state key ${key} is not allowed`);
+}
+
 export function assertArchiveArgs(reason: ArchiveReason, mergedInto: string | null, itemId: string): void {
   if (reason === "merged" && mergedInto === null) {
     throw new ForbiddenError("a merged item needs the item it was merged into");

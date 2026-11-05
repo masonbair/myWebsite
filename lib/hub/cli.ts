@@ -2,8 +2,8 @@ import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { createHttpStore } from "./http-store";
-import { LABEL_PATTERN } from "./input";
+import { createHttpStore, HubApiError } from "./http-store";
+import { LABEL_PATTERN, MAX_WORKER_COMMENT } from "./input";
 import { lateTasks, migrateLate } from "./late-migrate";
 import { notify, type Message } from "./notify";
 import { applySchedule, offsetMinutesAt, parsePlan, scheduleInput } from "./schedule";
@@ -24,8 +24,8 @@ const USAGE = `usage: hub <command>
   setup                               check the hub answers with this token
   approved                            JSON of items Mason approved and no run holds
   claim <id>                          take an item (exit 3 if not claimable)
-  finish <id> --comment-file <path>   post result, mark claude-done, ping phone
-  block <id> --comment-file <path>    post questions, mark claude-question, ping phone
+  finish <id> --comment-file <path>   post result, mark claude-done, ping phone (exit 3 if not claimed)
+  block <id> --comment-file <path>    post questions, mark claude-question, ping phone (exit 3 if not claimed)
   laptop                              JSON of open laptop items
   inbox                               JSON of unsorted inbox items
   item <id>                           JSON of one item
@@ -58,14 +58,30 @@ function flag(args: string[], name: string): string | undefined {
   return at >= 0 ? args[at + 1] : undefined;
 }
 
+function readComment(file: string, deps: CliDeps): string | null {
+  const comment = readFileSync(file, "utf8").trim();
+  if (comment.length <= MAX_WORKER_COMMENT) return comment;
+  deps.err(`comment is ${comment.length} characters; the hub takes at most ${MAX_WORKER_COMMENT}. Shorten it and run again.`);
+  return null;
+}
+
 async function report(id: string, args: string[], deps: CliDeps, outcome: Outcome): Promise<number> {
   const file = flag(args, "--comment-file");
   if (!file) {
     deps.err(USAGE);
     return 2;
   }
-  const comment = readFileSync(file, "utf8").trim();
-  const item = await deps.hub.report(id, outcome, comment);
+  const comment = readComment(file, deps);
+  if (comment === null) return 2;
+  let item: Item;
+  try {
+    item = await deps.hub.report(id, outcome, comment);
+  } catch (e) {
+    if (!(e instanceof HubApiError && e.status === 409)) throw e;
+    // Same exit as a lost claim: this run does not hold the item.
+    deps.err(`not claimed: ${e.message}`);
+    return 3;
+  }
   try {
     const title = `${outcome === "finish" ? "Done" : "Question"}: ${item.title}`;
     await deps.notify({ title, message: comment.split("\n")[0], clickUrl: item.url });
@@ -153,7 +169,9 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         const into = flag(rest, "--into");
         const file = flag(rest, "--comment-file");
         if (!id || !into || !file) break;
-        await deps.hub.merge(id, into, readFileSync(file, "utf8").trim());
+        const note = readComment(file, deps);
+        if (note === null) return 2;
+        await deps.hub.merge(id, into, note);
         return 0;
       }
       case "add": {

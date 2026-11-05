@@ -130,6 +130,23 @@ describe("runCli", () => {
       expect(h.sent[0].title).toBe("Question: Halloween costume");
     });
 
+    it("finish on an item no run claimed exits 3 and changes nothing", async () => {
+      const h = harness();
+      const t = seedItem(h.rows, { labels: ["claude"] });
+      expect(await runCli(["finish", t.id, "--comment-file", tempFile()], h.deps)).toBe(3);
+      expect(h.err.join("")).toContain("not claimed");
+      expect(h.item(t.id).labels).toEqual(["claude"]);
+      expect(h.sent).toEqual([]);
+    });
+
+    it("a write-up over 50,000 characters is refused before sending, naming the limit", async () => {
+      const h = harness();
+      const t = seedItem(h.rows, { labels: ["claude", "claude-working"] });
+      expect(await runCli(["finish", t.id, "--comment-file", tempFile("x".repeat(50_001))], h.deps)).toBe(2);
+      expect(h.err.join("")).toContain("50000");
+      expect(h.log).toEqual([]);
+    });
+
     it("finish without --comment-file is a usage error", async () => {
       const h = harness();
       const t = seedItem(h.rows, { labels: ["claude"] });
@@ -285,7 +302,7 @@ describe("runCli", () => {
         today: "2026-10-23",
         from: "2026-10-24T00:00:00",
         to: "2026-11-07T00:00:00",
-        tasks: [{ id: a.id, content: "Task a", description: "> quote", due: { date: "2026-10-25", time: "14:00" } }],
+        tasks: [{ id: a.id, title: "Task a", description: "> quote", due: { date: "2026-10-25", time: "14:00" } }],
       });
     });
 

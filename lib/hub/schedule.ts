@@ -175,7 +175,7 @@ export async function scheduleInput(hub: HubWorker, now: Date, offsetMinutes: nu
       const due = t.due && localDue(t.due);
       return {
         id: t.id,
-        content: t.title,
+        title: t.title,
         description: t.description,
         due: due ? { date: due.date, time: due.time === null ? null : hhmm(due.time) } : null,
       };

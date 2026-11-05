@@ -4,6 +4,7 @@ import {
   assertAllowed,
   assertArchiveAllowed,
   assertArchiveArgs,
+  assertHubStateKey,
   assertLabelChangeAllowed,
   assertStateChange,
   assertStatusLabel,
@@ -260,6 +261,7 @@ export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
 
     async setHubState(key, value) {
       assertAllowed(actor, "hub-state");
+      assertHubStateKey(key);
       const { error } = await client
         .from("hub_state")
         .upsert({ key, value, updated_at: new Date().toISOString() });

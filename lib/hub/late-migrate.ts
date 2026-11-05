@@ -3,7 +3,7 @@ import type { Item } from "./types";
 
 const SUFFIX = " (late)";
 
-export type LateTask = { id: string; content: string; quote: string; due: string | null; todo: boolean };
+export type LateTask = { id: string; title: string; quote: string; due: string | null; todo: boolean };
 
 /** Open HiDock items still carrying the old " (late)" title suffix from todo-hub. */
 export function lateTasks(items: Pick<Item, "id" | "title" | "description" | "labels" | "due">[]): LateTask[] {
@@ -11,7 +11,7 @@ export function lateTasks(items: Pick<Item, "id" | "title" | "description" | "la
     .filter((t) => t.labels.includes("hidock") && t.title.endsWith(SUFFIX))
     .map((t) => ({
       id: t.id,
-      content: t.title,
+      title: t.title,
       quote: t.description.split("\n").find((l) => l.startsWith("> "))?.slice(2) ?? "",
       due: t.due?.date ?? null,
       todo: !t.labels.includes("idea") && !t.labels.includes("thought"),
