@@ -59,8 +59,9 @@ test.describe("now page", () => {
       await toggle.click();
       await expect(toggle).toHaveAttribute("aria-checked", "true");
       await expect(place.getByText("The site shows Ohio, United States")).toBeVisible();
-      const marks = await serviceClient().from("now_place_privacy").select("private").eq("city", city);
-      expect(marks.data).toEqual([{ private: true }]);
+      // The database stores privacy rules normalized, so a phone's spelling can't dodge them.
+      const marks = await serviceClient().from("now_place_privacy").select("city, country, private").eq("city", city.toLowerCase());
+      expect(marks.data).toEqual([{ city: city.toLowerCase(), country: "us", private: true }]);
 
       await ping();
       await page.goto("/");

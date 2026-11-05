@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(17);
+select plan(20);
 
 select has_extension('pg_cron', 'pg_cron is on');
 select has_extension('pg_net', 'pg_net is on');
@@ -48,8 +48,14 @@ select lives_ok(
 reset role;
 select is((select count(*)::int from pg_temp.new_requests()), 0, 'without secrets the approval sends nothing');
 
-select vault.create_secret('http://stub.test:9999/', 'hub_events_url');
 select vault.create_secret('pgtap-token', 'hub_events_token');
+select vault.create_secret('http://example.com/', 'hub_events_url');
+select is(public.hub_post_event('reminders'), null, 'a plain http URL to a real host sends nothing');
+select is((select count(*)::int from pg_temp.new_requests()), 0, 'so the token never goes out unencrypted');
+select vault.update_secret((select id from vault.secrets where name = 'hub_events_url'), 'https://masonbair.test');
+select isnt(public.hub_post_event('reminders'), null, 'an https URL sends');
+delete from net.http_request_queue where id > (select id from queue_before);
+select vault.update_secret((select id from vault.secrets where name = 'hub_events_url'), 'http://localhost:9999/');
 
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-0000000000e1","role":"authenticated"}';
@@ -59,7 +65,7 @@ reset role;
 select is((select count(*)::int from pg_temp.new_requests()), 1, 'approving sends one request');
 select results_eq(
   $$ select method::text, url, convert_from(body, 'utf8')::jsonb, headers->>'Authorization' from pg_temp.new_requests() $$,
-  $$ values ('POST'::text, 'http://stub.test:9999/api/hub/events/approved'::text,
+  $$ values ('POST'::text, 'http://localhost:9999/api/hub/events/approved'::text,
              '{"id":"e0000000-0000-0000-0000-000000000001"}'::jsonb, 'Bearer pgtap-token'::text) $$,
   'the request posts the item id to the approved event with the token'
 );
@@ -82,14 +88,14 @@ insert into public.items (id, title, source, labels) values ('e0000000-0000-0000
 reset role;
 select is(
   (select url from pg_temp.new_requests() order by id desc limit 1),
-  'http://stub.test:9999/api/hub/events/approved',
+  'http://localhost:9999/api/hub/events/approved',
   'adding an item already approved sends a request too'
 );
 
 select isnt(public.hub_post_event('backup'), null, 'with secrets an event posts');
 select is(
   (select url from pg_temp.new_requests() order by id desc limit 1),
-  'http://stub.test:9999/api/hub/events/backup',
+  'http://localhost:9999/api/hub/events/backup',
   'the event name becomes the path'
 );
 

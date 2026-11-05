@@ -28,9 +28,78 @@ create table public.now_place_privacy (
   created_at timestamptz not null default now()
 );
 
-create index now_place_privacy_place_idx on public.now_place_privacy (lower(city), lower(region), lower(country), id desc);
+-- Place names are matched loosely so a spelling difference from the phone can never make a private place public.
+create function public.now_norm_text(p text) returns text
+language sql immutable set search_path = ''
+as $$ select lower(regexp_replace(btrim(coalesce(p, '')), '\s+', ' ', 'g')) $$;
+
+-- ISO 3166 alpha-2 for the common ways a country is written; anything else falls back to the normalized text.
+create function public.now_country_code(p text) returns text
+language sql immutable set search_path = ''
+as $$
+  select coalesce(
+    (select a.code from (values
+      ('us', 'us'), ('usa', 'us'), ('u.s.', 'us'), ('u.s.a.', 'us'), ('united states', 'us'), ('united states of america', 'us'),
+      ('america', 'us'), ('ca', 'ca'), ('canada', 'ca'), ('mx', 'mx'), ('mexico', 'mx'), ('méxico', 'mx'),
+      ('gb', 'gb'), ('uk', 'gb'), ('united kingdom', 'gb'), ('great britain', 'gb'), ('britain', 'gb'), ('england', 'gb'),
+      ('scotland', 'gb'), ('wales', 'gb'), ('northern ireland', 'gb'), ('ie', 'ie'), ('ireland', 'ie'),
+      ('pt', 'pt'), ('portugal', 'pt'), ('es', 'es'), ('spain', 'es'), ('españa', 'es'), ('fr', 'fr'), ('france', 'fr'),
+      ('de', 'de'), ('germany', 'de'), ('deutschland', 'de'), ('it', 'it'), ('italy', 'it'), ('italia', 'it'),
+      ('nl', 'nl'), ('netherlands', 'nl'), ('the netherlands', 'nl'), ('holland', 'nl'), ('be', 'be'), ('belgium', 'be'),
+      ('ch', 'ch'), ('switzerland', 'ch'), ('at', 'at'), ('austria', 'at'), ('se', 'se'), ('sweden', 'se'),
+      ('no', 'no'), ('norway', 'no'), ('dk', 'dk'), ('denmark', 'dk'), ('fi', 'fi'), ('finland', 'fi'),
+      ('is', 'is'), ('iceland', 'is'), ('pl', 'pl'), ('poland', 'pl'), ('cz', 'cz'), ('czechia', 'cz'),
+      ('czech republic', 'cz'), ('gr', 'gr'), ('greece', 'gr'), ('hu', 'hu'), ('hungary', 'hu'), ('hr', 'hr'),
+      ('croatia', 'hr'), ('tr', 'tr'), ('turkey', 'tr'), ('türkiye', 'tr'), ('turkiye', 'tr'),
+      ('jp', 'jp'), ('japan', 'jp'), ('kr', 'kr'), ('south korea', 'kr'), ('korea', 'kr'), ('republic of korea', 'kr'),
+      ('cn', 'cn'), ('china', 'cn'), ('tw', 'tw'), ('taiwan', 'tw'), ('hk', 'hk'), ('hong kong', 'hk'),
+      ('sg', 'sg'), ('singapore', 'sg'), ('th', 'th'), ('thailand', 'th'), ('vn', 'vn'), ('vietnam', 'vn'),
+      ('viet nam', 'vn'), ('id', 'id'), ('indonesia', 'id'), ('ph', 'ph'), ('philippines', 'ph'), ('my', 'my'),
+      ('malaysia', 'my'), ('in', 'in'), ('india', 'in'), ('au', 'au'), ('australia', 'au'), ('nz', 'nz'),
+      ('new zealand', 'nz'), ('br', 'br'), ('brazil', 'br'), ('brasil', 'br'), ('ar', 'ar'), ('argentina', 'ar'),
+      ('cl', 'cl'), ('chile', 'cl'), ('co', 'co'), ('colombia', 'co'), ('pe', 'pe'), ('peru', 'pe'), ('perú', 'pe'),
+      ('cr', 'cr'), ('costa rica', 'cr'), ('za', 'za'), ('south africa', 'za'), ('eg', 'eg'), ('egypt', 'eg'),
+      ('ma', 'ma'), ('morocco', 'ma'), ('ae', 'ae'), ('uae', 'ae'), ('united arab emirates', 'ae'),
+      ('il', 'il'), ('israel', 'il')
+    ) as a(name, code) where a.name = public.now_norm_text(p)),
+    public.now_norm_text(p)
+  )
+$$;
+
+create index now_place_privacy_place_idx
+  on public.now_place_privacy (public.now_norm_text(city), public.now_country_code(country), id desc);
+
+-- Privacy rows are stored normalized, so what the hub writes is exactly what the match compares.
+create function public.now_place_privacy_normalize() returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  new.city := public.now_norm_text(new.city);
+  new.region := public.now_norm_text(new.region);
+  new.country := public.now_country_code(new.country);
+  return new;
+end;
+$$;
+
+create trigger now_place_privacy_normalize before insert on public.now_place_privacy
+  for each row execute function public.now_place_privacy_normalize();
 
 create index now_bake_baked_at_idx on public.now_bake (baked_at desc, id desc);
+
+create function public.now_no_update() returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  raise exception 'rows in % are never edited; add a new row instead', tg_table_name;
+end;
+$$;
+
+create trigger now_place_no_update before update on public.now_place
+  for each row execute function public.now_no_update();
+create trigger now_bake_no_update before update on public.now_bake
+  for each row execute function public.now_no_update();
+create trigger now_place_privacy_no_update before update on public.now_place_privacy
+  for each row execute function public.now_no_update();
 
 create trigger now_place_no_delete before delete on public.now_place
   for each row execute function public.hub_no_delete();
@@ -61,7 +130,8 @@ revoke all on table public.now_place, public.now_bake, public.now_place_privacy 
 revoke all on sequence public.now_place_id_seq, public.now_bake_id_seq, public.now_place_privacy_id_seq from anon, authenticated;
 grant insert on table public.now_place, public.now_bake, public.now_place_privacy to authenticated;
 
--- The newest place with its effective privacy: its own flag, or the newest privacy row for the same place (ignoring case).
+-- The newest place with its effective privacy: its own flag, or the newest privacy row for the same city and country.
+-- Region is ignored on purpose ("OH", "Ohio" and blank all match), so any private rule for that city wins.
 create function public.now_current_place()
 returns table (city text, region text, country text, private boolean, sent_private boolean, updated_at timestamptz)
 language sql stable set search_path = ''
@@ -69,7 +139,8 @@ as $$
   select p.city, p.region, p.country,
          p.private or coalesce((
            select v.private from public.now_place_privacy v
-           where lower(v.city) = lower(p.city) and lower(v.region) = lower(p.region) and lower(v.country) = lower(p.country)
+           where public.now_norm_text(v.city) = public.now_norm_text(p.city)
+             and public.now_country_code(v.country) = public.now_country_code(p.country)
            order by v.id desc
            limit 1
          ), false),

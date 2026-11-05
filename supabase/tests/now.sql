@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(36);
+select plan(47);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a1', 'now-owner@example.com'),
@@ -108,6 +108,32 @@ insert into public.now_place_privacy (city, region, country, private) values ('H
 select is((select private from public.now_current_place()), false, 'marking the place public again shows it');
 insert into public.now_place (city, region, country, private) values ('Elsewhere', 'Ohio', 'United States', true);
 select is((select (private, sent_private) from public.now_current_place()), (true, true), 'a ping sent as private is private');
+
+select throws_ok($$ update public.now_place set private = false $$, null, null, 'places are never edited, even by the service role');
+select throws_ok($$ update public.now_bake set name = 'renamed' $$, null, null, 'bakes are never edited, even by the service role');
+select throws_ok(
+  $$ update public.now_place_privacy set private = false $$, null, null,
+  'a privacy rule cannot be quietly flipped, even by the service role'
+);
+
+insert into public.now_place_privacy (city, region, country, private) values ('  Columbus ', 'Ohio', 'United States', true);
+select results_eq(
+  $$ select city, region, country from public.now_place_privacy order by id desc limit 1 $$,
+  $$ values ('columbus'::text, 'ohio'::text, 'us'::text) $$,
+  'privacy rows are stored normalized, with the country as a code'
+);
+insert into public.now_place (city, region, country, private) values ('columbus ', 'OH', 'US', false);
+select is((select private from public.now_current_place()), true, 'the rule hides "columbus , OH, US"');
+insert into public.now_place (city, region, country, private) values ('Columbus', '', 'USA', false);
+select is((select private from public.now_current_place()), true, 'the rule hides "Columbus, , USA"');
+insert into public.now_place (city, region, country, private) values ('COLUMBUS', 'Ohio', 'United States of America', false);
+select is((select private from public.now_current_place()), true, 'the rule hides "COLUMBUS, Ohio, United States of America"');
+insert into public.now_place (city, region, country, private) values ('Columbus', 'Georgia', 'United States', false);
+select is((select private from public.now_current_place()), true, 'region is ignored, so any private rule for the city wins');
+insert into public.now_place (city, region, country, private) values ('Columbus', '', 'Canada', false);
+select is((select private from public.now_current_place()), false, 'a city of the same name in another country is not hidden');
+select is(public.now_country_code(' The  Netherlands '), 'nl', 'country names with odd spacing still map to a code');
+select is(public.now_country_code('Atlantis'), 'atlantis', 'an unknown country falls back to its normalized name');
 
 reset role;
 select throws_ok($$ truncate public.now_bake $$, null, null, 'now_bake cannot be truncated');

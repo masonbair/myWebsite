@@ -16,10 +16,13 @@ if (enabled && !/^(127\.0\.0\.1|localhost)$/.test(new URL(apiUrl || "http://inva
 
 const noPersist = { auth: { persistSession: false, autoRefreshToken: false } };
 
+// backup.test.ts writes now rows in parallel, so a test that needs to write the newest row retries if it loses that race.
+const NEWEST_ROW = { retry: 3 };
+
 describe.skipIf(!enabled)("now tables against local Supabase", () => {
   const service = () => createClient(apiUrl, serviceKey, noPersist);
 
-  it("reads the newest place and the latest bake, and loadNow prefers them over the file", async () => {
+  it("reads the newest place and the latest bake, and loadNow prefers them over the file", NEWEST_ROW, async () => {
     const city = `Integrationville${randomUUID().slice(0, 8)}`;
     const name = `integration loaf ${randomUUID().slice(0, 8)}`;
     expect((await service().from("now_place").insert({ city, region: "Ohio", country: "United States", private: true })).error).toBeNull();
@@ -34,7 +37,7 @@ describe.skipIf(!enabled)("now tables against local Supabase", () => {
     expect(formatLocation(now.place!)).toBe("Ohio, United States");
   });
 
-  it("a place marked private stays private when the phone pings it again as public", async () => {
+  it("a place marked private stays private when the phone pings it again as public", NEWEST_ROW, async () => {
     const city = `Hometown${randomUUID().slice(0, 8)}`;
     const ping = () => service().from("now_place").insert({ city, region: "Ohio", country: "United States", private: false });
     const mark = (makePrivate: boolean) =>

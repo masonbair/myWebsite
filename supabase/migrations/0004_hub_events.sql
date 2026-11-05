@@ -4,7 +4,14 @@
 create extension if not exists pg_cron;
 create extension if not exists pg_net with schema extensions;
 
--- Posts quietly to /api/hub/events/<event>, or does nothing (returns null) while either Vault secret is missing.
+-- Only the server may make outbound requests. On Supabase, supabase_admin grants anon and authenticated rights in net,
+-- and postgres cannot revoke another role's grant, so these lines can't remove those rights. The real guard is that net is
+-- not an API schema (supabase/config.toml), checked in tests/unit/hub/pg-net.integration.test.ts.
+revoke execute on all functions in schema net from anon, authenticated;
+revoke usage on schema net from anon, authenticated;
+
+-- Posts quietly to /api/hub/events/<event>, or does nothing (returns null) while either Vault secret is missing
+-- or the URL is not https (plain http only for a local stub), so the bearer token never travels in the clear.
 create function public.hub_post_event(p_event text, p_body jsonb default '{}') returns bigint
 language plpgsql security definer set search_path = ''
 as $$
@@ -15,6 +22,9 @@ begin
   select decrypted_secret into base_url from vault.decrypted_secrets where name = 'hub_events_url';
   select decrypted_secret into token from vault.decrypted_secrets where name = 'hub_events_token';
   if coalesce(base_url, '') = '' or coalesce(token, '') = '' then
+    return null;
+  end if;
+  if base_url !~* '^https://' and base_url !~* '^http://(localhost|127\.0\.0\.1|host\.docker\.internal)(:[0-9]+)?(/|$)' then
     return null;
   end if;
   return net.http_post(
