@@ -16,6 +16,14 @@ export type BackupMemoFile = {
 };
 
 export type BackupNowPlace = { id: number; city: string; region: string; country: string; private: boolean; updatedAt: string };
+export type BackupNowPlacePrivacy = {
+  id: number;
+  city: string;
+  region: string;
+  country: string;
+  private: boolean;
+  createdAt: string;
+};
 export type BackupNowBake = { id: number; name: string; photo: string | null; bakedAt: string };
 
 export type Snapshot = {
@@ -24,6 +32,7 @@ export type Snapshot = {
   hubState: Record<string, unknown>;
   memoFiles: BackupMemoFile[];
   nowPlace: BackupNowPlace[];
+  nowPlacePrivacy: BackupNowPlacePrivacy[];
   nowBake: BackupNowBake[];
   takenAt: string;
 };
@@ -34,6 +43,7 @@ export interface SnapshotSource {
   hubState(): Promise<Record<string, unknown>>;
   memoFiles(): Promise<BackupMemoFile[]>;
   nowPlace(): Promise<BackupNowPlace[]>;
+  nowPlacePrivacy(): Promise<BackupNowPlacePrivacy[]>;
   nowBake(): Promise<BackupNowBake[]>;
 }
 
@@ -53,12 +63,13 @@ const PAGE = 1000;
 export async function snapshot(source: SnapshotSource, now: Date = new Date()): Promise<Snapshot> {
   // Items last: they are never deleted, so every item a comment or memo file points at is already there.
   const nowPlace = await source.nowPlace();
+  const nowPlacePrivacy = await source.nowPlacePrivacy();
   const nowBake = await source.nowBake();
   const hubState = await source.hubState();
   const memoFiles = await source.memoFiles();
   const comments = await source.comments();
   const items = await source.items();
-  return { items, comments, hubState, memoFiles, nowPlace, nowBake, takenAt: now.toISOString() };
+  return { items, comments, hubState, memoFiles, nowPlace, nowPlacePrivacy, nowBake, takenAt: now.toISOString() };
 }
 
 export function backupPath(now: Date): string {
@@ -166,6 +177,13 @@ export function createSnapshotSource(client: SupabaseClient): SnapshotSource {
         "id",
       );
       return rows.map((r) => ({ id: r.id, city: r.city, region: r.region, country: r.country, private: r.private, updatedAt: r.updated_at }));
+    },
+    async nowPlacePrivacy() {
+      const rows = await all<{ id: number; city: string; region: string; country: string; private: boolean; created_at: string }>(
+        "now_place_privacy",
+        "id",
+      );
+      return rows.map((r) => ({ id: r.id, city: r.city, region: r.region, country: r.country, private: r.private, createdAt: r.created_at }));
     },
     async nowBake() {
       const rows = await all<{ id: number; name: string; photo: string | null; baked_at: string }>("now_bake", "id");

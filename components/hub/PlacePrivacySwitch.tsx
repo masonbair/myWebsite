@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { setPlacePrivateAction } from "@/app/hub/now-actions";
 import { focusRing } from "./styles";
 
-export function PlacePrivacySwitch({ isPrivate }: { isPrivate: boolean }) {
+export function PlacePrivacySwitch({ isPrivate, sentPrivate }: { isPrivate: boolean; sentPrivate: boolean }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +32,7 @@ export function PlacePrivacySwitch({ isPrivate }: { isPrivate: boolean }) {
           aria-checked={isPrivate}
           aria-labelledby="place-private-label"
           aria-busy={pending || undefined}
-          disabled={pending}
+          disabled={pending || sentPrivate}
           onClick={toggle}
           className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors duration-300 ease-spring disabled:opacity-60 ${
             isPrivate ? "bg-accent" : "bg-ink/15"
@@ -46,7 +46,11 @@ export function PlacePrivacySwitch({ isPrivate }: { isPrivate: boolean }) {
           />
         </button>
       </div>
-      <p className="mt-1.5 text-sm text-mute">Private hides the city. The site shows only the state and country.</p>
+      <p className="mt-1.5 text-sm text-mute">
+        {sentPrivate
+          ? "The phone sent this place as private, so it stays private."
+          : "Private hides the city, now and on every later visit. The site shows only the state and country."}
+      </p>
       {error && (
         <p role="alert" className="mt-2 text-sm font-medium text-accent-ink">
           {error}

@@ -34,6 +34,22 @@ describe.skipIf(!enabled)("now tables against local Supabase", () => {
     expect(formatLocation(now.place!)).toBe("Ohio, United States");
   });
 
+  it("a place marked private stays private when the phone pings it again as public", async () => {
+    const city = `Hometown${randomUUID().slice(0, 8)}`;
+    const ping = () => service().from("now_place").insert({ city, region: "Ohio", country: "United States", private: false });
+    const mark = (makePrivate: boolean) =>
+      service().from("now_place_privacy").insert({ city: city.toUpperCase(), region: "ohio", country: "united states", private: makePrivate });
+
+    expect((await ping()).error).toBeNull();
+    expect((await readNowRows(service())).place).toMatchObject({ city, private: false, sentPrivate: false });
+    expect((await mark(true)).error).toBeNull();
+    expect((await ping()).error).toBeNull();
+    const now = await loadNow({ rows: () => readNowRows(service()) });
+    expect(formatLocation(now.place!)).toBe("Ohio, United States");
+    expect((await mark(false)).error).toBeNull();
+    expect((await readNowRows(service())).place).toMatchObject({ city, private: false });
+  });
+
   it("an older bake logged later does not replace the latest one", async () => {
     const name = `old loaf ${randomUUID().slice(0, 8)}`;
     expect((await service().from("now_bake").insert({ name, baked_at: "2020-01-01T00:00:00Z" })).error).toBeNull();
@@ -45,5 +61,7 @@ describe.skipIf(!enabled)("now tables against local Supabase", () => {
     expect((await anon.from("now_place").select("city")).error).not.toBeNull();
     expect((await anon.from("now_bake").select("name")).error).not.toBeNull();
     expect((await anon.from("now_bake").insert({ name: "anon loaf" })).error).not.toBeNull();
+    expect((await anon.from("now_place_privacy").select("city")).error).not.toBeNull();
+    expect((await anon.rpc("now_current_place")).error).not.toBeNull();
   });
 });

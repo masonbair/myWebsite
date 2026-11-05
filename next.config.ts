@@ -6,6 +6,8 @@ const nextConfig: NextConfig = {
   typescript: { tsconfigPath: process.env.NEXT_TSCONFIG || "tsconfig.json" },
   // AVIF about halves the photos (phone hero 91 KB to 49 KB); WebP stays as the fallback.
   images: { formats: ["image/avif", "image/webp"] },
+  // Vercel serves public/ from the CDN, not the function, so /hub/now's bake action needs /misc traced in to check a photo exists.
+  outputFileTracingIncludes: { "/hub/now": ["./public/misc/*"] },
   async headers() {
     return [
       {

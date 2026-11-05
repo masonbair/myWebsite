@@ -38,6 +38,7 @@ function assertSnapshot(value: unknown): asserts value is Snapshot {
     s.hubState !== null &&
     (s.memoFiles === undefined || Array.isArray(s.memoFiles)) &&
     (s.nowPlace === undefined || Array.isArray(s.nowPlace)) &&
+    (s.nowPlacePrivacy === undefined || Array.isArray(s.nowPlacePrivacy)) &&
     (s.nowBake === undefined || Array.isArray(s.nowBake));
   if (!ok) throw new RestoreError("the file is not a hub snapshot");
 }
@@ -70,6 +71,11 @@ const NOW_PLACE_SQL = `
   insert into public.now_place (id, city, region, country, private, updated_at)
   select id, city, region, country, private, updated_at
   from jsonb_to_recordset($1::jsonb) as r(id bigint, city text, region text, country text, private boolean, updated_at timestamptz)`;
+
+const NOW_PLACE_PRIVACY_SQL = `
+  insert into public.now_place_privacy (id, city, region, country, private, created_at)
+  select id, city, region, country, private, created_at
+  from jsonb_to_recordset($1::jsonb) as r(id bigint, city text, region text, country text, private boolean, created_at timestamptz)`;
 
 const NOW_BAKE_SQL = `
   insert into public.now_bake (id, name, photo, baked_at)
@@ -132,11 +138,21 @@ async function restore(snapshot: Snapshot, target: string): Promise<Record<strin
       private: p.private,
       updated_at: p.updatedAt,
     }));
+    const nowPlacePrivacy = (snapshot.nowPlacePrivacy ?? []).map((p) => ({
+      id: p.id,
+      city: p.city,
+      region: p.region,
+      country: p.country,
+      private: p.private,
+      created_at: p.createdAt,
+    }));
     const nowBake = (snapshot.nowBake ?? []).map((b) => ({ id: b.id, name: b.name, photo: b.photo, baked_at: b.bakedAt }));
     await db.query(MEMO_FILES_SQL, [JSON.stringify(memoFiles)]);
     await db.query(NOW_PLACE_SQL, [JSON.stringify(nowPlace)]);
+    await db.query(NOW_PLACE_PRIVACY_SQL, [JSON.stringify(nowPlacePrivacy)]);
     await db.query(NOW_BAKE_SQL, [JSON.stringify(nowBake)]);
     await db.query(syncIdentity("now_place"));
+    await db.query(syncIdentity("now_place_privacy"));
     await db.query(syncIdentity("now_bake"));
     await db.query("commit");
     return {
@@ -145,6 +161,7 @@ async function restore(snapshot: Snapshot, target: string): Promise<Record<strin
       hubState: Object.keys(snapshot.hubState).length,
       memoFiles: memoFiles.length,
       nowPlace: nowPlace.length,
+      nowPlacePrivacy: nowPlacePrivacy.length,
       nowBake: nowBake.length,
     };
   } catch (e) {

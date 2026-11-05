@@ -7,14 +7,15 @@ import { panel } from "@/components/hub/styles";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { MAX_BAKE_NAME } from "@/lib/hub/now-input";
 import { formatLocation } from "@/lib/location";
-import { loadNow, type Bake, type Place } from "@/lib/now";
+import { loadNow, readNowRows, type Bake, type NowRows, type Place } from "@/lib/now";
+import { serviceClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time";
 
 export const metadata = { title: "Now" };
 
 export default async function NowPage() {
   await requireOwner();
-  const now = await loadNow();
+  const [now, db] = await Promise.all([loadNow(), readNowRows(serviceClient()).catch(() => null)]);
 
   return (
     <main>
@@ -23,7 +24,7 @@ export default async function NowPage() {
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         <Section id="place" icon={<MapPin size={18} weight="light" aria-hidden />} title="Current place">
-          {now.place ? <PlaceCard place={now.place} /> : <p className="text-sm text-mute">No place yet. The phone will send one once it is set up.</p>}
+          {now.place ? <PlaceCard place={now.place} db={db} /> : <p className="text-sm text-mute">No place yet. The phone will send one once it is set up.</p>}
         </Section>
         <Section id="last-bake" icon={<Cookie size={18} weight="light" aria-hidden />} title="Last bake">
           {now.bake ? <BakeCard bake={now.bake} /> : <p className="text-sm text-mute">No bake logged yet.</p>}
@@ -54,7 +55,7 @@ function Section({ id, icon, title, children }: { id: string; icon: ReactNode; t
   );
 }
 
-function PlaceCard({ place }: { place: Place }) {
+function PlaceCard({ place, db }: { place: Place; db: NowRows | null }) {
   const full = [place.city, place.region, place.country].filter(Boolean).join(", ");
   return (
     <>
@@ -65,7 +66,15 @@ function PlaceCard({ place }: { place: Place }) {
       <p className="rounded-2xl bg-canvas px-4 py-3 text-sm text-mute ring-1 ring-ink/5">
         The site shows <span className="font-semibold text-ink">{formatLocation(place)}</span>
       </p>
-      <PlacePrivacySwitch isPrivate={place.private} />
+      {db?.place ? (
+        <PlacePrivacySwitch isPrivate={db.place.private} sentPrivate={db.place.sentPrivate} />
+      ) : (
+        <p className="text-sm text-mute">
+          {db
+            ? "This place comes from the site's now.json file. Privacy can change once the phone sends a place."
+            : "Could not reach the database, so privacy cannot change right now."}
+        </p>
+      )}
     </>
   );
 }

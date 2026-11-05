@@ -39,6 +39,7 @@ const emptySource: SnapshotSource = {
   hubState: async () => ({}),
   memoFiles: async () => [],
   nowPlace: async () => [],
+  nowPlacePrivacy: async () => [],
   nowBake: async () => [],
 };
 
@@ -68,14 +69,16 @@ function fakeBlobs(initial: string[]) {
 const dayPath = (daysBefore: number) => backupPath(new Date(Date.UTC(2026, 10, 5) - daysBefore * 86_400_000));
 
 describe("snapshot", () => {
-  it("holds every table, the now place and bake tables included", async () => {
+  it("holds every table, the now place, privacy and bake tables included", async () => {
     const place = { id: 7, city: "Kent", region: "Ohio", country: "United States", private: true, updatedAt: "2026-11-01T00:00:00Z" };
     const bake = { id: 3, name: "Sourdough", photo: null, bakedAt: "2026-11-02T00:00:00Z" };
+    const privacy = { id: 2, city: "Kent", region: "Ohio", country: "United States", private: true, createdAt: "2026-11-01T01:00:00Z" };
     const shot = await snapshot(
       {
         ...emptySource,
         hubState: async () => ({ "reminded:x": "2026-11-05T10:00:00" }),
         nowPlace: async () => [place],
+        nowPlacePrivacy: async () => [privacy],
         nowBake: async () => [bake],
       },
       new Date("2026-11-05T03:00:00Z"),
@@ -86,6 +89,7 @@ describe("snapshot", () => {
       hubState: { "reminded:x": "2026-11-05T10:00:00" },
       memoFiles: [],
       nowPlace: [place],
+      nowPlacePrivacy: [privacy],
       nowBake: [bake],
       takenAt: "2026-11-05T03:00:00.000Z",
     });
@@ -184,7 +188,8 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
     await store.setHubState(`reminded:${older.id}`, "2026-11-05T09:30:00");
     const place = await client.from("now_place").insert({ city: "Backupville", region: "Ohio", country: "United States", private: true });
     const bake = await client.from("now_bake").insert({ name: "backup loaf", photo: "/misc/Mason_traveling.webp" });
-    if (place.error || bake.error) throw place.error ?? bake.error;
+    const privacy = await client.from("now_place_privacy").insert({ city: "Backupville", region: "Ohio", country: "United States", private: true });
+    if (place.error || bake.error || privacy.error) throw place.error ?? bake.error ?? privacy.error;
 
     shot = await snapshot(createSnapshotSource(client));
     file = join(await mkdtemp(join(tmpdir(), "hub-backup-")), "snapshot.json");
@@ -224,6 +229,9 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
       const nowBake = (await db.query("select id::int, name, photo from public.now_bake order by id")).rows;
       expect(shot.nowPlace.length).toBeGreaterThan(0);
       expect(shot.nowBake.length).toBeGreaterThan(0);
+      expect(shot.nowPlacePrivacy.length).toBeGreaterThan(0);
+      const privacyRows = (await db.query("select id::int, city, private from public.now_place_privacy order by id")).rows;
+      expect(privacyRows).toEqual(shot.nowPlacePrivacy.map((p) => ({ id: Number(p.id), city: p.city, private: p.private })));
       expect(nowPlace).toEqual(shot.nowPlace.map((p) => ({ id: Number(p.id), city: p.city, private: p.private })));
       expect(nowBake).toEqual(shot.nowBake.map((b) => ({ id: Number(b.id), name: b.name, photo: b.photo })));
       // The identity sequence moved past the restored ids, so the next bake gets a fresh one.

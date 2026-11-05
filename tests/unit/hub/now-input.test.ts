@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import { MAX_BAKE_NAME, NowInputError, parseBakeInput } from "@/lib/hub/now-input";
 
 const now = new Date("2026-11-05T12:00:00Z");
+const onSite = new Set(["/misc/babka.webp"]);
+const exists = (src: string) => onSite.has(src);
 
 describe("parseBakeInput", () => {
   it("defaults the time to now and the photo to none", () => {
-    expect(parseBakeInput({ name: "  Sourdough ", photo: "", bakedAt: "" }, now)).toEqual({
+    expect(parseBakeInput({ name: "  Sourdough ", photo: "", bakedAt: "" }, now, exists)).toEqual({
       name: "Sourdough",
       photo: null,
       bakedAt: "2026-11-05T12:00:00.000Z",
@@ -13,7 +15,7 @@ describe("parseBakeInput", () => {
   });
 
   it("keeps a /misc photo and an earlier time", () => {
-    expect(parseBakeInput({ name: "Babka", photo: "/misc/babka.webp", bakedAt: "2026-11-04T18:30:00.000Z" }, now)).toEqual({
+    expect(parseBakeInput({ name: "Babka", photo: "/misc/babka.webp", bakedAt: "2026-11-04T18:30:00.000Z" }, now, exists)).toEqual({
       name: "Babka",
       photo: "/misc/babka.webp",
       bakedAt: "2026-11-04T18:30:00.000Z",
@@ -28,11 +30,12 @@ describe("parseBakeInput", () => {
     [{ name: "Rye", photo: "https://example.com/x.webp" }, "/misc"],
     [{ name: "Rye", photo: "/misc/../.env" }, "/misc"],
     [{ name: "Rye", photo: "/misc/x.gif" }, "/misc"],
+    [{ name: "Rye", photo: "/misc/missing.webp" }, "There is no /misc/missing.webp on the site"],
     [{ name: "Rye", bakedAt: "yesterday-ish" }, "not a real date"],
     [{ name: "Rye", bakedAt: "1999-12-31T00:00:00Z" }, "not a real date"],
     [{ name: "Rye", bakedAt: "2026-11-06T12:00:00Z" }, "future"],
   ])("refuses %j", (raw, message) => {
-    expect(() => parseBakeInput(raw, now)).toThrow(NowInputError);
-    expect(() => parseBakeInput(raw, now)).toThrow(message);
+    expect(() => parseBakeInput(raw, now, exists)).toThrow(NowInputError);
+    expect(() => parseBakeInput(raw, now, exists)).toThrow(message);
   });
 });

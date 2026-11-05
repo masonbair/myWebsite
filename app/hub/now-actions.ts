@@ -1,10 +1,12 @@
 "use server";
 
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { NowInputError, parseBakeInput, placeRowWithPrivacy } from "@/lib/hub/now-input";
-import { loadNow } from "@/lib/now";
-import { sessionClient } from "@/lib/supabase/server";
+import { NowInputError, parseBakeInput, privacyRow } from "@/lib/hub/now-input";
+import { readNowRows, type NowRows } from "@/lib/now";
+import { serviceClient, sessionClient } from "@/lib/supabase/server";
 
 export type NowActionResult = { ok: true } | { ok: false; error: string };
 
@@ -14,11 +16,14 @@ function refreshNow() {
   revalidatePath("/hub/now");
 }
 
+// parseBakeInput has already matched the /misc pattern, so the path cannot leave public/misc.
+const photoExists = (src: string) => existsSync(path.join(process.cwd(), "public", src));
+
 export async function logBakeAction(raw: { name?: unknown; photo?: unknown; bakedAt?: unknown }): Promise<NowActionResult> {
   await requireOwner();
   let bake;
   try {
-    bake = parseBakeInput(raw ?? {}, new Date());
+    bake = parseBakeInput(raw ?? {}, new Date(), photoExists);
   } catch (e) {
     if (e instanceof NowInputError) return { ok: false, error: e.message };
     throw e;
@@ -31,14 +36,21 @@ export async function logBakeAction(raw: { name?: unknown; photo?: unknown; bake
   return { ok: true };
 }
 
-/** Writes a new place row copying the current place with the private flag set; a repeat with the same value does nothing. */
+/** Marks the current database place private or public with a new privacy row, so later pings from the same place keep it. */
 export async function setPlacePrivateAction(makePrivate: boolean): Promise<NowActionResult> {
   await requireOwner();
   if (typeof makePrivate !== "boolean") return { ok: false, error: "Bad request." };
-  const { place } = await loadNow();
-  if (!place) return { ok: false, error: "There is no place to change yet." };
+  let rows: NowRows;
+  try {
+    rows = await readNowRows(serviceClient());
+  } catch {
+    return { ok: false, error: "Could not read the current place from the database. Nothing changed." };
+  }
+  const place = rows.place;
+  if (!place) return { ok: false, error: "There is no place in the database yet, so there is nothing to mark." };
   if (place.private === makePrivate) return { ok: true };
-  const { error } = await (await sessionClient()).from("now_place").insert(placeRowWithPrivacy(place, makePrivate));
+  if (!makePrivate && place.sentPrivate) return { ok: false, error: "The phone sent this place as private, so it stays private." };
+  const { error } = await (await sessionClient()).from("now_place_privacy").insert(privacyRow(place, makePrivate));
   if (error) return { ok: false, error: "Could not save. Try again." };
   refreshNow();
   return { ok: true };

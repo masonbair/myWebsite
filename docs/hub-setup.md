@@ -65,13 +65,13 @@ node scripts/hub-restore.ts hub-backups-2026-11-05.json --target postgresql://po
 - It only restores into a database whose `items` table is empty, and stops with a non-zero exit otherwise.
 - It refuses any host but `localhost`, `127.0.0.1` or `::1` unless you add `--i-know-this-is-live`. For the live project, use the direct connection string (Project Settings > Database) with the `postgres` user, after the migrations have been applied there.
 - It runs in one transaction with `session_replication_role = replica`, so the hub guard triggers (which refuse done items, `claude` labels and Mason's comments from anyone but the signed-in owner) are skipped for the restore only.
-- It restores items (with archive reason, client key and completed time), comments, `hub_state`, `memo_files`, and the `now_place` and `now_bake` rows (ids kept, identity sequences moved past them).
+- It restores items (with archive reason, client key and completed time), comments, `hub_state`, `memo_files`, and the `now_place`, `now_place_privacy` and `now_bake` rows (ids kept, identity sequences moved past them).
 - `audit_log` is not in the backups at all, so its history is lost if the database is.
 - It does not restore `hub_owner` (sign in again and you are recorded), `audit_log` (history only), auth users, or the `updated_at` time of `hub_state` rows.
 
 ## Agent connector (MCP)
 
-Claude Code and the cloud worker reach the hub through `https://masonbair.com/api/mcp/mcp`. It only offers find, read, add, update, comment, merge-duplicate and the public now board; nothing can complete, delete, email, buy, book, deploy or merge.
+Claude Code (and other agents) reach the hub through `https://masonbair.com/api/mcp/mcp`. It only offers find, read, add, update, comment, merge-duplicate and the public now board; nothing can complete, delete, email, buy, book, deploy or merge.
 
 - `HUB_AGENT_TOKEN` (already set in Vercel) is the bearer token. If it is unset the connector answers 503; a missing or wrong token gets 401.
 - Requests carrying an `Origin` header (browsers) get 403, and bodies over 1 MB get 413.

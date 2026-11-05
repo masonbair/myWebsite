@@ -9,8 +9,12 @@ export type BakeInput = { name: string; photo: string | null; bakedAt: string };
 
 export class NowInputError extends Error {}
 
-/** Checks a "Log a bake" submission; an empty time means now, and a photo must be a /misc image path (no uploads yet). */
-export function parseBakeInput(raw: { name?: unknown; photo?: unknown; bakedAt?: unknown }, now: Date): BakeInput {
+/** Checks a "Log a bake" submission; an empty time means now, and a photo must be an existing /misc image (no uploads yet). */
+export function parseBakeInput(
+  raw: { name?: unknown; photo?: unknown; bakedAt?: unknown },
+  now: Date,
+  photoExists: (src: string) => boolean,
+): BakeInput {
   const name = typeof raw.name === "string" ? raw.name.trim() : "";
   if (!name) throw new NowInputError("A bake needs a name.");
   if (name.length > MAX_BAKE_NAME) throw new NowInputError(`Keep the name under ${MAX_BAKE_NAME} characters.`);
@@ -18,6 +22,7 @@ export function parseBakeInput(raw: { name?: unknown; photo?: unknown; bakedAt?:
   const photoText = typeof raw.photo === "string" ? raw.photo.trim() : "";
   const photo = photoText ? photoSrc(photoText) : null;
   if (photoText && !photo) throw new NowInputError("The photo must be a file in /misc, like /misc/bread.webp.");
+  if (photo && !photoExists(photo)) throw new NowInputError(`There is no ${photo} on the site. Check the file name.`);
 
   const timeText = typeof raw.bakedAt === "string" ? raw.bakedAt.trim() : "";
   if (!timeText) return { name, photo, bakedAt: now.toISOString() };
@@ -27,7 +32,7 @@ export function parseBakeInput(raw: { name?: unknown; photo?: unknown; bakedAt?:
   return { name, photo, bakedAt: new Date(time).toISOString() };
 }
 
-/** The new now_place row that marks a place private or public; history is never edited, so this is always an insert. */
-export function placeRowWithPrivacy(place: Place, makePrivate: boolean) {
-  return { city: place.city, region: place.region, country: place.country, private: makePrivate, updated_at: place.updatedAt };
+/** The now_place_privacy row that marks a place private or public; it is always an insert, never an edit. */
+export function privacyRow(place: Place, makePrivate: boolean) {
+  return { city: place.city, region: place.region, country: place.country, private: makePrivate };
 }

@@ -87,13 +87,17 @@ export async function readNow(): Promise<NowData> {
   }
 }
 
+/** A database place also says whether the ping itself was sent as private, which the hub cannot undo. */
+export type DbPlace = Place & { sentPrivate: boolean };
 /** The newest place and latest bake from the database; null fields mean the tables have none yet. */
-export type NowRows = { place: Place | null; bake: Bake | null };
+export type NowRows = { place: DbPlace | null; bake: Bake | null };
 
-/** Reads the now tables as the service role; callers must keep a private place's city off public pages. */
+type CurrentPlaceRow = { city: string; region: string; country: string; private: boolean; sent_private: boolean; updated_at: string };
+
+/** Reads the now tables as the service role, with the place's privacy already applied; callers still keep a private city off public pages. */
 export async function readNowRows(client: SupabaseClient): Promise<NowRows> {
   const [place, bake] = await Promise.all([
-    client.from("now_place").select("city, region, country, private, updated_at").order("id", { ascending: false }).limit(1).maybeSingle(),
+    client.rpc("now_current_place").maybeSingle<CurrentPlaceRow>(),
     client
       .from("now_bake")
       .select("name, photo, baked_at")
@@ -104,8 +108,10 @@ export async function readNowRows(client: SupabaseClient): Promise<NowRows> {
   ]);
   if (place.error) throw place.error;
   if (bake.error) throw bake.error;
+  const row = place.data;
+  const parsed = row ? parsePlace({ ...row, updatedAt: row.updated_at }) : null;
   return {
-    place: place.data ? parsePlace({ ...place.data, updatedAt: place.data.updated_at }) : null,
+    place: parsed && row ? { ...parsed, sentPrivate: row.sent_private === true } : null,
     bake: bake.data ? parseBake({ ...bake.data, bakedAt: bake.data.baked_at }) : null,
   };
 }
@@ -126,5 +132,9 @@ export async function loadNow(deps: LoadNowDeps = {}): Promise<NowData> {
       .then(deps.rows ?? databaseRows)
       .catch(() => null),
   ]);
-  return { ...file, place: rows?.place ?? file.place, bake: rows?.bake ?? file.bake };
+  const dbPlace = rows?.place;
+  const place: Place | null = dbPlace
+    ? { city: dbPlace.city, region: dbPlace.region, country: dbPlace.country, private: dbPlace.private, updatedAt: dbPlace.updatedAt }
+    : file.place;
+  return { ...file, place, bake: rows?.bake ?? file.bake };
 }

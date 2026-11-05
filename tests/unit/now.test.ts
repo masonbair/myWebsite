@@ -51,7 +51,8 @@ describe("loadNow", () => {
     bake: { name: "Focaccia", bakedAt: "2026-10-02T00:00:00Z" },
     photos: [{ src: "/misc/a.webp", alt: "a" }],
   });
-  const dbPlace = { city: "Testerville", region: "Ohio", country: "United States", private: true, updatedAt: "2026-11-04T00:00:00Z" };
+  const shownPlace = { city: "Testerville", region: "Ohio", country: "United States", private: true, updatedAt: "2026-11-04T00:00:00Z" };
+  const dbPlace = { ...shownPlace, sentPrivate: false };
   const dbBake = { name: "Sourdough", photo: null, bakedAt: "2026-11-05T09:00:00Z" };
 
   afterEach(() => vi.unstubAllEnvs());
@@ -77,7 +78,8 @@ describe("loadNow", () => {
     const onlyBake = await loadNow({ file: async () => file, rows: async () => ({ place: null, bake: dbBake }) });
     expect(onlyBake).toEqual({ ...file, bake: dbBake });
     const both = await loadNow({ file: async () => file, rows: async () => ({ place: dbPlace, bake: dbBake }) });
-    expect(both).toEqual({ ...file, place: dbPlace, bake: dbBake });
+    // sentPrivate is hub-only, so it never reaches the board or get_now.
+    expect(both).toEqual({ ...file, place: shownPlace, bake: dbBake });
   });
 
   it("a private database place still shows only region and country", async () => {

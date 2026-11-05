@@ -40,13 +40,16 @@ test.describe("now page", () => {
       await expect(page.getByRole("region", { name: "Log a bake" }).getByRole("alert")).toHaveText("The photo must be a file in /misc, like /misc/bread.webp.");
     });
 
-    test("marking the place private adds a row and the board shows only state and country", async ({ page, request }) => {
+    test("marking home private sticks across a new public ping, and marking it public shows the city again", async ({ page, request }) => {
       const city = `Placeville${randomUUID().slice(0, 8)}`;
-      const seeded = await serviceClient()
-        .from("now_place")
-        .insert({ city, region: "Ohio", country: "United States", private: false });
-      expect(seeded.error).toBeNull();
+      // Stands in for the phone collector, which always sends private = false.
+      const ping = async () => {
+        const { error } = await serviceClient().from("now_place").insert({ city, region: "Ohio", country: "United States", private: false });
+        expect(error).toBeNull();
+      };
+      const boardHtml = async () => (await request.get("/")).text();
 
+      await ping();
       await page.goto("/hub/now");
       const place = page.getByRole("region", { name: "Current place" });
       await expect(place.getByText(`${city}, Ohio, United States`)).toBeVisible();
@@ -56,15 +59,31 @@ test.describe("now page", () => {
       await toggle.click();
       await expect(toggle).toHaveAttribute("aria-checked", "true");
       await expect(place.getByText("The site shows Ohio, United States")).toBeVisible();
+      const marks = await serviceClient().from("now_place_privacy").select("private").eq("city", city);
+      expect(marks.data).toEqual([{ private: true }]);
 
-      const rows = await serviceClient().from("now_place").select("private").eq("city", city).order("id");
-      expect(rows.data).toEqual([{ private: false }, { private: true }]);
-
+      await ping();
       await page.goto("/");
       await expect(page.getByText("Ohio, United States")).toBeVisible();
       // Raw response, so the RSC payload is checked too.
-      const html = await (await request.get("/")).text();
-      expect(html).not.toContain(city);
+      expect(await boardHtml()).not.toContain(city);
+
+      await page.goto("/hub/now");
+      await expect(toggle).toHaveAttribute("aria-checked", "true");
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-checked", "false");
+      await page.goto("/");
+      await expect(page.getByText(`${city}, United States`)).toBeVisible();
+    });
+
+    test("a photo that is not on the site is refused", async ({ page }) => {
+      await page.goto("/hub/now");
+      await page.getByLabel("What did you bake?").fill("e2e missing photo");
+      await page.getByLabel(/Photo path/).fill("/misc/not-a-real-file.webp");
+      await page.getByRole("button", { name: "Log bake" }).click();
+      await expect(page.getByRole("region", { name: "Log a bake" }).getByRole("alert")).toHaveText(
+        "There is no /misc/not-a-real-file.webp on the site. Check the file name.",
+      );
     });
 
     test("has no serious accessibility problems", async ({ page }) => {
