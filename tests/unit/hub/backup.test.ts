@@ -41,6 +41,8 @@ const emptySource: SnapshotSource = {
   nowPlace: async () => [],
   nowPlacePrivacy: async () => [],
   nowBake: async () => [],
+  itemsHistory: async () => [],
+  auditLog: async () => [],
 };
 
 function fakeBlobs(initial: string[]) {
@@ -69,10 +71,12 @@ function fakeBlobs(initial: string[]) {
 const dayPath = (daysBefore: number) => backupPath(new Date(Date.UTC(2026, 10, 5) - daysBefore * 86_400_000));
 
 describe("snapshot", () => {
-  it("holds every table, the now place, privacy and bake tables included", async () => {
-    const place = { id: 7, city: "Kent", region: "Ohio", country: "United States", private: true, updatedAt: "2026-11-01T00:00:00Z" };
+  it("holds every table, the now place, privacy, bake, history and audit tables included", async () => {
+    const place = { id: 7, city: "Kent", region: "Ohio", country: "United States", private: true, timeZone: "America/New_York", updatedAt: "2026-11-01T00:00:00Z" };
     const bake = { id: 3, name: "Sourdough", photo: null, bakedAt: "2026-11-02T00:00:00Z" };
     const privacy = { id: 2, city: "Kent", region: "Ohio", country: "United States", private: true, createdAt: "2026-11-01T01:00:00Z" };
+    const version = { id: 4, itemId: "i1", title: "old", description: "old text", changedBy: "service_role", changedAt: "2026-11-03T00:00:00Z" };
+    const audit = { id: 9, actor: "agent:x", action: "update", itemId: "i1", detail: { fields: ["title"] }, at: "2026-11-03T00:00:00Z" };
     const shot = await snapshot(
       {
         ...emptySource,
@@ -80,6 +84,8 @@ describe("snapshot", () => {
         nowPlace: async () => [place],
         nowPlacePrivacy: async () => [privacy],
         nowBake: async () => [bake],
+        itemsHistory: async () => [version],
+        auditLog: async () => [audit],
       },
       new Date("2026-11-05T03:00:00Z"),
     );
@@ -91,6 +97,8 @@ describe("snapshot", () => {
       nowPlace: [place],
       nowPlacePrivacy: [privacy],
       nowBake: [bake],
+      itemsHistory: [version],
+      auditLog: [audit],
       takenAt: "2026-11-05T03:00:00.000Z",
     });
   });
@@ -185,8 +193,9 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
     const newer = await store.addItem({ title: "backup duplicate", source: "test" });
     await store.addComment(older.id, "backup comment");
     await store.archive(newer.id, "merged", older.id, "merged in the backup test");
+    await store.updateItem(older.id, { description: "backup rewrite" });
     await store.setHubState(`reminded:${older.id}`, "2026-11-05T09:30:00");
-    const place = await client.from("now_place").insert({ city: "Backupville", region: "Ohio", country: "United States", private: true });
+    const place = await client.from("now_place").insert({ city: "Backupville", region: "Ohio", country: "United States", private: true, time_zone: "America/New_York" });
     const bake = await client.from("now_bake").insert({ name: "backup loaf", photo: "/misc/Mason_traveling.webp" });
     const privacy = await client.from("now_place_privacy").insert({ city: "Backupville", region: "Ohio", country: "United States", private: true });
     if (place.error || bake.error || privacy.error) throw place.error ?? bake.error ?? privacy.error;
@@ -197,7 +206,7 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
 
     await withDb(`${LOCAL_DB}/postgres`, (db) => db.query(`create database ${scratch}`));
     const migrations = await Promise.all(
-      ["0002_hub.sql", "0003_hub_memo.sql", "0005_now.sql"].map((name) => readFile(join(__dirname, "../../../supabase/migrations", name), "utf8")),
+      ["0002_hub.sql", "0003_hub_memo.sql", "0005_now.sql", "0006_hub_history.sql"].map((name) => readFile(join(__dirname, "../../../supabase/migrations", name), "utf8")),
     );
     await withDb(scratchUrl, async (db) => {
       await db.query(AUTH_STUB);
@@ -225,18 +234,28 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
       expect(ids(comments)).toEqual(shot.comments.map((c) => c.id).sort());
       expect(ids(state)).toEqual(Object.keys(shot.hubState).sort());
       expect(ids(memoFiles)).toEqual(shot.memoFiles.map((m) => m.file).sort());
-      const nowPlace = (await db.query("select id::int, city, private from public.now_place order by id")).rows;
+      const nowPlace = (await db.query("select id::int, city, private, time_zone from public.now_place order by id")).rows;
       const nowBake = (await db.query("select id::int, name, photo from public.now_bake order by id")).rows;
       expect(shot.nowPlace.length).toBeGreaterThan(0);
       expect(shot.nowBake.length).toBeGreaterThan(0);
       expect(shot.nowPlacePrivacy.length).toBeGreaterThan(0);
       const privacyRows = (await db.query("select id::int, city, private from public.now_place_privacy order by id")).rows;
       expect(privacyRows).toEqual(shot.nowPlacePrivacy.map((p) => ({ id: Number(p.id), city: p.city, private: p.private })));
-      expect(nowPlace).toEqual(shot.nowPlace.map((p) => ({ id: Number(p.id), city: p.city, private: p.private })));
+      expect(nowPlace).toEqual(shot.nowPlace.map((p) => ({ id: Number(p.id), city: p.city, private: p.private, time_zone: p.timeZone })));
+      expect(shot.nowPlace.some((p) => p.timeZone === "America/New_York")).toBe(true);
       expect(nowBake).toEqual(shot.nowBake.map((b) => ({ id: Number(b.id), name: b.name, photo: b.photo })));
       // The identity sequence moved past the restored ids, so the next bake gets a fresh one.
       const next = (await db.query("insert into public.now_bake (name) values ('after restore') returning id::int")).rows[0];
       expect(next.id).toBeGreaterThan(Math.max(...shot.nowBake.map((b) => Number(b.id))));
+
+      const history = (await db.query("select id::int, item_id, title from public.items_history order by id")).rows;
+      expect(shot.itemsHistory.some((v) => v.title === "backup survivor")).toBe(true);
+      expect(history).toEqual(shot.itemsHistory.map((v) => ({ id: Number(v.id), item_id: v.itemId, title: v.title })));
+      const audit = (await db.query("select id::int, actor, action from public.audit_log order by id")).rows;
+      expect(shot.auditLog.length).toBeGreaterThan(0);
+      expect(audit).toEqual(shot.auditLog.map((a) => ({ id: Number(a.id), actor: a.actor, action: a.action })));
+      const nextAudit = (await db.query("insert into public.audit_log (actor, action) values ('test', 'after restore') returning id::int")).rows[0];
+      expect(nextAudit.id).toBeGreaterThan(Math.max(...shot.auditLog.map((a) => Number(a.id))));
 
       const merged = shot.items.find((i) => i.title === "backup duplicate" && i.state === "archived")!;
       expect(items.find((r) => r.id === merged.id)).toMatchObject({ merged_into: merged.mergedInto, archived_reason: "merged" });

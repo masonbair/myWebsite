@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { mcpRequestGuard } from "@/lib/hub/mcp-guard";
+import { mcpRequestGuard, withCappedBody } from "@/lib/hub/mcp-guard";
 import { handleMcpRequest } from "@/lib/hub/mcp-tools";
 import { createHubStore } from "@/lib/hub/store";
 import { loadNow } from "@/lib/now";
@@ -11,7 +11,9 @@ async function handle(request: NextRequest, ctx: { params: Promise<{ transport: 
   if (refused) return refused;
   const { transport } = await ctx.params;
   if (transport !== "mcp") return Response.json({ error: "not found" }, { status: 404 });
-  return handleMcpRequest(request, {
+  const capped = await withCappedBody(request);
+  if (capped instanceof Response) return capped;
+  return handleMcpRequest(capped, {
     token: process.env.HUB_AGENT_TOKEN,
     storeFor: (client) => createHubStore(serviceClient(), { kind: "agent", client }),
     readNow: () => loadNow(),

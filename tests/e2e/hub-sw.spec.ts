@@ -26,6 +26,29 @@ test.describe("hub service worker", () => {
     await expect(page.getByRole("textbox", { name: "Capture" })).toBeVisible();
   });
 
+  test("keeps the plain capture page as the offline copy and drops build files it no longer names", async ({ page }) => {
+    const stale = "/_next/static/chunks/old-deploy-e2e.js";
+    await page.goto(`${SW_BASE}/hub/capture`);
+    await page.evaluate(async () => (await navigator.serviceWorker.ready).scope);
+    await expect.poll(() => page.evaluate(async () => Boolean(await caches.match("/hub/capture")))).toBe(true);
+    await page.reload();
+    expect(await page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+
+    await page.evaluate(async (path) => {
+      const cache = await caches.open("hub-v1");
+      await cache.put(path, new Response("// old build", { headers: { "content-type": "text/javascript" } }));
+      await cache.delete("/hub/capture");
+    }, stale);
+
+    await page.goto(`${SW_BASE}/hub/capture?shared=1`);
+    await page.waitForLoadState("networkidle");
+    expect(await page.evaluate(async () => Boolean(await caches.match("/hub/capture")))).toBe(false);
+
+    await page.goto(`${SW_BASE}/hub/capture`);
+    await expect.poll(() => page.evaluate(async () => Boolean(await caches.match("/hub/capture")))).toBe(true);
+    await expect.poll(() => page.evaluate(async (path) => Boolean(await caches.match(path)), stale)).toBe(false);
+  });
+
   test("serves the worker script publicly as no-cache JavaScript", async ({ request }) => {
     const response = await request.get(`${SW_BASE}/hub/sw.js`, { maxRedirects: 0 });
     expect(response.status()).toBe(200);

@@ -1,5 +1,5 @@
 import { createSnapshotSource, runBackup, vercelBlobs } from "@/lib/hub/backup";
-import { handleEventRequest } from "@/lib/hub/events";
+import { handleEventRequest, readLatestPlaceZone } from "@/lib/hub/events";
 import { createHubStore } from "@/lib/hub/store";
 import { serviceClient } from "@/lib/supabase/server";
 
@@ -12,7 +12,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ event: str
     token: process.env.HUB_EVENTS_TOKEN,
     store: () => createHubStore(serviceClient(), { kind: "worker", runId: "events" }),
     now: () => new Date(),
-    timeZone: process.env.HUB_TIME_ZONE || "America/Denver",
+    timeZone: process.env.HUB_TIME_ZONE || undefined,
+    latestPlaceZone: () => readLatestPlaceZone(serviceClient()),
     ntfyTopic: process.env.NTFY_TOPIC,
     routine: routineUrl && routineToken ? { url: routineUrl, token: routineToken } : null,
     fetchFn: fetch,

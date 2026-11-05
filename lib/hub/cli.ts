@@ -9,7 +9,7 @@ import { listMemos, parsePieces, splitMemo } from "./memo-split";
 import { notify, type Message } from "./notify";
 import { applySchedule, offsetMinutesAt, parsePlan, scheduleInput } from "./schedule";
 import type { Item } from "./types";
-import type { HubWorker, Outcome } from "./worker-api";
+import { CLIENT_KEY, type HubWorker, type Outcome } from "./worker-api";
 
 export type CliDeps = {
   hub: HubWorker;
@@ -37,8 +37,8 @@ const USAGE = `usage: hub <command>
                                       label and file an inbox item, keeping its labels
   merge <newer-id> --into <older-id> --comment-file <path>
                                       copy the note onto the older item, archive the newer one into it
-  add --title <t> [--description-file <path>] [--labels a,b]
-                                      add an inbox item
+  add --title <t> [--description-file <path>] [--labels a,b] [--key <k>]
+                                      add an inbox item; a repeated --key returns the first item
   alert <message>                     ping phone with a hub problem
   granola-since                       time of the last Granola sweep (default 48h ago)
   granola-done <iso time>             record a finished Granola sweep
@@ -188,11 +188,17 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         const title = flag(argv, "--title");
         const file = flag(argv, "--description-file");
         const labels = flag(argv, "--labels");
+        const key = flag(argv, "--key");
         if (!title) break;
+        if (argv.includes("--key") && (key === undefined || !CLIENT_KEY.test(key))) {
+          deps.err("--key must be 1 to 200 of A-Z a-z 0-9 . _ : # -");
+          return 2;
+        }
         const item = await deps.hub.addItem({
           title,
           description: file ? readFileSync(file, "utf8").trim() : "",
           labels: labels ? labels.split(",").map((l) => l.trim()).filter(Boolean) : [],
+          ...(key ? { clientKey: key } : {}),
         });
         deps.out(item.id);
         return 0;
@@ -264,7 +270,8 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
     }
   } catch (e) {
     deps.err((e as Error).message);
-    return 1;
+    // The hub refused the input itself, so a retry would fail the same way.
+    return e instanceof HubApiError && e.status === 400 ? 2 : 1;
   }
   deps.err(USAGE);
   return 2;

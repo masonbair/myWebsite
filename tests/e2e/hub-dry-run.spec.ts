@@ -141,6 +141,21 @@ test.describe("worker dry run", () => {
 
     expect((await hub(["setup"])).status).toBe(0);
 
+    // Step 4: a Granola action item, swept twice as a retried run would, files once.
+    const granolaArgs = [
+      "add",
+      "--title",
+      `Send Priya the deck ${tag}`,
+      "--description-file",
+      tempFile("granola.txt", `Source: Granola standup, 2026-10-22: meeting-${tag}`),
+      "--key",
+      `granola:meeting-${tag}:1`,
+    ];
+    const firstAdd = await hub(granolaArgs);
+    const secondAdd = await hub(granolaArgs);
+    expect(firstAdd.status, firstAdd.stderr).toBe(0);
+    expect(secondAdd.stdout).toBe(firstAdd.stdout);
+
     // Step 5: split the memo.
     const memos = await hubJson<{ id: string; file: string; recorded: string; transcript: string }[]>(["memos"]);
     const memo = memos.find((m) => m.id === memoId);
@@ -170,6 +185,8 @@ test.describe("worker dry run", () => {
     expect((await hub(["sort", piece("Call the dentist").id, "--kind", "todo"])).status).toBe(0);
     expect((await hub(["sort", piece("A costume app").id, "--kind", "idea"])).status).toBe(0);
     expect((await hub(["sort", piece(`Add a recipes page ${tag}`).id, "--kind", "thought", "--project", "mywebsite"])).status).toBe(0);
+    expect(inbox.filter((i) => i.title === `Send Priya the deck ${tag}`).map((i) => i.id)).toEqual([firstAdd.stdout.trim()]);
+    expect((await hub(["sort", firstAdd.stdout.trim(), "--kind", "todo"])).status).toBe(0);
 
     const older = inbox.find((i) => i.id === olderId)!;
     const newer = inbox.find((i) => i.id === newerId)!;

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { del, list, put } from "@vercel/blob";
 import { ITEM_URL_BASE } from "./store";
-import type { ArchiveReason, Comment, Item } from "./types";
+import type { ArchiveReason, Comment, Item, ItemVersion } from "./types";
 
 export type BackupResult = { path: string; pruned: string[]; newestAt: string | null };
 
@@ -15,7 +15,15 @@ export type BackupMemoFile = {
   acceptedAt: string | null;
 };
 
-export type BackupNowPlace = { id: number; city: string; region: string; country: string; private: boolean; updatedAt: string };
+export type BackupNowPlace = {
+  id: number;
+  city: string;
+  region: string;
+  country: string;
+  private: boolean;
+  timeZone: string | null;
+  updatedAt: string;
+};
 export type BackupNowPlacePrivacy = {
   id: number;
   city: string;
@@ -25,6 +33,7 @@ export type BackupNowPlacePrivacy = {
   createdAt: string;
 };
 export type BackupNowBake = { id: number; name: string; photo: string | null; bakedAt: string };
+export type BackupAuditEntry = { id: number; actor: string; action: string; itemId: string | null; detail: unknown; at: string };
 
 export type Snapshot = {
   items: BackupItem[];
@@ -34,6 +43,8 @@ export type Snapshot = {
   nowPlace: BackupNowPlace[];
   nowPlacePrivacy: BackupNowPlacePrivacy[];
   nowBake: BackupNowBake[];
+  itemsHistory: ItemVersion[];
+  auditLog: BackupAuditEntry[];
   takenAt: string;
 };
 
@@ -45,6 +56,8 @@ export interface SnapshotSource {
   nowPlace(): Promise<BackupNowPlace[]>;
   nowPlacePrivacy(): Promise<BackupNowPlacePrivacy[]>;
   nowBake(): Promise<BackupNowBake[]>;
+  itemsHistory(): Promise<ItemVersion[]>;
+  auditLog(): Promise<BackupAuditEntry[]>;
 }
 
 /** The blob calls a backup needs, so tests can swap in memory. */
@@ -68,8 +81,21 @@ export async function snapshot(source: SnapshotSource, now: Date = new Date()): 
   const hubState = await source.hubState();
   const memoFiles = await source.memoFiles();
   const comments = await source.comments();
+  const itemsHistory = await source.itemsHistory();
+  const auditLog = await source.auditLog();
   const items = await source.items();
-  return { items, comments, hubState, memoFiles, nowPlace, nowPlacePrivacy, nowBake, takenAt: now.toISOString() };
+  return {
+    items,
+    comments,
+    hubState,
+    memoFiles,
+    nowPlace,
+    nowPlacePrivacy,
+    nowBake,
+    itemsHistory,
+    auditLog,
+    takenAt: now.toISOString(),
+  };
 }
 
 export function backupPath(now: Date): string {
@@ -172,11 +198,24 @@ export function createSnapshotSource(client: SupabaseClient): SnapshotSource {
       return rows.map((r) => ({ file: r.file, recorded: r.recorded, device: r.device, itemId: r.item_id, acceptedAt: r.accepted_at }));
     },
     async nowPlace() {
-      const rows = await all<{ id: number; city: string; region: string; country: string; private: boolean; updated_at: string }>(
-        "now_place",
-        "id",
-      );
-      return rows.map((r) => ({ id: r.id, city: r.city, region: r.region, country: r.country, private: r.private, updatedAt: r.updated_at }));
+      const rows = await all<{
+        id: number;
+        city: string;
+        region: string;
+        country: string;
+        private: boolean;
+        time_zone: string | null;
+        updated_at: string;
+      }>("now_place", "id");
+      return rows.map((r) => ({
+        id: r.id,
+        city: r.city,
+        region: r.region,
+        country: r.country,
+        private: r.private,
+        timeZone: r.time_zone,
+        updatedAt: r.updated_at,
+      }));
     },
     async nowPlacePrivacy() {
       const rows = await all<{ id: number; city: string; region: string; country: string; private: boolean; created_at: string }>(
@@ -188,6 +227,27 @@ export function createSnapshotSource(client: SupabaseClient): SnapshotSource {
     async nowBake() {
       const rows = await all<{ id: number; name: string; photo: string | null; baked_at: string }>("now_bake", "id");
       return rows.map((r) => ({ id: r.id, name: r.name, photo: r.photo, bakedAt: r.baked_at }));
+    },
+    async itemsHistory() {
+      const rows = await all<{ id: number; item_id: string; title: string; description: string; changed_by: string; changed_at: string }>(
+        "items_history",
+        "id",
+      );
+      return rows.map((r) => ({
+        id: r.id,
+        itemId: r.item_id,
+        title: r.title,
+        description: r.description,
+        changedBy: r.changed_by,
+        changedAt: r.changed_at,
+      }));
+    },
+    async auditLog() {
+      const rows = await all<{ id: number; actor: string; action: string; item_id: string | null; detail: unknown; at: string }>(
+        "audit_log",
+        "id",
+      );
+      return rows.map((r) => ({ id: r.id, actor: r.actor, action: r.action, itemId: r.item_id, detail: r.detail, at: r.at }));
     },
   };
 }

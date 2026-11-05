@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as route from "@/app/api/hub/events/[event]/route";
-import { dueReminders, handleEventRequest, reminderKey, type EventDeps } from "@/lib/hub/events";
+import { dueReminders, handleEventRequest, reminderKey, reminderTimeZone, type EventDeps, type PlaceZone } from "@/lib/hub/events";
 import type { Item } from "@/lib/hub/types";
 import { createFakeStore, type FakeStore } from "./fake-store";
 
@@ -84,6 +84,7 @@ function harness(overrides: Partial<EventDeps> = {}) {
     store: () => store,
     now: () => NOW,
     timeZone: "UTC",
+    latestPlaceZone: async () => null,
     ntfyTopic: "topic-x",
     routine: { url: "https://routine.example/fire", token: "routine-token" },
     fetchFn: (async (url: string, init: RequestInit) => {
@@ -180,6 +181,46 @@ describe("reminders event", () => {
 
   it("is 503 without an ntfy topic", async () => {
     expect((await harness({ ntfyTopic: undefined }).call("reminders")).status).toBe(503);
+  });
+
+  it("is 503 without a time zone rather than reading due times in a guessed one", async () => {
+    expect((await harness({ timeZone: undefined }).call("reminders")).status).toBe(503);
+  });
+
+  describe("follows the zone of Mason's latest place ping", () => {
+    // 09:00 in Lisbon on a summer day is 08:00Z; in Denver (the fallback) it is 15:00Z.
+    const summerMorning = new Date("2026-07-01T08:02:00Z");
+    const ping = (timeZone: string | null, daysOld: number): PlaceZone => ({
+      timeZone,
+      updatedAt: new Date(summerMorning.getTime() - daysOld * 86_400_000).toISOString(),
+    });
+    const remindedWith = async (place: PlaceZone | null) => {
+      const h = harness({ now: () => summerMorning, timeZone: "America/Denver", latestPlaceZone: async () => place });
+      const due = seed(h.store, { due: dueAt("2026-07-01", "09:00:00") });
+      return { body: await (await h.call("reminders")).json(), id: due.id };
+    };
+
+    it("fires a 09:00 Lisbon reminder at 08:00Z when the recent ping says Europe/Lisbon", async () => {
+      const { body, id } = await remindedWith(ping("Europe/Lisbon", 1));
+      expect(body).toEqual({ reminded: [id] });
+    });
+
+    for (const [name, place] of [
+      ["no ping", null],
+      ["a ping without a zone", ping(null, 1)],
+      ["an invalid zone", ping("Mars/Olympus", 1)],
+      ["a ping over 7 days old", ping("Europe/Lisbon", 8)],
+    ] as const) {
+      it(`falls back to HUB_TIME_ZONE with ${name}`, async () => {
+        expect((await remindedWith(place)).body).toEqual({ reminded: [] });
+      });
+    }
+  });
+
+  it("reminderTimeZone keeps the fallback for a ping dated in the future", () => {
+    const now = new Date("2026-07-01T08:00:00Z");
+    expect(reminderTimeZone({ timeZone: "Asia/Tokyo", updatedAt: "2026-07-02T08:00:00Z" }, "UTC", now)).toBe("UTC");
+    expect(reminderTimeZone({ timeZone: "Asia/Tokyo", updatedAt: "2026-06-30T08:00:00Z" }, "UTC", now)).toBe("Asia/Tokyo");
   });
 });
 

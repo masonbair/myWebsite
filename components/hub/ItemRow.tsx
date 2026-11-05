@@ -57,19 +57,27 @@ export function ItemSection({
   items,
   empty,
   showList,
+  total = items.length,
 }: {
   id: string;
   title: string;
   items: Item[];
   empty: string;
   showList?: boolean;
+  /** How many items match in all, when the page could only load some of them. */
+  total?: number;
 }) {
   return (
     <section aria-labelledby={id} className="mt-10 first:mt-0">
       <h2 id={id} className="mb-3 flex items-baseline gap-2 px-1 text-sm font-semibold text-ink">
         {title}
-        <span className="font-normal text-mute">{items.length}</span>
+        <span className="font-normal text-mute">{total}</span>
       </h2>
+      {total > items.length && (
+        <p className="mb-3 px-1 text-sm text-mute">
+          Showing {items.length} of {total}, newest first.
+        </p>
+      )}
       {items.length > 0 ? (
         <ul className="divide-y divide-ink/[0.06] overflow-hidden rounded-tile bg-surface shadow-tile ring-1 ring-ink/5">
           {items.map((item) => (

@@ -1,3 +1,4 @@
+import { isCalendarDate, isClockTime } from "./input";
 import { TRANSCRIPT_PART } from "./memo";
 import type { Comment, Item } from "./types";
 import type { HubWorker } from "./worker-api";
@@ -13,8 +14,7 @@ export type Pieces = {
 export type PlannedPiece = { ref: string; title: string; description: string; labels: string[]; due: Item["due"] };
 
 const FOOTER = /Source: HiDock (\S+), recorded (\S+)\nhidock-file: (\S+)/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const TIME = /^\d{2}:\d{2}$/;
+const isPieceTime = (v: unknown) => isClockTime(v) && v.length === 5;
 
 /** Read a memo item back into the upload it came from; only the relay's own worker comments count as transcript. */
 export function parseMemo(item: Pick<Item, "id" | "description">, comments: Comment[]): Memo {
@@ -35,9 +35,9 @@ function text(v: unknown, where: string): string {
   return v;
 }
 
-function optional(v: unknown, re: RegExp, where: string): string | null {
+function optional(v: unknown, valid: (v: unknown) => boolean, where: string, shape: string): string | null {
   if (v === null || v === undefined) return null;
-  if (typeof v !== "string" || !re.test(v)) throw new Error(`${where} must be null or match ${re.source}`);
+  if (typeof v !== "string" || !valid(v)) throw new Error(`${where} must be null or a real ${shape}`);
   return v;
 }
 
@@ -60,8 +60,8 @@ export function parsePieces(json: unknown, projects: string[]): Pieces {
     out.todos.push({
       text: text(t.text, `todos[${i}].text`),
       source: text(t.source, `todos[${i}].source`),
-      date: optional(t.date, DATE, `todos[${i}].date`),
-      time: optional(t.time, TIME, `todos[${i}].time`),
+      date: optional(t.date, isCalendarDate, `todos[${i}].date`, "YYYY-MM-DD date"),
+      time: optional(t.time, isPieceTime, `todos[${i}].time`, "HH:MM time"),
       project: known(t.project),
     }),
   );

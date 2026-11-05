@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { tokenMatches } from "./bearer";
 import { CLAUDE_LABEL } from "./rules";
 import { notify } from "./notify";
@@ -7,12 +8,17 @@ import type { HubStore, Item } from "./types";
 
 export type RoutineConfig = { url: string; token: string };
 
+/** The newest now_place row's zone and when it was sent. */
+export type PlaceZone = { timeZone: string | null; updatedAt: string };
+
 export type EventDeps = {
   token: string | undefined;
   store: () => HubStore;
   now: () => Date;
-  /** IANA zone the due times are written in. */
-  timeZone: string;
+  /** HUB_TIME_ZONE: the zone due times are read in when the phone sent no recent zone; reminders refuse to run without it. */
+  timeZone: string | undefined;
+  /** The newest place ping's zone, or null when there is no ping. */
+  latestPlaceZone: () => Promise<PlaceZone | null>;
   ntfyTopic: string | undefined;
   /** Null until the cutover sets ROUTINE_FIRE_URL and ROUTINE_FIRE_TOKEN. */
   routine: RoutineConfig | null;
@@ -30,6 +36,8 @@ const REMINDER_WINDOW_MIN = 15;
 // pg_cron can start a moment early, so an item due within the next minute counts as due now.
 const EARLY_MS = MINUTE_MS;
 const BACKUP_STALE_MS = 36 * 60 * MINUTE_MS;
+// Past a week the phone has likely stopped pinging, so its last zone says little about where Mason is.
+const PLACE_ZONE_MAX_AGE_MS = 7 * 24 * 60 * MINUTE_MS;
 
 const json = (data: unknown, status = 200) => Response.json(data, { status });
 
@@ -63,6 +71,35 @@ export function dueReminders(
   });
 }
 
+function isTimeZone(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The zone of Mason's latest place ping when it is a week old or less and valid, otherwise `fallback`. */
+export function reminderTimeZone(place: PlaceZone | null, fallback: string, now: Date): string {
+  const zone = place?.timeZone;
+  if (!zone || !isTimeZone(zone)) return fallback;
+  const age = now.getTime() - Date.parse(place.updatedAt);
+  return age >= 0 && age <= PLACE_ZONE_MAX_AGE_MS ? zone : fallback;
+}
+
+/** Reads the newest now_place row's zone through the service client. */
+export async function readLatestPlaceZone(client: SupabaseClient): Promise<PlaceZone | null> {
+  const { data, error } = await client
+    .from("now_place")
+    .select("time_zone, updated_at")
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ time_zone: string | null; updated_at: string }>();
+  if (error) throw error;
+  return data ? { timeZone: data.time_zone, updatedAt: data.updated_at } : null;
+}
+
 /** Starts the routine through its API trigger, with the same headers todo-hub's relay sends. */
 export async function fireRoutine(itemId: string, routine: RoutineConfig, fetchFn: typeof fetch): Promise<void> {
   const res = await fetchFn(routine.url, {
@@ -80,17 +117,18 @@ export async function fireRoutine(itemId: string, routine: RoutineConfig, fetchF
 
 async function sendReminders(deps: EventDeps): Promise<Response> {
   const topic = deps.ntfyTopic;
-  if (!topic) return json({ error: "reminders are not configured" }, 503);
+  if (!topic || !deps.timeZone) return json({ error: "reminders are not configured" }, 503);
   const store = deps.store();
   const now = deps.now();
+  const timeZone = reminderTimeZone(await deps.latestPlaceZone(), deps.timeZone, now);
   const dated = await store.listItems({ state: "open", hasDue: true, limit: DATED_LIMIT });
-  const inWindow = dueReminders(dated, now, REMINDER_WINDOW_MIN, { timeZone: deps.timeZone });
+  const inWindow = dueReminders(dated, now, REMINDER_WINDOW_MIN, { timeZone });
   const reminded = new Map<string, unknown>();
   for (const item of inWindow) reminded.set(item.id, await store.getHubState(reminderKey(item.id)));
 
   const sent: string[] = [];
   const failed: string[] = [];
-  for (const item of dueReminders(inWindow, now, REMINDER_WINDOW_MIN, { timeZone: deps.timeZone, reminded })) {
+  for (const item of dueReminders(inWindow, now, REMINDER_WINDOW_MIN, { timeZone, reminded })) {
     const due = item.due!;
     try {
       await notify(topic, { title: item.title, message: `Due ${due.time!.slice(0, 5)}`, clickUrl: item.url }, deps.fetchFn);

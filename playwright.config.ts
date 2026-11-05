@@ -5,7 +5,7 @@ import { HUB_E2E_AGENT_TOKEN, HUB_E2E_MEMO_TOKEN, HUB_E2E_WORKER_TOKEN, HUB_LIVE
 import { localSupabaseEnv } from "./tests/e2e/local-supabase";
 
 const PORT = 3100;
-const HUB_SPECS = /hub-.*\.spec\.ts/;
+const HUB_SPECS = /(^|\/)hub-[^/]*\.spec\.ts$/;
 // Each dev server is slow to start on a busy machine, so a run starts only the set it needs.
 const SERVER_SETS = ["hub", "site"] as const;
 type ServerSet = (typeof SERVER_SETS)[number];

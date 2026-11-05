@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(47);
+select plan(51);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a1', 'now-owner@example.com'),
@@ -75,6 +75,22 @@ select lives_ok(
 select lives_ok(
   $$ insert into public.now_place_privacy (city, region, country, private) values ('Kent', 'Ohio', 'United States', true) $$,
   'the owner can mark a place private'
+);
+select lives_ok(
+  $$ insert into public.now_place (city, country, time_zone) values ('Lisbon', 'Portugal', 'Europe/Lisbon') $$,
+  'the owner can send a real IANA time zone with a place'
+);
+select throws_ok(
+  $$ insert into public.now_place (city, country, time_zone) values ('Lisbon', 'Portugal', 'Mars/Olympus') $$,
+  '22023', null, 'an unknown time zone is refused'
+);
+select throws_ok(
+  $$ insert into public.now_place (city, country, time_zone) values ('Lisbon', 'Portugal', '') $$,
+  '22023', null, 'an empty time zone is refused'
+);
+select lives_ok(
+  $$ insert into public.now_place (city, country) values ('Lisbon', 'Portugal') $$,
+  'a place without a time zone is fine'
 );
 select throws_ok(
   $$ insert into public.now_bake (name, photo) values ('bad photo', 'https://example.com/x.webp') $$,

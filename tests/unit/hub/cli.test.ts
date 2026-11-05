@@ -286,6 +286,24 @@ describe("runCli", () => {
       expect(await runCli(["add", "--title", "x", "--labels", "claude"], h.deps)).toBe(1);
       expect(await runCli(["add", "--description-file", tempFile()], h.deps)).toBe(2);
     });
+
+    it("add with the same --key twice files one item", async () => {
+      const h = harness();
+      const args = ["add", "--title", "Send the deck", "--key", "granola:abc-123:1"];
+      expect(await runCli(args, h.deps)).toBe(0);
+      expect(await runCli(args, h.deps)).toBe(0);
+      expect([...h.rows.items.values()].filter((i) => i.title === "Send the deck")).toHaveLength(1);
+      expect(h.out[0]).toBe(h.out[1]);
+      expect(await runCli(["add", "--title", "x", "--key", "has space"], h.deps)).toBe(2);
+      expect(await runCli(["add", "--title", "x", "--key"], h.deps)).toBe(2);
+    });
+
+    it("exits 2 when the hub answers 400, since a retry would fail the same way", async () => {
+      const h = harness();
+      const item = seedItem(h.rows, { labels: ["todo"] });
+      expect(await runCli(["sort", item.id, "--kind", "todo", "--project", "x".repeat(61)], h.deps)).toBe(2);
+      expect(h.err.join("\n")).toMatch(/hub 400/);
+    });
   });
 
   describe("scheduling", () => {

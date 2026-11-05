@@ -39,7 +39,9 @@ function assertSnapshot(value: unknown): asserts value is Snapshot {
     (s.memoFiles === undefined || Array.isArray(s.memoFiles)) &&
     (s.nowPlace === undefined || Array.isArray(s.nowPlace)) &&
     (s.nowPlacePrivacy === undefined || Array.isArray(s.nowPlacePrivacy)) &&
-    (s.nowBake === undefined || Array.isArray(s.nowBake));
+    (s.nowBake === undefined || Array.isArray(s.nowBake)) &&
+    (s.itemsHistory === undefined || Array.isArray(s.itemsHistory)) &&
+    (s.auditLog === undefined || Array.isArray(s.auditLog));
   if (!ok) throw new RestoreError("the file is not a hub snapshot");
 }
 
@@ -68,9 +70,10 @@ const MEMO_FILES_SQL = `
 
 // Ids are kept so a later backup lines up, then each identity sequence moves past them so new rows never collide.
 const NOW_PLACE_SQL = `
-  insert into public.now_place (id, city, region, country, private, updated_at)
-  select id, city, region, country, private, updated_at
-  from jsonb_to_recordset($1::jsonb) as r(id bigint, city text, region text, country text, private boolean, updated_at timestamptz)`;
+  insert into public.now_place (id, city, region, country, private, time_zone, updated_at)
+  select id, city, region, country, private, time_zone, updated_at
+  from jsonb_to_recordset($1::jsonb) as r(id bigint, city text, region text, country text, private boolean, time_zone text,
+       updated_at timestamptz)`;
 
 const NOW_PLACE_PRIVACY_SQL = `
   insert into public.now_place_privacy (id, city, region, country, private, created_at)
@@ -81,6 +84,17 @@ const NOW_BAKE_SQL = `
   insert into public.now_bake (id, name, photo, baked_at)
   select id, name, photo, baked_at
   from jsonb_to_recordset($1::jsonb) as r(id bigint, name text, photo text, baked_at timestamptz)`;
+
+const ITEMS_HISTORY_SQL = `
+  insert into public.items_history (id, item_id, title, description, changed_by, changed_at)
+  select id, item_id, title, description, changed_by, changed_at
+  from jsonb_to_recordset($1::jsonb) as r(id bigint, item_id uuid, title text, description text, changed_by text, changed_at timestamptz)`;
+
+// audit_log ids are "generated always", so keeping them needs overriding system value.
+const AUDIT_LOG_SQL = `
+  insert into public.audit_log (id, actor, action, item_id, detail, at) overriding system value
+  select id, actor, action, item_id, detail, at
+  from jsonb_to_recordset($1::jsonb) as r(id bigint, actor text, action text, item_id uuid, detail jsonb, at timestamptz)`;
 
 const syncIdentity = (table: string) =>
   `select setval(pg_get_serial_sequence('public.${table}', 'id'), coalesce((select max(id) from public.${table}), 0) + 1, false)`;
@@ -136,6 +150,7 @@ async function restore(snapshot: Snapshot, target: string): Promise<Record<strin
       region: p.region,
       country: p.country,
       private: p.private,
+      time_zone: p.timeZone ?? null,
       updated_at: p.updatedAt,
     }));
     const nowPlacePrivacy = (snapshot.nowPlacePrivacy ?? []).map((p) => ({
@@ -154,6 +169,26 @@ async function restore(snapshot: Snapshot, target: string): Promise<Record<strin
     await db.query(syncIdentity("now_place"));
     await db.query(syncIdentity("now_place_privacy"));
     await db.query(syncIdentity("now_bake"));
+    const itemsHistory = (snapshot.itemsHistory ?? []).map((v) => ({
+      id: v.id,
+      item_id: v.itemId,
+      title: v.title,
+      description: v.description,
+      changed_by: v.changedBy,
+      changed_at: v.changedAt,
+    }));
+    const auditLog = (snapshot.auditLog ?? []).map((a) => ({
+      id: a.id,
+      actor: a.actor,
+      action: a.action,
+      item_id: a.itemId,
+      detail: a.detail,
+      at: a.at,
+    }));
+    await db.query(ITEMS_HISTORY_SQL, [JSON.stringify(itemsHistory)]);
+    await db.query(AUDIT_LOG_SQL, [JSON.stringify(auditLog)]);
+    await db.query(syncIdentity("items_history"));
+    await db.query(syncIdentity("audit_log"));
     await db.query("commit");
     return {
       items: items.length,
@@ -163,6 +198,8 @@ async function restore(snapshot: Snapshot, target: string): Promise<Record<strin
       nowPlace: nowPlace.length,
       nowPlacePrivacy: nowPlacePrivacy.length,
       nowBake: nowBake.length,
+      itemsHistory: itemsHistory.length,
+      auditLog: auditLog.length,
     };
   } catch (e) {
     await db.query("rollback");

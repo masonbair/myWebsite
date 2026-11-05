@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import { formatLocation } from "@/lib/location";
+import { readLatestPlaceZone } from "@/lib/hub/events";
 import { loadNow, readNowRows } from "@/lib/now";
 
 // Run with: HUB_TEST_DB_URL=1 HUB_TEST_SUPABASE_URL=http://127.0.0.1:54321 HUB_TEST_SERVICE_KEY=<SERVICE_ROLE_KEY> HUB_TEST_ANON_KEY=<ANON_KEY> (from `supabase status -o env`)
@@ -35,6 +36,14 @@ describe.skipIf(!enabled)("now tables against local Supabase", () => {
     const now = await loadNow({ rows: () => readNowRows(service()) });
     expect(now.bake?.name).toBe(name);
     expect(formatLocation(now.place!)).toBe("Ohio, United States");
+  });
+
+  it("keeps the phone's time zone with a ping and refuses one Postgres does not know", NEWEST_ROW, async () => {
+    const city = `Zoneville${randomUUID().slice(0, 8)}`;
+    expect((await service().from("now_place").insert({ city, country: "Portugal", time_zone: "Europe/Lisbon" })).error).toBeNull();
+    expect(await readLatestPlaceZone(service())).toMatchObject({ timeZone: "Europe/Lisbon" });
+    const bad = await service().from("now_place").insert({ city, country: "Portugal", time_zone: "Mars/Olympus" });
+    expect(bad.error?.message).toMatch(/unknown time zone/);
   });
 
   it("a place marked private stays private when the phone pings it again as public", NEWEST_ROW, async () => {

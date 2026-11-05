@@ -69,6 +69,13 @@ describe("parsePieces", () => {
     expect(() => parsePieces({ ...empty, todos: [todo("Oct 25")] }, PROJECTS)).toThrow(/date/);
   });
 
+  it("rejects a day or time that does not exist", () => {
+    expect(() => parsePieces({ ...empty, todos: [todo("2026-02-31")] }, PROJECTS)).toThrow(/date/);
+    expect(() => parsePieces({ ...empty, todos: [todo("2026-10-25", "25:00")] }, PROJECTS)).toThrow(/time/);
+    expect(() => parsePieces({ ...empty, todos: [todo("2026-10-25", "17:00:00")] }, PROJECTS)).toThrow(/time/);
+    expect(parsePieces({ ...empty, todos: [todo("2028-02-29", "23:59")] }, PROJECTS).todos[0]).toMatchObject({ date: "2028-02-29", time: "23:59" });
+  });
+
   it("turns a note for an unknown project into an idea", () => {
     const p = parsePieces({ ...empty, notes: [{ text: "n", source: "s", project: "nope" }] }, PROJECTS);
     expect(p.notes).toEqual([]);

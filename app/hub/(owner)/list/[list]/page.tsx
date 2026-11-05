@@ -3,6 +3,7 @@ import { hubMissing } from "@/lib/auth/hub-missing";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { LIST_NAMES } from "@/lib/hub/format";
 import { masonStore } from "@/lib/hub/mason-store";
+import { listForPage } from "@/lib/hub/page-items";
 import type { Item } from "@/lib/hub/types";
 
 const LISTS = ["todo", "ideas"] as const;
@@ -28,13 +29,14 @@ export default async function ListPage({ params }: PageProps<"/hub/list/[list]">
   await requireOwner();
   const { list } = await params;
   if (!isList(list)) hubMissing();
-  const items = (await (await masonStore()).listItems({ list, state: "open" })).sort(byDue);
+  const { items, total } = await listForPage(await masonStore(), { list, state: "open" });
+  items.sort(byDue);
   const name = LIST_NAMES[list];
 
   return (
     <main>
       <h1 className="mb-8 text-3xl font-semibold tracking-tight">{name}</h1>
-      <ItemSection id="open-items" title="Open" items={items} empty={`Nothing in ${name}.`} />
+      <ItemSection id="open-items" title="Open" items={items} total={total} empty={`Nothing in ${name}.`} />
     </main>
   );
 }

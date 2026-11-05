@@ -16,15 +16,25 @@ function fail(message: string): never {
   throw new Error(`bad item patch: ${message}`);
 }
 
+/** A YYYY-MM-DD day that exists on the calendar. */
+export function isCalendarDate(value: unknown): value is string {
+  if (typeof value !== "string" || !DATE.test(value)) return false;
+  // Date rolls 2026-02-31 over to March 3, so a real day must come back unchanged.
+  const day = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(day.getTime()) && day.toISOString().slice(0, 10) === value;
+}
+
+/** A 24-hour HH:MM or HH:MM:SS time. */
+export function isClockTime(value: unknown): value is string {
+  return typeof value === "string" && TIME.test(value);
+}
+
 function parseDue(raw: unknown): Item["due"] {
   if (raw === null) return null;
   const due = raw as { date?: unknown; time?: unknown };
-  if (typeof due !== "object" || typeof due.date !== "string" || !DATE.test(due.date)) fail("due.date");
-  // Date rolls 2026-02-31 over to March 3, so a real day must come back unchanged.
-  const day = new Date(`${due.date}T00:00:00Z`);
-  if (Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== due.date) fail("due.date");
+  if (typeof due !== "object" || !isCalendarDate(due.date)) fail("due.date");
   const time = due.time ?? null;
-  if (time !== null && (typeof time !== "string" || !TIME.test(time))) fail("due.time");
+  if (time !== null && !isClockTime(time)) fail("due.time");
   return { date: due.date, time };
 }
 

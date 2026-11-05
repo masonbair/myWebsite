@@ -7,6 +7,8 @@ create table public.now_place (
   region text not null default '' check (length(region) <= 100),
   country text not null check (length(btrim(country)) between 1 and 100),
   private boolean not null default false,
+  -- The phone's IANA zone (never coordinates), so reminders follow Mason; null when the phone sent none.
+  time_zone text check (length(time_zone) <= 64),
   updated_at timestamptz not null default now()
 );
 
@@ -83,6 +85,21 @@ $$;
 
 create trigger now_place_privacy_normalize before insert on public.now_place_privacy
   for each row execute function public.now_place_privacy_normalize();
+
+-- A check constraint can't read pg_timezone_names, so a trigger refuses a zone Postgres doesn't know.
+create function public.now_place_check_time_zone() returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  if new.time_zone is not null and not exists (select 1 from pg_catalog.pg_timezone_names where name = new.time_zone) then
+    raise exception 'unknown time zone %', new.time_zone using errcode = '22023';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger now_place_check_time_zone before insert on public.now_place
+  for each row execute function public.now_place_check_time_zone();
 
 create index now_bake_baked_at_idx on public.now_bake (baked_at desc, id desc);
 

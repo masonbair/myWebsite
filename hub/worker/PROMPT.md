@@ -33,7 +33,7 @@ Runs before sorting, so the items it adds get sorted and checked for duplicates 
 
 1. `hub granola-since` prints the time of the last sweep. Look only at meetings that started after it.
 2. Add only action items **Mason owns**: assigned to Mason by name, or ones he said he would do ("I'll…", "let me…"). Skip items owned by others, team-wide items, and vague ideas.
-3. For each, write the description `Source: Granola <meeting title>, <date>: <link or id>` to a temp file and run `hub add --title "<Mason's wording, kept as close as possible>" --description-file <file>`. No `--labels`: it lands in the inbox with no labels.
+3. For each, write the description `Source: Granola <meeting title>, <date>: <link or id>` to a temp file and run `hub add --title "<Mason's wording, kept as close as possible>" --description-file <file> --key "granola:<meeting id>:<n>"`, where `<n>` counts that meeting's action items from 1 in the order they appear. The key makes a re-run of the same meeting add nothing twice. No `--labels`: it lands in the inbox with no labels.
 4. If you can't tell who owns an item, skip it. Noise is worse than a miss.
 5. When done, run `hub granola-done <start time of the newest meeting you looked at>`. If there were no new meetings, skip this.
 

@@ -4,17 +4,28 @@ const CAPTURE = "/hub/capture";
 // The page names some files as "static/chunks/..." inside its React payload, without the /_next/ prefix.
 const STATIC_ASSET = /static\/(?:chunks|css|media)\/[^"'\s\\]+?\.(?:js|css|woff2)/g;
 
+// Only the plain page becomes the offline copy; a share-target visit (/hub/capture?shared=1) renders differently.
 function isCapturePage(response) {
-  return response.ok && !response.redirected && new URL(response.url).pathname === CAPTURE;
+  if (!response.ok || response.redirected) return false;
+  const url = new URL(response.url);
+  return url.pathname === CAPTURE && url.search === "";
 }
 
-// Caches the capture page plus the scripts and styles it names, so it still runs offline.
+const samePath = (path) => decodeURI(path);
+
+// Caches the capture page plus the scripts and styles it names, then drops build files it no longer names so old deploys don't pile up.
 async function cacheCapture(response) {
   const cache = await caches.open(CACHE);
   const html = await response.clone().text();
   await cache.put(CAPTURE, response);
   const assets = [...new Set((html.match(STATIC_ASSET) ?? []).map((path) => `/_next/${path}`))];
   await Promise.all(assets.map((path) => cache.add(path).catch(() => undefined)));
+  const keep = new Set(assets.map(samePath));
+  const stale = (await cache.keys()).filter((request) => {
+    const path = new URL(request.url).pathname;
+    return path.startsWith("/_next/static/") && !keep.has(samePath(path));
+  });
+  await Promise.all(stale.map((request) => cache.delete(request)));
 }
 
 self.addEventListener("install", (event) => {
