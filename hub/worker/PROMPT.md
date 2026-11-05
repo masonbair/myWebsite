@@ -24,7 +24,7 @@ The hub enforces the delete, complete, `claude` and status-label rules itself: a
 
 ## 3. Setup
 
-1. `bash hub/worker/setup.sh`. It checks Node and the environment, then runs `hub setup` to check the hub answers. If it fails, run `hub alert "worker setup failed: <first error line>"` and stop. (`hub alert` reaches the phone even when the hub is down.)
+1. `bash hub/worker/setup.sh`. It checks Node and the environment, then runs `hub setup` to check the hub answers. If it fails, run `hub alert "worker setup failed: <first error line>"` and stop. (`hub alert` reaches the phone even when the hub is down.) If `hub alert` itself fails (for example Node is too old or an env var is missing), run `curl -s -d "Hub worker setup failed: <reason>" "https://ntfy.sh/$NTFY_TOPIC"` instead, so the failure still reaches Mason's phone. Keep the topic in the variable: never print its value or any other secret.
 2. Check the connectors with one cheap call each: Granola (list recent meetings) and Google Calendar (list calendars). If a connector is missing or returns an auth error, run `hub alert "<Granola|Google Calendar> connector needs reconnecting on claude.ai"` and skip the steps that need it. Without Granola, skip step 4. Without Google Calendar, skip step 7. Steps 5, 6 and 8 work through `hub` alone.
 
 ## 4. Granola sweep
@@ -99,6 +99,7 @@ Memo to-dos wait with the label `to-schedule`. This step estimates each one and 
 5. **Report.** Write the comment to a temp file (at most 50,000 characters; longer exits 2 naming the limit: shorten it and run again), then:
    - done: `hub finish <id> --comment-file <file>`
    - blocked: `hub block <id> --comment-file <file>`
+   Exit 3 on the first try means another run took the item or it was never claimed: stop, don't redo the work.
    If the command exits 1, run it again once. If it fails again, run `hub alert "could not report item <id>"`. Exit 3 on a retry means the first try already recorded the result: don't redo the work or report it again.
 6. **Next.** Scheduled run only: after the last item, run `hub approved` once more and handle anything new.
 
