@@ -1,5 +1,5 @@
-import { notFound } from "next/navigation";
 import { ItemSection } from "@/components/hub/ItemRow";
+import { hubMissing } from "@/lib/auth/hub-missing";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { LIST_NAMES } from "@/lib/hub/format";
 import { masonStore } from "@/lib/hub/mason-store";
@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: PageProps<"/hub/list/[list]">
 export default async function ListPage({ params }: PageProps<"/hub/list/[list]">) {
   await requireOwner();
   const { list } = await params;
-  if (!isList(list)) notFound();
+  if (!isList(list)) hubMissing();
   const items = (await (await masonStore()).listItems({ list, state: "open" })).sort(byDue);
   const name = LIST_NAMES[list];
 

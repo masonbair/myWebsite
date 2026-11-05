@@ -15,5 +15,14 @@ export const viewport: Viewport = {
 };
 
 export default function HubLayout({ children }: LayoutProps<"/hub">) {
-  return <div className="mx-auto min-h-dvh w-full max-w-3xl px-4 pt-6 pb-16 sm:px-5 sm:pt-10">{children}</div>;
+  return (
+    <div className="mx-auto min-h-dvh w-full max-w-3xl px-4 pt-6 pb-16 sm:px-5 sm:pt-10">
+      <noscript>
+        <p role="status" className="mb-6 rounded-tile bg-surface p-4 text-sm font-medium text-accent-ink shadow-tile">
+          This page needs JavaScript. Turn it on for masonbair.com in your browser settings.
+        </p>
+      </noscript>
+      {children}
+    </div>
+  );
 }

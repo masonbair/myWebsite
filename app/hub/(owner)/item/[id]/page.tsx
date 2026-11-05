@@ -1,5 +1,5 @@
-import { notFound } from "next/navigation";
 import { ItemDetail } from "@/components/hub/ItemDetail";
+import { hubMissing } from "@/lib/auth/hub-missing";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { isItemId } from "@/lib/hub/format";
 import { masonStore } from "@/lib/hub/mason-store";
@@ -9,10 +9,10 @@ export const metadata = { title: "Item" };
 export default async function ItemPage({ params }: PageProps<"/hub/item/[id]">) {
   await requireOwner();
   const { id } = await params;
-  if (!isItemId(id)) notFound();
+  if (!isItemId(id)) hubMissing();
   const store = await masonStore();
   const item = await store.getItem(id);
-  if (!item) notFound();
+  if (!item) hubMissing();
   const [comments, mergedFrom, mergedInto] = await Promise.all([
     store.listComments(id),
     store.listItems({ mergedInto: id, state: "archived" }),

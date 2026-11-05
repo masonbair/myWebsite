@@ -101,27 +101,27 @@ describe("requireOwner", () => {
   it("shows a 404 to a signed-in stranger", async () => {
     session.user = githubUser("42");
     session.isOwner = true;
-    await expect((await load())()).rejects.toThrow("not-found");
+    await expect((await load())()).rejects.toThrow("redirect:/hub/missing");
   });
 
   it("shows a 404 when the GitHub id matches but hub_owner has no row", async () => {
     session.user = githubUser(OWNER_ID);
     session.isOwner = false;
-    await expect((await load())()).rejects.toThrow("not-found");
+    await expect((await load())()).rejects.toThrow("redirect:/hub/missing");
   });
 
   it("shows a 404 when the owner check errors", async () => {
     session.user = githubUser(OWNER_ID);
     session.isOwner = true;
     session.rpcError = { message: "boom" };
-    await expect((await load())()).rejects.toThrow("not-found");
+    await expect((await load())()).rejects.toThrow("redirect:/hub/missing");
   });
 
   it("fails closed when HUB_OWNER_GITHUB_ID is missing", async () => {
     vi.stubEnv("HUB_OWNER_GITHUB_ID", "");
     session.user = githubUser(OWNER_ID);
     session.isOwner = true;
-    await expect((await load())()).rejects.toThrow("not-found");
+    await expect((await load())()).rejects.toThrow("redirect:/hub/missing");
   });
 
   it("returns the owner's user id", async () => {

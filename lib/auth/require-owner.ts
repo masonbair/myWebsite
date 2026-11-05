@@ -1,7 +1,8 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { sessionClient } from "@/lib/supabase/server";
+import { hubMissing } from "./hub-missing";
 import { isOwnerUser } from "./owner";
 
 export type OwnerCheck = { ok: true; userId: string } | { ok: false; reason: "signed-out" | "not-owner" };
@@ -17,11 +18,11 @@ export async function checkOwner(): Promise<OwnerCheck> {
   return { ok: true, userId: data.user.id };
 }
 
-/** Gate for every /hub page: signed out goes to login, anyone but Mason gets a 404. */
+/** Gate for every /hub page: signed out goes to login, anyone but Mason goes to the 404 page. */
 export async function requireOwner(): Promise<{ userId: string }> {
   const check = await checkOwner();
   if (!check.ok && check.reason === "signed-out") redirect("/hub/login");
-  if (!check.ok) notFound();
+  if (!check.ok) hubMissing();
   return { userId: check.userId };
 }
 
