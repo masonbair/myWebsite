@@ -4,15 +4,25 @@ import { notFound, redirect } from "next/navigation";
 import { sessionClient } from "@/lib/supabase/server";
 import { isOwnerUser } from "./owner";
 
-/** Gate for every /hub page: signed out goes to login, anyone but Mason gets a 404. */
-export async function requireOwner(): Promise<{ userId: string }> {
+export type OwnerCheck = { ok: true; userId: string } | { ok: false; reason: "signed-out" | "not-owner" };
+
+/** Checks the session belongs to Mason without redirecting, for route handlers that answer in their own way. */
+export async function checkOwner(): Promise<OwnerCheck> {
   const supabase = await sessionClient();
   const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) redirect("/hub/login");
-  if (!isOwnerUser(data.user)) notFound();
+  if (error || !data.user) return { ok: false, reason: "signed-out" };
+  if (!isOwnerUser(data.user)) return { ok: false, reason: "not-owner" };
   const owner = await supabase.rpc("is_owner");
-  if (owner.error || owner.data !== true) notFound();
-  return { userId: data.user.id };
+  if (owner.error || owner.data !== true) return { ok: false, reason: "not-owner" };
+  return { ok: true, userId: data.user.id };
+}
+
+/** Gate for every /hub page: signed out goes to login, anyone but Mason gets a 404. */
+export async function requireOwner(): Promise<{ userId: string }> {
+  const check = await checkOwner();
+  if (!check.ok && check.reason === "signed-out") redirect("/hub/login");
+  if (!check.ok) notFound();
+  return { userId: check.userId };
 }
 
 /** Adds Mason's Supabase user to hub_owner; safe to repeat on every sign-in. */

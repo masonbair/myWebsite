@@ -4,10 +4,10 @@ const LISTS: readonly Item["list"][] = ["inbox", "todo", "ideas"];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
 export const LABEL_PATTERN = /^[a-z0-9_:-]+$/;
-const MAX_TITLE = 500;
+export const MAX_TITLE = 500;
 export const MAX_LABEL_LENGTH = 60;
 const MAX_LABELS = 50;
-const MAX_DESCRIPTION = 10_000;
+export const MAX_DESCRIPTION = 10_000;
 export const MAX_COMMENT = 10_000;
 
 function fail(message: string): never {

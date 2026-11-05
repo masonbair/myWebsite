@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { focusRing } from "./styles";
 
 const TABS = [
+  { href: "/hub/capture", label: "Capture" },
   { href: "/hub", label: "Inbox" },
   { href: "/hub/list/todo", label: "Todo" },
   { href: "/hub/list/ideas", label: "Ideas" },
