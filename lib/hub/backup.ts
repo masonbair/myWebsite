@@ -3,6 +3,8 @@ import { del, list, put } from "@vercel/blob";
 import { ITEM_URL_BASE } from "./store";
 import type { ArchiveReason, Comment, Item } from "./types";
 
+export type BackupResult = { path: string; pruned: string[]; newestAt: string | null };
+
 /** An item with the columns the app type leaves out, so a restore loses nothing. */
 export type BackupItem = Item & { archivedReason: ArchiveReason | null; clientKey: string | null; completedAt: string | null };
 export type BackupMemoFile = {
@@ -33,8 +35,8 @@ export interface SnapshotSource {
 /** The blob calls a backup needs, so tests can swap in memory. */
 export interface BackupBlobs {
   put(pathname: string, body: string): Promise<void>;
-  /** Every pathname under the prefix. */
-  list(prefix: string): Promise<string[]>;
+  /** Every file under the prefix, with its upload time as an ISO string. */
+  list(prefix: string): Promise<{ pathname: string; uploadedAt: string }[]>;
   del(pathnames: string[]): Promise<void>;
 }
 
@@ -65,12 +67,15 @@ export function backupsToPrune(pathnames: string[], keep = KEEP_BACKUPS): string
     .slice(keep);
 }
 
-export async function runBackup(deps: { source: SnapshotSource; blobs: BackupBlobs; now: Date }): Promise<{ path: string; pruned: string[] }> {
+/** `newestAt` is the newest kept backup's upload time as the store reports it, so a write that silently failed shows up. */
+export async function runBackup(deps: { source: SnapshotSource; blobs: BackupBlobs; now: Date }): Promise<BackupResult> {
   const path = backupPath(deps.now);
   await deps.blobs.put(path, JSON.stringify(await snapshot(deps.source, deps.now)));
-  const pruned = backupsToPrune(await deps.blobs.list(BACKUP_PREFIX));
+  const files = (await deps.blobs.list(BACKUP_PREFIX)).filter((f) => BACKUP_FILE.test(f.pathname));
+  const pruned = backupsToPrune(files.map((f) => f.pathname));
   if (pruned.length > 0) await deps.blobs.del(pruned);
-  return { path, pruned };
+  const kept = files.filter((f) => !pruned.includes(f.pathname)).map((f) => f.uploadedAt).sort();
+  return { path, pruned, newestAt: kept.at(-1) ?? null };
 }
 
 type ItemRow = {
@@ -163,14 +168,14 @@ export function vercelBlobs(): BackupBlobs {
       });
     },
     async list(prefix) {
-      const pathnames: string[] = [];
+      const files: { pathname: string; uploadedAt: string }[] = [];
       let cursor: string | undefined;
       do {
         const page = await list({ prefix, cursor });
-        pathnames.push(...page.blobs.map((b) => b.pathname));
+        files.push(...page.blobs.map((b) => ({ pathname: b.pathname, uploadedAt: b.uploadedAt.toISOString() })));
         cursor = page.hasMore ? page.cursor : undefined;
       } while (cursor);
-      return pathnames;
+      return files;
     },
     async del(pathnames) {
       await del(pathnames);

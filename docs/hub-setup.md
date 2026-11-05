@@ -26,6 +26,10 @@ Migration `0004_hub_events.sql` adds three calls from the database to the site, 
 
 They read the site URL and a token from two Vault secrets. Until both exist, every call does nothing, and Mason's edits still save.
 
+Never add the `net` schema to the exposed schemas in Supabase (Project Settings > Data API): pg_net's tables keep each queued request, bearer token included.
+
+A reminder is sent once, up to 15 minutes late if a run fails or is late. If a backup fails, or the newest backup is over 36 hours old, the backup job sends "Hub backup failed: ..." to `NTFY_TOPIC`.
+
 1. Make a token on your laptop: `openssl rand -hex 32`. Keep it in your password manager.
 2. In Vercel (Project > Settings > Environment Variables, Production), add `HUB_EVENTS_TOKEN` set to that token. Also check `NTFY_TOPIC` is set (reminders need it) and `BLOB_STORE_ID` is set (backups need it). `HUB_TIME_ZONE` is optional; due times are read as `America/Denver` without it. Leave `ROUTINE_FIRE_URL` and `ROUTINE_FIRE_TOKEN` unset until the cutover; until then the approved event answers 503 and fires nothing. Redeploy so the function sees the new values.
 3. In the Supabase dashboard, open the project, then SQL Editor > New query, and run this with your own token pasted in:
@@ -62,4 +66,5 @@ node scripts/hub-restore.ts hub-backups-2026-11-05.json --target postgresql://po
 - It refuses any host but `localhost`, `127.0.0.1` or `::1` unless you add `--i-know-this-is-live`. For the live project, use the direct connection string (Project Settings > Database) with the `postgres` user, after the migrations have been applied there.
 - It runs in one transaction with `session_replication_role = replica`, so the hub guard triggers (which refuse done items, `claude` labels and Mason's comments from anyone but the signed-in owner) are skipped for the restore only.
 - It restores items (with archive reason, client key and completed time), comments, `hub_state` and `memo_files`.
+- `audit_log` is not in the backups at all, so its history is lost if the database is.
 - It does not restore `hub_owner` (sign in again and you are recorded), `audit_log` (history only), auth users, or the `updated_at` time of `hub_state` rows. The now place and bake tables join the backup when they exist.

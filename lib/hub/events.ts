@@ -2,10 +2,10 @@ import { tokenMatches } from "./bearer";
 import { CLAUDE_LABEL } from "./rules";
 import { notify } from "./notify";
 import { offsetMinutesAt } from "./schedule";
+import type { BackupResult } from "./backup";
 import type { HubStore, Item } from "./types";
 
 export type RoutineConfig = { url: string; token: string };
-export type BackupResult = { path: string; pruned: string[] };
 
 export type EventDeps = {
   token: string | undefined;
@@ -25,6 +25,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_BODY_BYTES = 4096;
 const DATED_LIMIT = 1000;
 const MINUTE_MS = 60_000;
+// Runs every 5 minutes, so 15 gives a failed or late run two more tries; the reminded flag stops repeats.
+const REMINDER_WINDOW_MIN = 15;
+// pg_cron can start a moment early, so an item due within the next minute counts as due now.
+const EARLY_MS = MINUTE_MS;
+const BACKUP_STALE_MS = 36 * 60 * MINUTE_MS;
 
 const json = (data: unknown, status = 200) => Response.json(data, { status });
 
@@ -41,11 +46,11 @@ function dueInstant(stamp: string, timeZone: string): number {
   return wallClock - offsetMinutesAt(timeZone, new Date(guess)) * MINUTE_MS;
 }
 
-/** Open items due in the last `windowMin` minutes; `options.reminded` maps item id to its `reminded:<id>` value. */
+/** Open items due in the last `windowMin` minutes (or the next one); `options.reminded` maps item id to its `reminded:<id>` value. */
 export function dueReminders(
   items: Item[],
   now: Date,
-  windowMin = 5,
+  windowMin = REMINDER_WINDOW_MIN,
   options: { timeZone?: string; reminded?: ReadonlyMap<string, unknown> } = {},
 ): Item[] {
   const timeZone = options.timeZone ?? "UTC";
@@ -54,7 +59,7 @@ export function dueReminders(
     const stamp = dueStamp(item.due, item.due.time);
     if (options.reminded?.get(item.id) === stamp) return false;
     const age = now.getTime() - dueInstant(stamp, timeZone);
-    return age >= 0 && age < windowMin * MINUTE_MS;
+    return age >= -EARLY_MS && age < windowMin * MINUTE_MS;
   });
 }
 
@@ -79,13 +84,13 @@ async function sendReminders(deps: EventDeps): Promise<Response> {
   const store = deps.store();
   const now = deps.now();
   const dated = await store.listItems({ state: "open", hasDue: true, limit: DATED_LIMIT });
-  const inWindow = dueReminders(dated, now, 5, { timeZone: deps.timeZone });
+  const inWindow = dueReminders(dated, now, REMINDER_WINDOW_MIN, { timeZone: deps.timeZone });
   const reminded = new Map<string, unknown>();
   for (const item of inWindow) reminded.set(item.id, await store.getHubState(reminderKey(item.id)));
 
   const sent: string[] = [];
   const failed: string[] = [];
-  for (const item of dueReminders(inWindow, now, 5, { timeZone: deps.timeZone, reminded })) {
+  for (const item of dueReminders(inWindow, now, REMINDER_WINDOW_MIN, { timeZone: deps.timeZone, reminded })) {
     const due = item.due!;
     try {
       await notify(topic, { title: item.title, message: `Due ${due.time!.slice(0, 5)}`, clickUrl: item.url }, deps.fetchFn);
@@ -132,9 +137,29 @@ async function fireApproved(request: Request, deps: EventDeps): Promise<Response
   return json({ fired: true });
 }
 
+async function backupFailed(deps: EventDeps, reason: string): Promise<Response> {
+  console.error(`hub backup failed: ${reason}`);
+  if (deps.ntfyTopic) {
+    await notify(deps.ntfyTopic, { title: `Hub backup failed: ${reason.slice(0, 120)}`, message: "Check the hub-backup job and the blob store." }, deps.fetchFn).catch(
+      (e: unknown) => console.error(`backup alert not sent: ${(e as Error).message}`),
+    );
+  }
+  return json({ error: `backup failed: ${reason}` }, 500);
+}
+
 async function backup(deps: EventDeps): Promise<Response> {
   if (!deps.backup) return json({ error: "backup is not configured" }, 503);
-  return json(await deps.backup());
+  let result: BackupResult;
+  try {
+    result = await deps.backup();
+  } catch (e) {
+    return backupFailed(deps, (e as Error).message);
+  }
+  const newest = result.newestAt ? Date.parse(result.newestAt) : NaN;
+  if (!(deps.now().getTime() - newest <= BACKUP_STALE_MS)) {
+    return backupFailed(deps, `newest backup is from ${result.newestAt ?? "never"}`);
+  }
+  return json(result);
 }
 
 /** Serves one pg_cron or trigger event; the token is checked here even though the proxy pre-checks the header. */

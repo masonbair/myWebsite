@@ -39,7 +39,7 @@ describe("dueReminders", () => {
   });
 
   it("skips an item not due yet and an all-day item", () => {
-    const later = item({ due: dueAt("2026-11-05", "18:01:00") });
+    const later = item({ due: dueAt("2026-11-05", "18:05:00") });
     const allDay = item({ due: dueAt("2026-11-05", null) });
     expect(dueReminders([later, allDay], NOW, 5, utc)).toEqual([]);
   });
@@ -52,6 +52,14 @@ describe("dueReminders", () => {
       [moved.id, "2026-11-04T09:00:00"],
     ]);
     expect(dueReminders([reminded, moved], NOW, 5, { ...utc, reminded: flags }).map((i) => i.id)).toEqual([moved.id]);
+  });
+
+  it("by default reaches back 15 minutes and counts an item due within the next minute", () => {
+    const late = item({ due: dueAt("2026-11-05", "17:46:00") });
+    const tooLate = item({ due: dueAt("2026-11-05", "17:44:00") });
+    const almost = item({ due: dueAt("2026-11-05", "18:01:00") });
+    const future = item({ due: dueAt("2026-11-05", "18:02:00") });
+    expect(dueReminders([late, tooLate, almost, future], NOW, undefined, utc).map((i) => i.id)).toEqual([late.id, almost.id]);
   });
 
   it("skips done and archived items", () => {
@@ -82,7 +90,7 @@ function harness(overrides: Partial<EventDeps> = {}) {
       fetched.push({ url, init });
       return new Response("{}");
     }) as unknown as typeof fetch,
-    backup: async () => ({ path: "hub-backups/2026-11-05.json", pruned: [] }),
+    backup: async () => ({ path: "hub-backups/2026-11-05.json", pruned: [], newestAt: "2026-11-05T17:59:00.000Z" }),
     ...overrides,
   };
   const call = (event: string, body: unknown = {}, auth = `Bearer ${TOKEN}`) =>
@@ -143,6 +151,31 @@ describe("reminders event", () => {
     const due = seed(h.store, { due: dueAt("2026-11-05", "17:57:00") });
     expect((await h.call("reminders")).status).toBe(502);
     expect(h.store.rows.state.has(reminderKey(due.id))).toBe(false);
+  });
+
+  it("retries a failed send on the next run, and reminds exactly once in total", async () => {
+    let now = NOW;
+    let failNext = true;
+    const sent: string[] = [];
+    const h = harness({
+      now: () => now,
+      fetchFn: (async (_url: string, init: RequestInit) => {
+        if (failNext) {
+          failNext = false;
+          return new Response("no", { status: 503 });
+        }
+        sent.push(init.body as string);
+        return new Response("{}");
+      }) as unknown as typeof fetch,
+    });
+    seed(h.store, { due: dueAt("2026-11-05", "17:58:00") });
+
+    expect((await h.call("reminders")).status).toBe(502);
+    now = new Date(NOW.getTime() + 5 * 60_000);
+    expect((await h.call("reminders")).status).toBe(200);
+    now = new Date(NOW.getTime() + 10 * 60_000);
+    await h.call("reminders");
+    expect(sent).toHaveLength(1);
   });
 
   it("is 503 without an ntfy topic", async () => {
@@ -208,7 +241,29 @@ describe("backup event", () => {
   it("runs the backup and reports the file", async () => {
     const res = await harness().call("backup");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ path: "hub-backups/2026-11-05.json", pruned: [] });
+    expect(await res.json()).toEqual({ path: "hub-backups/2026-11-05.json", pruned: [], newestAt: "2026-11-05T17:59:00.000Z" });
+  });
+
+  it("pings the phone and answers 500 when the backup throws", async () => {
+    const h = harness({
+      backup: async () => {
+        throw new Error("blob store suspended");
+      },
+    });
+    expect((await h.call("backup")).status).toBe(500);
+    expect(h.fetched).toHaveLength(1);
+    expect(JSON.parse(h.fetched[0].init.body as string)).toMatchObject({
+      topic: "topic-x",
+      title: "Hub backup failed: blob store suspended",
+    });
+  });
+
+  it("pings the phone when the newest backup is over 36 hours old", async () => {
+    const h = harness({
+      backup: async () => ({ path: "hub-backups/2026-11-05.json", pruned: [], newestAt: "2026-11-03T03:00:00.000Z" }),
+    });
+    expect((await h.call("backup")).status).toBe(500);
+    expect(JSON.parse(h.fetched[0].init.body as string).title).toMatch(/^Hub backup failed: newest backup is from 2026-11-03/);
   });
 
   it("is 503 when no blob store is connected", async () => {

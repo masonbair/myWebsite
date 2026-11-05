@@ -42,14 +42,16 @@ const emptySource: SnapshotSource = {
 
 function fakeBlobs(initial: string[]) {
   const files = new Map<string, string>(initial.map((p) => [p, "{}"]));
+  const uploadedAt = new Map<string, string>(initial.map((p) => [p, `${p.slice(-15, -5)}T03:00:00.000Z`]));
   const deleted: string[] = [];
   // Ignores the prefix on purpose, so the test proves the pruning filter itself never reaches outside hub-backups/.
   const blobs: BackupBlobs = {
     async put(pathname, body) {
       files.set(pathname, body);
+      uploadedAt.set(pathname, JSON.parse(body).takenAt);
     },
     async list() {
-      return [...files.keys()];
+      return [...files.keys()].map((pathname) => ({ pathname, uploadedAt: uploadedAt.get(pathname)! }));
     },
     async del(pathnames) {
       for (const p of pathnames) {
@@ -86,6 +88,7 @@ describe("runBackup", () => {
     const { files, blobs } = fakeBlobs([]);
     const result = await runBackup({ source: emptySource, blobs, now: new Date("2026-11-05T23:30:00-07:00") });
     expect(result.path).toBe("hub-backups/2026-11-06.json");
+    expect(result.newestAt).toBe("2026-11-06T06:30:00.000Z");
     expect(JSON.parse(files.get("hub-backups/2026-11-06.json")!).takenAt).toBe("2026-11-06T06:30:00.000Z");
   });
 
