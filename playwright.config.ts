@@ -71,6 +71,8 @@ function hubServer(port: number, name: "hub" | "hub-live", workerLive: boolean) 
       MEMO_UPLOAD_TOKEN: HUB_E2E_MEMO_TOKEN,
       // Set explicitly so a value in .env.local can never decide which state a test sees.
       HUB_WORKER_LIVE: workerLive ? "true" : "false",
+      // Only the live server registers the service worker, so the other hub specs never run behind one.
+      NEXT_PUBLIC_HUB_SW: workerLive ? "1" : "",
       NEXT_DIST_DIR: `.next/e2e-${name}`,
       NEXT_TSCONFIG: fixtureTsconfig(name),
     },

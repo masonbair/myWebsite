@@ -9,6 +9,8 @@ const PUBLIC_HUB_PATHS = new Set([
   "/hub/icon-192.png",
   "/hub/icon-512.png",
   "/hub/icon-maskable-512.png",
+  // The browser refetches the worker script to update it, and a redirect to login would fail that update.
+  "/hub/sw.js",
 ]);
 const MACHINE_API = /^\/api\/hub\/(worker|events)(\/|$)/;
 

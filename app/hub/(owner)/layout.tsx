@@ -1,4 +1,5 @@
 import { HubHeader } from "@/components/hub/HubHeader";
+import { HubServiceWorker } from "@/components/hub/HubServiceWorker";
 import { OutboxFlusher } from "@/components/hub/OutboxFlusher";
 import { requireOwner } from "@/lib/auth/require-owner";
 
@@ -9,6 +10,7 @@ export default async function OwnerLayout({ children }: LayoutProps<"/hub">) {
     <>
       <HubHeader />
       <OutboxFlusher />
+      <HubServiceWorker />
       {children}
     </>
   );
