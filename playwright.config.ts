@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
 import { FIXTURES, fixturePort, type Fixture } from "./tests/e2e/fixture-servers";
-import { HUB_LIVE_PORT, HUB_PORT } from "./tests/e2e/hub-ports";
+import { HUB_E2E_WORKER_TOKEN, HUB_LIVE_PORT, HUB_PORT } from "./tests/e2e/hub-ports";
 import { localSupabaseEnv } from "./tests/e2e/local-supabase";
 
 const PORT = 3100;
@@ -67,6 +67,7 @@ function hubServer(port: number, name: "hub" | "hub-live", workerLive: boolean) 
       SUPABASE_URL: localSupabase.url,
       SUPABASE_SERVICE_ROLE_KEY: localSupabase.serviceKey,
       HUB_OWNER_GITHUB_ID: "77211262",
+      HUB_WORKER_TOKEN: HUB_E2E_WORKER_TOKEN,
       // Set explicitly so a value in .env.local can never decide which state a test sees.
       HUB_WORKER_LIVE: workerLive ? "true" : "false",
       NEXT_DIST_DIR: `.next/e2e-${name}`,

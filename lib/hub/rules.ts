@@ -1,4 +1,4 @@
-import type { Actor, ArchiveReason, HubAction, Item, ItemPatch } from "./types";
+import type { Actor, ArchiveReason, HubAction, Item, ItemPatch, StatusLabel } from "./types";
 
 export class ForbiddenError extends Error {
   constructor(message: string) {
@@ -8,7 +8,7 @@ export class ForbiddenError extends Error {
 }
 
 export const CLAUDE_LABEL = "claude";
-export const STATUS_LABELS = ["claude-working", "claude-done", "claude-question"] as const;
+export const STATUS_LABELS: readonly StatusLabel[] = ["claude-working", "claude-done", "claude-question"];
 
 const ALLOWED: Record<HubAction, Actor["kind"][]> = {
   read: ["mason", "worker", "agent"],
@@ -45,10 +45,8 @@ export function assertLabelChangeAllowed(actor: Actor, before: string[], after: 
   }
 }
 
-export function assertStatusLabels(labels: string[]): void {
-  const allowed: string[] = [...STATUS_LABELS];
-  const bad = labels.find((label) => !allowed.includes(label));
-  if (bad !== undefined) throw new ForbiddenError(`${bad} is not a status label`);
+export function assertStatusLabel(status: string): asserts status is StatusLabel {
+  if (!(STATUS_LABELS as readonly string[]).includes(status)) throw new ForbiddenError(`${status} is not a status label`);
 }
 
 export function assertArchiveArgs(reason: ArchiveReason, mergedInto: string | null, itemId: string): void {

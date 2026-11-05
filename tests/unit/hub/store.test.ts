@@ -51,13 +51,24 @@ describe("fake store rules", () => {
     expect((await store.listComments(dupe.id)).map((c) => c.body)).toEqual(["Merged into keep"]);
   });
 
-  it("setStatusLabels replaces only status labels and rejects others", async () => {
+  it("setStatusLabels follows the todo-hub lifecycle and rejects anything but a status", async () => {
     const seed = createFakeStore(mason);
     const item = await seed.addItem({ title: "a", labels: ["claude", "claude-working", "laptop"], source: "test" });
     const store = createFakeStore(worker, seed.rows);
-    await store.setStatusLabels(item.id, ["claude-done"]);
-    expect((await store.getItem(item.id))?.labels.sort()).toEqual(["claude", "claude-done", "laptop"]);
-    await expect(store.setStatusLabels(item.id, ["laptop"])).rejects.toThrow(ForbiddenError);
+    await store.setStatusLabels(item.id, "claude-done");
+    expect((await store.getItem(item.id))?.labels).toEqual(["laptop", "claude-done"]);
+    expect(await store.claim(item.id)).toBe(false);
+    await expect(store.setStatusLabels(item.id, "laptop" as never)).rejects.toThrow(ForbiddenError);
+  });
+
+  it("setStatusLabels keeps claude on claim and drops it on block", async () => {
+    const seed = createFakeStore(mason);
+    const item = await seed.addItem({ title: "a", labels: ["claude", "claude-done"], source: "test" });
+    const store = createFakeStore(worker, seed.rows);
+    await store.setStatusLabels(item.id, "claude-working");
+    expect((await store.getItem(item.id))?.labels).toEqual(["claude", "claude-working"]);
+    await store.setStatusLabels(item.id, "claude-question");
+    expect((await store.getItem(item.id))?.labels).toEqual(["claude-question"]);
   });
 
   it("claim only works once for a claude item", async () => {
@@ -120,7 +131,8 @@ describe("fake store rules", () => {
     const first = await store.addItem({ title: "first", labels: [], source: "test" });
     await new Promise((r) => setTimeout(r, 5));
     const second = await store.addItem({ title: "second", source: "test" });
-    await store.setStatusLabels(first.id, ["claude-done", "claude-done"]);
+    await store.setStatusLabels(first.id, "claude-done");
+    await store.setStatusLabels(first.id, "claude-done");
     expect((await store.getItem(first.id))?.labels).toEqual(["claude-done"]);
     expect((await store.listItems({})).map((i) => i.id)).toEqual([second.id, first.id]);
   });

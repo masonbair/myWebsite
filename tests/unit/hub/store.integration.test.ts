@@ -85,8 +85,9 @@ describe.skipIf(!enabled)("hub store against local Supabase", () => {
     expect((await store.listComments(dupe.id)).map((c) => c.body)).toEqual(["Merged into the kept item"]);
     expect(await store.claim(keep.id)).toBe(true);
     expect(await store.claim(keep.id)).toBe(false);
-    await store.setStatusLabels(keep.id, ["claude-done"]);
-    expect((await store.getItem(keep.id))?.labels.sort()).toEqual(["claude", "claude-done"]);
+    await store.setStatusLabels(keep.id, "claude-done");
+    expect((await store.getItem(keep.id))?.labels).toEqual(["claude-done"]);
+    expect(await store.claim(keep.id)).toBe(false);
     const { data } = await client().from("audit_log").select("actor, action").eq("item_id", keep.id);
     expect(data?.every((row) => row.actor === "worker:integration")).toBe(true);
     expect(data?.map((row) => row.action)).toEqual(expect.arrayContaining(["claim", "set-status-labels"]));

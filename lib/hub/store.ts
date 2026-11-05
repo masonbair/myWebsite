@@ -1,12 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { labelsForStatus } from "./lifecycle";
 import {
-  STATUS_LABELS,
   assertAllowed,
   assertArchiveAllowed,
   assertArchiveArgs,
   assertLabelChangeAllowed,
   assertStateChange,
-  assertStatusLabels,
+  assertStatusLabel,
   auditActor,
   pickPatch,
 } from "./rules";
@@ -139,6 +139,7 @@ export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
       }
       if (q.updatedBefore) query = query.lt("updated_at", q.updatedBefore);
       if (q.mergedInto) query = query.eq("merged_into", q.mergedInto);
+      if (q.hasDue) query = query.not("due_date", "is", null);
       const { data, error } = await query.order("created_at", { ascending: false }).limit(q.limit ?? DEFAULT_LIMIT);
       if (error) throw error;
       return (data as ItemRow[]).map(toItem);
@@ -224,14 +225,12 @@ export function createHubStore(client: SupabaseClient, actor: Actor): HubStore {
       return claimed;
     },
 
-    async setStatusLabels(id, labels) {
+    async setStatusLabels(id, status) {
       assertAllowed(actor, "set-status-labels");
-      assertStatusLabels(labels);
+      assertStatusLabel(status);
       const current = await requireItem(id);
-      const statuses: readonly string[] = STATUS_LABELS;
-      const kept = current.labels.filter((label) => !statuses.includes(label));
-      await updateColumns(id, { labels: [...kept, ...new Set(labels)] });
-      await audit("set-status-labels", id, { labels });
+      await updateColumns(id, { labels: labelsForStatus(status, current.labels) });
+      await audit("set-status-labels", id, { status });
     },
 
     async addComment(itemId, body) {

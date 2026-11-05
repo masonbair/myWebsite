@@ -1,0 +1,25 @@
+#!/usr/bin/env node
+// Runs lib/hub/cli.ts with Node's built-in TypeScript type stripping, so the worker needs no build step or extra package.
+const { registerHooks } = require("node:module");
+const path = require("node:path");
+const { pathToFileURL } = require("node:url");
+
+// lib/ imports siblings without an extension, as Next and Vitest allow; Node needs the .ts spelled out,
+// and the ESM format stated, since package.json has no "type" field.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    const bare = /^\.\.?\//.test(specifier) && !path.extname(specifier);
+    const resolved = nextResolve(bare ? `${specifier}.ts` : specifier, context);
+    return resolved.url.endsWith(".ts") ? { ...resolved, format: "module-typescript" } : resolved;
+  },
+});
+
+import(pathToFileURL(path.join(__dirname, "../lib/hub/cli.ts")).href)
+  .then(({ main }) => main(process.argv.slice(2)))
+  .then((code) => {
+    process.exitCode = code;
+  })
+  .catch((e) => {
+    console.error(e instanceof Error ? e.message : e);
+    process.exitCode = 1;
+  });

@@ -33,6 +33,7 @@ export type ItemQuery = {
   withoutLabels?: string[];
   updatedBefore?: string;
   mergedInto?: string;
+  hasDue?: boolean;
   limit?: number;
 };
 
@@ -60,6 +61,8 @@ export type HubAction =
   | "set-status-labels"
   | "hub-state";
 
+export type StatusLabel = "claude-working" | "claude-done" | "claude-question";
+
 export type ArchiveReason = "merged" | "memo-split";
 
 export interface HubStore {
@@ -71,7 +74,8 @@ export interface HubStore {
   reopen(id: string): Promise<Item>;
   archive(id: string, reason: ArchiveReason, mergedInto: string | null, note: string): Promise<Item>;
   claim(id: string): Promise<boolean>;
-  setStatusLabels(id: string, labels: string[]): Promise<void>;
+  /** Moves an item to one claude status the way todo-hub did: done and question also drop `claude`. */
+  setStatusLabels(id: string, status: StatusLabel): Promise<void>;
   addComment(itemId: string, body: string): Promise<Comment>;
   listComments(itemId: string): Promise<Comment[]>;
   getHubState(key: string): Promise<unknown | null>;
