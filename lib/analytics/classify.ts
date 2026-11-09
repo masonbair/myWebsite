@@ -87,7 +87,8 @@ export function classifySource(referrer: string | null, pageUrl: URL, siteHost: 
   return { refHost: ownSite ? "" : refHost, fromAssistant };
 }
 
-const KNOWN_PATHS = new Set(["/", "/coffee", "/llms.txt", "/robots.txt", "/sitemap.xml"]);
+// Add new public routes here; anything else is stored as "other".
+const KNOWN_PATHS = new Set(["/", "/coffee", "/trends", "/llms.txt", "/robots.txt", "/sitemap.xml"]);
 
 /** Maps a request path to a known route so arbitrary URLs never reach storage. */
 export function normalizePath(pathname: string): string {

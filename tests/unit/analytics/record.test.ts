@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
-import { visitFor, visitorHash } from "@/lib/analytics/record";
+import { sampleUnknownBot, visitFor, visitorHash } from "@/lib/analytics/record";
 
 const CHROME = "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 const NOON = new Date("2026-11-09T17:00:00Z");
@@ -61,5 +61,14 @@ describe("visitorHash", () => {
     const next = await visitorHash("s", "1.1.1.1", CHROME, new Date("2026-11-10T17:00:00Z"));
     expect(a).toBe(b);
     expect(next).not.toBe(a);
+  });
+});
+
+describe("sampleUnknownBot", () => {
+  it("lets a daily sample through and resets the next day", () => {
+    const day = new Date("2030-01-01T17:00:00Z");
+    const passed = Array.from({ length: 400 }, () => sampleUnknownBot(day)).filter(Boolean).length;
+    expect(passed).toBe(300);
+    expect(sampleUnknownBot(new Date("2030-01-02T17:00:00Z"))).toBe(true);
   });
 });

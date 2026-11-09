@@ -57,6 +57,16 @@ export async function visitFor(request: NextRequest, salt: string | undefined, n
   };
 }
 
+const UNKNOWN_BOT_SAMPLE = 300;
+const unknownBotsSeen = { day: "", count: 0 };
+
+/** Lets through a daily sample of unknown bots per server instance, so a flood of junk never reaches the database. */
+export function sampleUnknownBot(now: Date): boolean {
+  const day = easternDay.format(now);
+  if (unknownBotsSeen.day !== day) Object.assign(unknownBotsSeen, { day, count: 0 });
+  return ++unknownBotsSeen.count <= UNKNOWN_BOT_SAMPLE;
+}
+
 /** Sends one visit to Supabase; never throws, since a lost count must not break a page. */
 export async function recordVisit(request: NextRequest): Promise<void> {
   const url = process.env.SUPABASE_URL;
@@ -65,6 +75,7 @@ export async function recordVisit(request: NextRequest): Promise<void> {
   try {
     const visit = await visitFor(request, process.env.ANALYTICS_SALT);
     if (!visit) return;
+    if (visit.p_agent === "unknown" && !sampleUnknownBot(new Date())) return;
     await fetch(`${url}/rest/v1/rpc/analytics_record`, {
       method: "POST",
       headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },

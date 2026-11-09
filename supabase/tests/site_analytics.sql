@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(24);
+select plan(32);
 
 create temporary table today_value as select (now() at time zone 'America/New_York')::date as d;
 grant select on today_value to service_role, authenticated;
@@ -38,7 +38,25 @@ select is((select country from public.analytics_daily where agent = 'unknown'), 
 select is((select length(ua_sample) from public.analytics_daily where agent = 'unknown'), 120, 'unknown bot user-agent is cut to 120 chars');
 
 select throws_ok($$ delete from public.analytics_daily $$, 'P0001', null, 'rollups are never deleted');
-select throws_ok($$ delete from public.analytics_visitors $$, 'P0001', null, 'visitor rows are never deleted');
+select throws_ok($$ delete from public.analytics_visitors $$, 'P0001', null, 'visitor hashes cannot be deleted directly');
+select ok(not has_function_privilege('anon', 'public.analytics_roll_visitors()', 'execute'), 'anon cannot roll visitors');
+select ok(not has_function_privilege('authenticated', 'public.analytics_roll_visitors()', 'execute'), 'authenticated cannot roll visitors');
+
+insert into public.analytics_visitors (day, path, visitor_hash) values
+  ((select d - 1 from today_value), '/', repeat('c', 64)),
+  ((select d - 1 from today_value), '/coffee', repeat('c', 64)),
+  ((select d - 1 from today_value), '/coffee', repeat('d', 64));
+set local role service_role;
+select public.analytics_record('/', 'ai', 'GPTBot', '', '', '', '', null);
+reset role;
+select is((select count(*)::int from public.analytics_visitors where day < (select d from today_value)), 0, 'the first visit of a day removes past hashes');
+select is((select visitors from public.analytics_uniques where path = '*'), 2, 'past hashes become a site-wide unique count');
+select is((select visitors from public.analytics_uniques where path = '/coffee'), 2, 'and a per-page unique count');
+select is((select count(*)::int from public.analytics_visitors where day = (select d from today_value)), 1, 'today''s hashes stay');
+select throws_ok($$ delete from public.analytics_uniques $$, 'P0001', null, 'unique counts are never deleted');
+set local analytics.rolling = 'on';
+select throws_ok($$ delete from public.analytics_visitors $$, 'P0001', null, 'today''s hashes cannot be deleted even with the rolling flag');
+reset analytics.rolling;
 
 insert into public.analytics_daily (day, path, kind, agent, ref_host, hits)
 select (select d from today_value), 'other', 'bot', 'filler', 'f' || g || '.example', 1 from generate_series(1, 5000) g;
