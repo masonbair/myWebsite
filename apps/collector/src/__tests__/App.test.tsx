@@ -186,6 +186,21 @@ it('a signed-out reading does not stop the place task; only Sign out does', asyn
   expect(syncPlaceTask).not.toHaveBeenCalled();
 });
 
+it('after Sign out, turning reporting on again asks the question when there are no private places', async () => {
+  await AsyncStorage.removeItem('private-places');
+  const ask = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
+    buttons?.find((b) => b.text === 'Mark private first')?.onPress?.();
+  });
+  await show();
+  await fireEvent.press(screen.getByText('Sign out'));
+  await waitFor(() => expect(signOut).toHaveBeenCalled());
+  expect(await AsyncStorage.getItem('place-task-wanted')).toBe('false');
+  await waitFor(() => expect(screen.getByRole('switch').props.value).toBe(false));
+  await fireEvent(screen.getByRole('switch'), 'valueChange', true);
+  await waitFor(() => expect(ask).toHaveBeenCalled());
+  ask.mockRestore();
+});
+
 it('Sign out stops the place task before signing out', async () => {
   await show();
   (syncPlaceTask as jest.Mock).mockClear();

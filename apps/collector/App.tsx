@@ -74,6 +74,8 @@ export default function App() {
 
   async function handleSignOut() {
     await syncPlaceTask('off');
+    await writeJson(PLACE_TASK_WANTED_KEY, false);
+    setLocationWanted(false);
     await signOut();
     setResult(null);
     await refresh();
