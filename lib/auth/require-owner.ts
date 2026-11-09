@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { sessionClient } from "@/lib/supabase/server";
 import { hubMissing } from "./hub-missing";
 import { isOwnerUser } from "./owner";
+import { loginHref } from "./safe-next";
 
 export type OwnerCheck = { ok: true; userId: string } | { ok: false; reason: "signed-out" | "not-owner" };
 
@@ -18,10 +19,13 @@ export async function checkOwner(): Promise<OwnerCheck> {
   return { ok: true, userId: data.user.id };
 }
 
-/** Gate for every /hub page: signed out goes to login, anyone but Mason goes to the 404 page. */
-export async function requireOwner(): Promise<{ userId: string }> {
+/**
+ * Gate for every /hub page: signed out goes to login, anyone but Mason goes to the 404 page.
+ * @param returnTo hub path to come back to after sign in; anything but a plain hub path is dropped.
+ */
+export async function requireOwner(returnTo?: string): Promise<{ userId: string }> {
   const check = await checkOwner();
-  if (!check.ok && check.reason === "signed-out") redirect("/hub/login");
+  if (!check.ok && check.reason === "signed-out") redirect(loginHref(returnTo));
   if (!check.ok) hubMissing();
   return { userId: check.userId };
 }

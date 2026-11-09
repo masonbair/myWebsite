@@ -3,7 +3,16 @@ import type { Item } from "./types";
 export const LIST_NAMES: Record<Item["list"], string> = { inbox: "Inbox", todo: "Todo", ideas: "Ideas" };
 
 export function listHref(list: Item["list"]): string {
-  return list === "inbox" ? "/hub" : `/hub/list/${list}`;
+  if (list === "inbox") return "/hub";
+  if (list === "ideas") return "/hub/ideas";
+  return `/hub/list/${list}`;
+}
+
+/** A calendar day (YYYY-MM-DD) as "Mon, Nov 9", read in UTC so no timezone shifts the day. */
+export function formatDay(date: string): string | null {
+  const day = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(day.getTime())) return null;
+  return day.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -15,9 +24,8 @@ export function isItemId(value: unknown): value is string {
 // Due dates are calendar days, so they are read and printed in UTC to stop a timezone shifting the day.
 export function formatDue(due: Item["due"]): string | null {
   if (!due) return null;
-  const day = new Date(`${due.date}T00:00:00Z`);
-  if (Number.isNaN(day.getTime())) return null;
-  const date = day.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  const date = formatDay(due.date);
+  if (!date) return null;
   if (!due.time) return `Due ${date}`;
   const [hours, minutes] = due.time.split(":").map(Number);
   const clock = new Date(Date.UTC(2000, 0, 1, hours, minutes)).toLocaleTimeString("en-US", {

@@ -8,7 +8,7 @@ const TABS = [
   { href: "/hub/capture", label: "Capture" },
   { href: "/hub", label: "Inbox" },
   { href: "/hub/list/todo", label: "Todo" },
-  { href: "/hub/list/ideas", label: "Ideas" },
+  { href: "/hub/ideas", label: "Ideas" },
   { href: "/hub/now", label: "Now" },
 ];
 
@@ -18,7 +18,7 @@ export function HubTabs() {
     <nav aria-label="Hub lists">
       <ul className="inline-flex rounded-full bg-ink/5 p-1">
         {TABS.map((tab) => {
-          const current = path === tab.href;
+          const current = path === tab.href || (tab.href === "/hub/ideas" && path.startsWith("/hub/ideas/"));
           return (
             <li key={tab.href}>
               <Link

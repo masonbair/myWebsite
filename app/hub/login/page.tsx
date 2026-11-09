@@ -1,7 +1,8 @@
+import { safeHubPath } from "@/lib/auth/safe-next";
 import { SignInButton } from "./SignInButton";
 
 export default async function LoginPage({ searchParams }: PageProps<"/hub/login">) {
-  const { error } = await searchParams;
+  const { error, next } = await searchParams;
   return (
     <main className="mx-auto mt-16 max-w-md rounded-tile bg-surface p-8 shadow-tile">
       <h1 className="text-3xl font-semibold tracking-tight">Sign in</h1>
@@ -11,7 +12,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/hub/login"
           Sign in did not finish. Please try again.
         </p>
       )}
-      <SignInButton />
+      <SignInButton next={safeHubPath(next)} />
     </main>
   );
 }

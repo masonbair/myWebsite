@@ -4,7 +4,14 @@ import { GithubLogo } from "@phosphor-icons/react";
 import { useState } from "react";
 import { browserClient } from "@/lib/supabase/browser";
 
-export function SignInButton() {
+function callbackUrl(origin: string, next: string): string {
+  const url = new URL("/hub/auth/callback", origin);
+  if (next !== "/hub") url.searchParams.set("next", next);
+  return url.toString();
+}
+
+/** @param next hub path the callback returns to; the callback checks it again. */
+export function SignInButton({ next }: { next: string }) {
   const [busy, setBusy] = useState(false);
 
   async function signIn() {
@@ -12,7 +19,7 @@ export function SignInButton() {
     // This page's own origin, so preview deploys come back to themselves.
     const { error } = await browserClient().auth.signInWithOAuth({
       provider: "github",
-      options: { redirectTo: `${window.location.origin}/hub/auth/callback` },
+      options: { redirectTo: callbackUrl(window.location.origin, next) },
     });
     if (error) setBusy(false);
   }

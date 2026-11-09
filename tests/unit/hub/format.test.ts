@@ -16,7 +16,7 @@ describe("hub format", () => {
 
   it("links the inbox to /hub and other lists to their page", () => {
     expect(listHref("inbox")).toBe("/hub");
-    expect(listHref("ideas")).toBe("/hub/list/ideas");
+    expect(listHref("ideas")).toBe("/hub/ideas");
   });
 
   it("names why an item needs Mason, question first", () => {

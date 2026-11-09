@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { loginHref } from "@/lib/auth/safe-next";
 
 // Chrome fetches the manifest and its icons without cookies, so they must load signed out for install to work.
 const PUBLIC_HUB_PATHS = new Set([
@@ -64,8 +65,11 @@ async function gateHubPage(request: NextRequest): Promise<NextResponse> {
   const { response, signedIn } = await readSession(request);
   if (PUBLIC_HUB_PATHS.has(request.nextUrl.pathname) || signedIn) return response;
   // 303 so a signed-out share POST becomes a GET of the login page instead of a POST to it.
-  const status = request.method === "GET" || request.method === "HEAD" ? 307 : 303;
-  return withCookies(NextResponse.redirect(new URL("/hub/login", request.url), status), response);
+  const isRead = request.method === "GET" || request.method === "HEAD";
+  const status = isRead ? 307 : 303;
+  // Only a page view asks to come back; a share POST has nothing to return to.
+  const login = loginHref(isRead ? request.nextUrl.pathname : null);
+  return withCookies(NextResponse.redirect(new URL(login, request.url), status), response);
 }
 
 export async function proxy(request: NextRequest) {

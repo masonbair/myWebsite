@@ -2,6 +2,9 @@ import { z } from "zod";
 
 export const PROMPT_VERSION = "review-v1";
 
+/** Matches the length check on idea_settings.review_note. */
+export const MAX_REVIEW_NOTE = 2000;
+
 export const REVIEW_SCHEMA = z.object({
   verdict: z.enum(["strong", "promising", "needs work", "weak"]),
   why: z.string(),
