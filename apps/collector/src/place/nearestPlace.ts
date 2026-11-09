@@ -1,6 +1,6 @@
-/** [GeoNames id, name, latitude × 100, longitude × 100, population in thousands, country code, region], as `scripts/build-cities.ts` writes them. */
+/** [name, latitude × 100, longitude × 100, population in thousands, country code, region], as `scripts/build-cities.ts` writes them. */
 export type City = readonly [
-  id: number, name: string, lat100: number, lng100: number, thousands: number, countryCode: string, region: string,
+  name: string, lat100: number, lng100: number, thousands: number, countryCode: string, region: string,
 ];
 export type Point = { latitude: number; longitude: number };
 /** region is '' when GeoNames has no first-level division: the database column is NOT NULL default ''. */
@@ -17,9 +17,12 @@ const KM_PER_DEGREE = 111.32;
 let cities: City[] | null = null;
 let countries: Record<string, string> | null = null;
 
-// Loaded on first use so the ~500 KB table is not parsed at app start.
+// Loaded on first use so the ~1 MB table is not parsed at app start.
 function loadCities(): City[] {
-  cities ??= require('./cities.json') as City[];
+  if (!cities) {
+    const file = require('./cities.json') as { regions: string[]; rows: [string, number, number, number, string, number][] };
+    cities = file.rows.map((r) => [r[0], r[1], r[2], r[3], r[4], file.regions[r[5]]] as const);
+  }
   return cities;
 }
 
@@ -47,15 +50,15 @@ export function nearestPlace(fix: Point, table?: readonly City[]): FoundPlace | 
   let nearestKm = MAX_KM;
   let biggest: City | null = null;
   for (const city of table ?? loadCities()) {
-    const km = kmBetween(fix, { latitude: city[2] / 100, longitude: city[3] / 100 });
+    const km = kmBetween(fix, { latitude: city[1] / 100, longitude: city[2] / 100 });
     if (km <= nearestKm) {
       nearest = city;
       nearestKm = km;
     }
-    if (km <= METRO_KM && (!biggest || city[4] > biggest[4])) biggest = city;
+    if (km <= METRO_KM && (!biggest || city[3] > biggest[3])) biggest = city;
   }
   const best = biggest ?? nearest;
   if (!best) return null;
-  const countryCode = best[5];
-  return { city: best[1], region: best[6], countryCode, country: loadCountries()[countryCode] ?? countryCode };
+  const countryCode = best[4];
+  return { city: best[0], region: best[5], countryCode, country: loadCountries()[countryCode] ?? countryCode };
 }

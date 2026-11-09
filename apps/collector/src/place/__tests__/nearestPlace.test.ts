@@ -1,10 +1,10 @@
 import { nearestPlace, kmBetween, type City } from '../nearestPlace';
 
 const TABLE: City[] = [
-  [2267057, 'Lisbon', 3872, -914, 518, 'PT', 'Lisbon'],
-  [2742611, 'Porto', 4115, -861, 250, 'PT', 'Porto'],
-  [2643743, 'London', 5151, -13, 8962, 'GB', 'England'],
-  [3333156, 'Islington', 5154, -10, 319, 'GB', 'England'],
+  ['Lisbon', 3872, -914, 518, 'PT', 'Lisbon'],
+  ['Porto', 4115, -861, 250, 'PT', 'Porto'],
+  ['London', 5151, -13, 8962, 'GB', 'England'],
+  ['Islington', 5154, -10, 319, 'GB', 'England'],
 ];
 
 describe('nearestPlace', () => {
@@ -20,6 +20,16 @@ describe('nearestPlace', () => {
 
   it('names nothing more than 40 km from every city', () => {
     expect(nearestPlace({ latitude: 39.4, longitude: -8.9 }, TABLE)).toBeNull();
+  });
+
+  it('nearest wins when no city is within the 25 km metro radius', () => {
+    // 0.3 degrees of latitude is about 33 km from Porto.
+    expect(nearestPlace({ latitude: 41.45, longitude: -8.61 }, TABLE)?.city).toBe('Porto');
+  });
+
+  it('the 40 km limit: just inside names the city, just outside names nothing', () => {
+    expect(nearestPlace({ latitude: 41.15 + 39.5 / 111.32, longitude: -8.61 }, TABLE)?.city).toBe('Porto');
+    expect(nearestPlace({ latitude: 41.15 + 40.5 / 111.32, longitude: -8.61 }, TABLE)).toBeNull();
   });
 
   it('ignores a fix that is not a place on Earth', () => {
