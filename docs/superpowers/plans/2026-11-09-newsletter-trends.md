@@ -377,7 +377,7 @@ Page: top topics and companies over 30 days (count, rising/falling with how much
 
 ## Costs
 
-- Comparison and topic draft (Task 5): about $6 one-time.
-- Daily: about $7/month on Sonnet 5.5 or $0.40 on Haiku 5.5 (Task 5 measures), cap $25.
-- Import: about $40 on Sonnet batch, about $2 on Haiku, after M7.
+- Comparison (Task 5): $5.95 spent on 2026-11-09.
+- Daily: measured about $16/month on Sonnet 5.5 (the chosen model). In-app cap stays $25 (`NEWS_MONTHLY_BUDGET_USD`).
+- Import: Mason chose Sonnet, about $90 through the Batch API, after go-live and his typed yes (M7). He raises the `masonbair-news` Console limit for that month. Import, re-runs and the comparison never count toward the monthly cap.
 - Resend free plan (about 200 mails/month against 3,000), Blob about 250 MB/year (Task 0 checks the plan limit), no new Vercel or Supabase cost.

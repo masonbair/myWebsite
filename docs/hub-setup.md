@@ -106,11 +106,11 @@ claude mcp add --transport http hub-local http://localhost:3000/api/mcp/mcp --he
 
 Forwarded newsletters arrive by email, get read by Claude, and feed `/trends` and `/hub/news`. Do these steps in order.
 
-Migration push order: `0008_ideas_lab.sql`, then `0009_news.sql`, then `0010_news_topics_cron.sql`. Do not skip ahead: 0010 changes the `ai_usage` table, and 0008 is the file that creates it.
+Migration push order: `0008_ideas_lab.sql`, then `0009_news.sql`, then `0010_news_topics_cron.sql`, then `0011_news_more_senders.sql` (0011 may go right after 0009). Do not skip ahead: 0010 changes the `ai_usage` table, and 0008 is the file that creates it.
 
 1. Gmail filter and export. Make a filter for the six newsletter senders with "Apply label: Newsletters" and "Also apply to matching conversations". Then in Google Takeout export Mail, only the label Newsletters, and send the `.mbox` path to Claude. Do the filter and export in each Gmail account that gets newsletters (there are two), so you end up with one `.mbox` file per account.
 2. Anthropic key. Done on 2026-11-09: workspace `masonbair-news` (monthly limit $30; raise to $75 for the import month) and its key set as `ANTHROPIC_API_KEY_NEWS` in Vercel Production. Add the same `ANTHROPIC_API_KEY_NEWS` to Preview too, and put it in the worktree's `.env.local`.
-3. Sender rows. Claude fills each newsletter's `sender_addresses` or `sender_domains` in the seed of `0009_news.sql` (Task 0) before it is pushed. Mail that matches no newsletter is held back, not read.
+3. Sender rows. Done: exact `sender_addresses` for four newsletters in `0009_news.sql` and for Morning Brew and The Rundown AI in `0011_news_more_senders.sql` (push 0011 any time after 0009). No domain matching. Mail that matches no newsletter is held back, not read.
 4. Push 0009. Mason runs `supabase db push` for `0009_news.sql`. Claude never pushes. Phone-collector's `0007` may land after `0008` and `0009`; once a later-numbered migration is on the live database, a plain `supabase db push` refuses the older file, so push it with `supabase db push --include-all`.
 5. Deploy. Merge and let Vercel deploy. Nothing reads mail yet.
 6. Resend and its webhook.
@@ -121,7 +121,7 @@ Migration push order: `0008_ideas_lab.sql`, then `0009_news.sql`, then `0010_new
    - Testing on a preview writes to the live database and the live Blob store, because there is only one. So the preview also needs `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `BLOB_STORE_ID` set for Preview. Without them the inbound route fails.
 7. Gmail forwarding. Settings > Forwarding > Add a forwarding address: `news@in.masonbair.com`. Gmail sends a confirmation mail. Open `/hub/news`, find it under "Held back", and click the confirmation link. Then edit the step 1 filter to also forward to that address. Do this whole step in each Gmail account, and list every account in `NEWS_FORWARD_FROM`. Mail from an account that is not in the list waits under "Held back".
 8. Push 0010. After review of the topics work, Mason runs `supabase db push` for `0010_news_topics_cron.sql`. This starts the news job (every 30 minutes). Push it before any job run and before any backfill `collect`: both write `ai_usage.news_issue_id`, which only 0010 adds.
-9. Backfill. When the import estimate appears, read it and type `yes`.
+9. Backfill, only after go-live. Mason chose Sonnet 5.5 for the 12-month import (about $90 through the Batch API, measured 2026-11-09) and raises the `masonbair-news` Console limit for that month himself. Run `import` once per Takeout file, then `estimate`; read the estimate and type `yes` to submit, and `yes` again at `collect` to pay for the duplicate checks. The in-app monthly cap stays $25 (`NEWS_MONTHLY_BUDGET_USD`); the import and the model comparison never count toward it.
 
 How it is checked: a mail is processed only when Gmail forwarding names one of the `NEWS_FORWARD_FROM` addresses as the sender and a DKIM signature (the mail's proof of origin) that matches the From domain verifies. Any other mail waits in `/hub/news` under "Held back" and is never picked up for reading: the job that claims issues takes only pending, failed and stuck ones, never held ones.
 
