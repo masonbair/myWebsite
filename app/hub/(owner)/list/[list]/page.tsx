@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { ItemSection } from "@/components/hub/ItemRow";
 import { hubMissing } from "@/lib/auth/hub-missing";
 import { requireOwner } from "@/lib/auth/require-owner";
@@ -6,7 +7,7 @@ import { masonStore } from "@/lib/hub/mason-store";
 import { listForPage } from "@/lib/hub/page-items";
 import type { Item } from "@/lib/hub/types";
 
-const LISTS = ["todo", "ideas"] as const;
+const LISTS = ["todo"] as const;
 
 function isList(value: string): value is (typeof LISTS)[number] {
   return (LISTS as readonly string[]).includes(value);
@@ -28,6 +29,7 @@ export async function generateMetadata({ params }: PageProps<"/hub/list/[list]">
 export default async function ListPage({ params }: PageProps<"/hub/list/[list]">) {
   await requireOwner();
   const { list } = await params;
+  if (list === "ideas") redirect("/hub/ideas");
   if (!isList(list)) hubMissing();
   const { items, total } = await listForPage(await masonStore(), { list, state: "open" });
   items.sort(byDue);

@@ -8,7 +8,7 @@ import { NavMenu, type NavLink } from "./NavMenu";
 export function NavActions({ links }: { links: NavLink[] }) {
   const home = usePathname() === "/";
   return (
-    <div className={`relative flex items-center gap-2 ${home ? "" : "md:hidden"}`}>
+    <div className={`pointer-events-auto relative flex items-center gap-2 ${home ? "" : "lg:hidden"}`}>
       {home && <LazyScorePill />}
       <NavMenu links={links} />
     </div>

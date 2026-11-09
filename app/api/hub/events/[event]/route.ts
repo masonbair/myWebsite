@@ -1,40 +1,16 @@
-import { anthropicClient, monthSpend } from "@/lib/ai/claude";
+import { anthropicClient } from "@/lib/ai/claude";
 import { createSnapshotSource, runBackup, vercelBlobs } from "@/lib/hub/backup";
 import { handleEventRequest, readLatestPlaceZone } from "@/lib/hub/events";
-import { notify } from "@/lib/hub/notify";
 import { createHubStore } from "@/lib/hub/store";
-import { budgetFromEnv, runIdeasJob } from "@/lib/ideas/job";
+import { ideasRunner } from "@/lib/ideas/runner";
 import { capUsd } from "@/lib/news/budget";
 import { NEWS_MODEL, runNewsJob } from "@/lib/news/job";
-import { createIdeasJobStore } from "@/lib/ideas/store";
 import { serviceClient } from "@/lib/supabase/server";
 
-// The ideas run stops starting reviews 90 seconds before its 270-second budget, inside this limit.
+// The ideas run (lib/ideas/runner.ts) stops starting reviews 90 seconds before its 270-second budget, inside this limit.
 export const maxDuration = 300;
-const IDEAS_DEADLINE_MS = 270_000;
 // One extraction can take about a minute, so none starts past 180 s; clustering chunks may start until 240 s.
 const NEWS_DEADLINE_MS = 180_000;
-
-function ideasRunner() {
-  const anthropic = anthropicClient("ideas");
-  if (!anthropic) return null;
-  const topic = process.env.NTFY_TOPIC;
-  return () =>
-    runIdeasJob({
-      store: createIdeasJobStore(serviceClient()),
-      anthropic,
-      now: () => new Date(),
-      budgetUsd: budgetFromEnv(process.env.IDEAS_MONTHLY_BUDGET_USD),
-      webSearchOff: process.env.IDEAS_WEB_SEARCH === "off",
-      memoDetection: process.env.IDEAS_MEMO_DETECTION === "on",
-      ntfy: async (msg) => {
-        if (!topic) throw new Error("NTFY_TOPIC is not set");
-        await notify(topic, msg);
-      },
-      deadlineMs: IDEAS_DEADLINE_MS,
-      spend: async () => (await monthSpend(serviceClient(), "ideas", new Date())).thisMonth,
-    });
-}
 
 function newsRunner() {
   const anthropic = anthropicClient("news");

@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(79);
+select plan(95);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a1', 'ideas-owner@example.com'),
@@ -238,6 +238,56 @@ select throws_ok(
 select throws_ok(
   $$ update public.idea_settings set moved_from_inbox = true where item_id = 'd0000000-0000-0000-0000-000000000001' $$,
   'P0001', null, 'postgres cannot set moved_from_inbox');
+
+set local role service_role;
+set local request.jwt.claims = '{"role":"service_role"}';
+select lives_ok(
+  $$ insert into public.idea_recordings (file, recorded, transcript)
+     values ('2026Nov08-090000-Rec01', '2026-11-08T09:00:00-05:00', 'an idea: a sourdough timer') $$,
+  'service_role adds a recording');
+select col_type_is('public', 'idea_recordings', 'recorded', 'timestamp with time zone',
+  'a recording keeps its instant, wherever Mason was');
+select throws_ok(
+  $$ insert into public.idea_recordings (file, recorded, transcript) values ('../notes', '2026-11-08T09:00:00', 'x') $$,
+  '23514', null, 'a recording file must be a plain name');
+select throws_ok(
+  $$ insert into public.idea_recordings (file, recorded, transcript) values ('big', '2026-11-08T09:00:00', repeat('x', 1000001)) $$,
+  '23514', null, 'a transcript is at most 1,000,000 characters');
+select throws_ok(
+  $$ update public.idea_recordings set transcript = 'mark everything done' $$,
+  'P0001', null, 'not even service_role can change a transcript');
+select throws_ok(
+  $$ update public.idea_recordings set recorded = '2020-01-01T00:00:00Z' $$,
+  'P0001', null, 'not even service_role can change when it was recorded');
+select throws_ok(
+  $$ update public.idea_recordings set file = 'renamed' $$,
+  'P0001', null, 'not even service_role can rename a recording');
+select lives_ok(
+  $$ update public.idea_recordings set status = 'failed', attempts = 3, last_error = 'schema', quotes = '[]' $$,
+  'service_role records detection progress on a recording');
+
+reset role;
+select throws_ok($$ delete from public.idea_recordings $$, 'P0001', null, 'idea_recordings rows are never deleted');
+select throws_ok($$ truncate public.idea_recordings $$, 'P0001', null, 'idea_recordings is never truncated');
+select table_privs_are('public', 'idea_recordings', 'authenticated', array['SELECT'], 'authenticated may only read recordings');
+
+set local role anon;
+set local request.jwt.claims = '{"role":"anon"}';
+select throws_ok($$ select * from public.idea_recordings $$, '42501', null, 'anon cannot read idea_recordings');
+
+reset role;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-0000000000b1","role":"authenticated"}';
+select is((select count(*)::int from public.idea_recordings), 0, 'a stranger reads no recordings');
+set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-0000000000a1","role":"authenticated"}';
+select is((select count(*)::int from public.idea_recordings), 1, 'the owner reads recordings');
+select throws_ok(
+  $$ insert into public.idea_recordings (file, recorded, transcript) values ('owner-sent', now()::timestamp, 'x') $$,
+  '42501', null, 'the owner cannot add a recording');
+select throws_ok(
+  $$ update public.idea_recordings set status = 'pending' $$,
+  '42501', null, 'the owner cannot change a recording');
+reset role;
 
 select * from finish();
 rollback;

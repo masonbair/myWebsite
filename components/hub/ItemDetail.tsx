@@ -1,9 +1,10 @@
-import { ArrowLeft, Check } from "@phosphor-icons/react/dist/ssr";
+import { ArrowLeft, ArrowRight, Check } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { approveItem, completeItem, reopenItem } from "@/app/hub/actions";
 import { formatDue, LIST_NAMES, listHref, needsYouReason } from "@/lib/hub/format";
 import { CLAUDE_LABEL } from "@/lib/hub/rules";
+import { isIdea } from "@/lib/ideas/read";
 import type { Comment, Item, ItemVersion } from "@/lib/hub/types";
 import { timeAgo } from "@/lib/time";
 import { CommentForm } from "./CommentForm";
@@ -51,6 +52,16 @@ export function ItemDetail({ item, comments, mergedFrom, mergedInto, history, wo
         {due && <span>{due}</span>}
         <span>Added {timeAgo(item.createdAt)}</span>
       </p>
+
+      {isIdea(item) && (
+        <Link
+          href={`/hub/ideas/${item.id}`}
+          className={`mt-4 inline-flex items-center gap-1.5 rounded-full text-sm font-semibold text-accent-ink underline-offset-4 hover:underline ${focusRing}`}
+        >
+          Open in the Ideas Lab
+          <ArrowRight size={14} weight="bold" aria-hidden />
+        </Link>
+      )}
 
       {archived && (
         <div className="mt-5 rounded-tile border-[2.5px] border-dashed border-line bg-surface px-5 py-4 shadow-sticker-sm">
@@ -198,7 +209,7 @@ function EarlierVersions({ history }: { history: ItemVersion[] }) {
   );
 }
 
-function CommentEntry({ comment }: { comment: Comment }) {
+export function CommentEntry({ comment }: { comment: Comment }) {
   const fromWorker = comment.author === "worker";
   const [firstLine, ...rest] = comment.body.split("\n");
   return (

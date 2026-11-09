@@ -67,7 +67,7 @@ export function Achievements() {
         role="region"
         aria-label="Event and club photos"
         tabIndex={0}
-        className="-mx-4 mt-6 snap-x snap-mandatory scroll-px-4 overflow-x-auto overscroll-x-contain px-4 pb-6 outline-none [scrollbar-width:thin] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink md:-mx-8 md:scroll-px-8 md:px-8"
+        className="-mx-4 mt-6 snap-x snap-mandatory scroll-px-4 overflow-x-auto overscroll-x-contain px-4 pb-6 outline-none [scrollbar-width:thin] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-accent-ink md:-mx-8 md:scroll-px-8 md:px-8"
       >
         <ul className="flex w-max gap-3">
           {gallery.map((g) => {

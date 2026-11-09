@@ -47,13 +47,14 @@ describe("assertOpenForEdit", () => {
 });
 
 describe("assertHubStateKey", () => {
-  it("allows the Ideas Lab's monthly cap flag and daily failure flag", () => {
+  it("allows the Ideas Lab's monthly cap flag, daily failure flag and daily Google-revoked flag", () => {
     expect(() => assertHubStateKey("ideas-cap-notified:2026-11")).not.toThrow();
     expect(() => assertHubStateKey("ideas-failures-notified:2026-11-09")).not.toThrow();
+    expect(() => assertHubStateKey("ideas-google-revoked:2026-11-09")).not.toThrow();
   });
 
   it("refuses look-alike Ideas Lab keys", () => {
-    for (const key of ["ideas-cap-notified:", "ideas-cap-notified:2026-11-09", "ideas-failures-notified:2026-11", "ideas-cap-notified:2026-11x"]) {
+    for (const key of ["ideas-cap-notified:", "ideas-cap-notified:2026-11-09", "ideas-failures-notified:2026-11", "ideas-cap-notified:2026-11x", "ideas-google-revoked:2026-11", "ideas-google-revoked:"]) {
       expect(() => assertHubStateKey(key)).toThrow(ForbiddenError);
     }
   });

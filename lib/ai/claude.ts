@@ -75,7 +75,8 @@ export async function monthSpend(
   const lastStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1);
   const PAGE = 1000;
   const rows: { model: string; cost_usd: number | string; at: string }[] = [];
-  for (let from = 0; ; from += PAGE) {
+  // The hosted max_rows can be below PAGE, so a short page is not the end; only an empty one is.
+  for (let from = 0; ; ) {
     const { data, error } = await client
       .from("ai_usage")
       .select("model, cost_usd, at")
@@ -84,8 +85,9 @@ export async function monthSpend(
       .order("id")
       .range(from, from + PAGE - 1);
     if (error) throw error;
-    rows.push(...(data ?? []));
-    if ((data ?? []).length < PAGE) break;
+    if (!data?.length) break;
+    rows.push(...data);
+    from += data.length;
   }
 
   const out = { thisMonth: 0, lastMonth: 0, byModel: {} as Record<string, number>, calls: 0 };

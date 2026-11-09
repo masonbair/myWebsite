@@ -102,7 +102,7 @@ export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
                 <button
                   type="button"
                   onClick={() => save(true)}
-                  className={`inline-flex h-12 items-center gap-2 rounded-full border-2 border-line bg-surface px-4 text-sm font-bold text-ink transition-colors duration-200 ease-spring hover:bg-canvas ${focusRing}`}
+                  className={`inline-flex h-12 items-center gap-2 rounded-full border-[2.5px] border-line bg-surface px-4 text-sm font-bold text-ink shadow-sticker-sm transition-[translate,box-shadow] duration-200 ease-spring active:translate-x-0.5 active:translate-y-0.5 active:shadow-none ${focusRing}`}
                 >
                   <Lightbulb size={18} aria-hidden />
                   Save as idea

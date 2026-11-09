@@ -1,5 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
+import { recordVisit } from "@/lib/analytics/record";
+import { loginHref } from "@/lib/auth/safe-next";
 
 // Chrome fetches the manifest and its icons without cookies, so they must load signed out for install to work.
 const PUBLIC_HUB_PATHS = new Set([
@@ -12,14 +14,14 @@ const PUBLIC_HUB_PATHS = new Set([
   // The browser refetches the worker script to update it, and a redirect to login would fail that update.
   "/hub/sw.js",
 ]);
-const MACHINE_API = /^\/api\/hub\/(worker|events)(\/|$)/;
+const MACHINE_API = /^\/api\/hub\/(worker|events|ideas\/recording)(\/|$)/;
 
 function noindex(response: NextResponse): NextResponse {
   response.headers.set("X-Robots-Tag", "noindex, nofollow");
   return response;
 }
 
-// Cheap pre-check only: each worker or events route still verifies its own token.
+// Cheap pre-check only: each worker, events or recording route still verifies its own token.
 function gateMachineApi(request: NextRequest): NextResponse {
   if (!/^Bearer \S+/.test(request.headers.get("authorization") ?? "")) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -64,17 +66,31 @@ async function gateHubPage(request: NextRequest): Promise<NextResponse> {
   const { response, signedIn } = await readSession(request);
   if (PUBLIC_HUB_PATHS.has(request.nextUrl.pathname) || signedIn) return response;
   // 303 so a signed-out share POST becomes a GET of the login page instead of a POST to it.
-  const status = request.method === "GET" || request.method === "HEAD" ? 307 : 303;
-  return withCookies(NextResponse.redirect(new URL("/hub/login", request.url), status), response);
+  const isRead = request.method === "GET" || request.method === "HEAD";
+  const status = isRead ? 307 : 303;
+  // Only a page view asks to come back; a share POST has nothing to return to.
+  const login = loginHref(isRead ? request.nextUrl.pathname : null);
+  return withCookies(NextResponse.redirect(new URL(login, request.url), status), response);
 }
 
-export async function proxy(request: NextRequest) {
+const HUB_PATH = /^\/(hub|api\/hub)(\/|$)/;
+
+export async function proxy(request: NextRequest, event: NextFetchEvent) {
   const path = request.nextUrl.pathname;
+  if (!HUB_PATH.test(path)) {
+    event.waitUntil(recordVisit(request));
+    return NextResponse.next();
+  }
   if (MACHINE_API.test(path)) return gateMachineApi(request);
   if (/^\/api\/hub(\/|$)/.test(path)) return gateBrowserApi(request);
   return noindex(await gateHubPage(request));
 }
 
 export const config = {
-  matcher: ["/hub/:path*", "/api/hub/:path*"],
+  matcher: [
+    "/hub/:path*",
+    "/api/hub/:path*",
+    // Public pages plus the text files crawlers read; never API routes, Next.js assets or images.
+    "/((?!api/|hub/|hub$|_next/|.*opengraph-image|favicon|.*\\.(?:png|jpe?g|gif|svg|ico|webp|avif|css|js|map|woff2?|webmanifest)$).*)",
+  ],
 };

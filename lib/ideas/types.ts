@@ -2,6 +2,9 @@ import { z } from "zod";
 
 export const PROMPT_VERSION = "review-v1";
 
+/** Matches the length check on idea_settings.review_note. */
+export const MAX_REVIEW_NOTE = 2000;
+
 export const REVIEW_SCHEMA = z.object({
   verdict: z.enum(["strong", "promising", "needs work", "weak"]),
   why: z.string(),
@@ -40,3 +43,59 @@ export class ReviewFailed extends Error {
     this.name = "ReviewFailed";
   }
 }
+
+/** The idea or source is no longer claimed by this run (a stale re-claim or Mason's change); its result must not be saved. */
+export class ClaimLost extends Error {
+  constructor(id: string) {
+    super(`claim lost for ${id}`);
+    this.name = "ClaimLost";
+  }
+}
+
+/** Spend reached the monthly cap before a paid call; the idea goes back in line, not counted as a failure. */
+export class CapReached extends Error {
+  constructor() {
+    super("ideas monthly cap reached");
+    this.name = "CapReached";
+  }
+}
+
+export const DETECT_SCHEMA = z.object({
+  ideas: z
+    .array(z.object({ title: z.string(), quote: z.string(), whole_item: z.boolean(), sure: z.boolean() }))
+    .max(10),
+});
+
+export type DetectedIdea = z.infer<typeof DETECT_SCHEMA>["ideas"][number];
+
+export const SAME_IDEA_SCHEMA = z.object({ match_id: z.string().nullable() });
+
+export type SourceKind = "capture" | "memo";
+/** What detection reads: an item source, or a HiNote recording the Mac sent read-only. */
+export type DetectKind = SourceKind | "recording";
+
+const RECORDING_REF = "rec:";
+/** A recording's source ref; `:` never appears in an item id or a recording file name, so the two cannot collide. */
+export const recordingRef = (file: string) => `${RECORDING_REF}${file}`;
+/** The recording file a source ref names, or null for an item id. */
+export const recordingFile = (ref: string) => (ref.startsWith(RECORDING_REF) ? ref.slice(RECORDING_REF.length) : null);
+
+/** A detection that cannot be used; `code` is safe to log and store, it never holds idea text. */
+export class DetectFailed extends Error {
+  constructor(readonly code: "refusal" | "schema" | "max_tokens") {
+    super(`detection failed: ${code}`);
+    this.name = "DetectFailed";
+  }
+}
+
+/** How one detected idea was filed: a new item, the source itself moved, or a mention on an open idea. */
+export const IDEA_OUTCOME = z.object({ kind: z.enum(["new", "moved", "mention"]), id: z.string() });
+
+/** One detected idea as saved on idea_sources.quotes, so a retry files from it instead of detecting again. */
+export const SAVED_IDEA = DETECT_SCHEMA.shape.ideas.element.extend({ outcome: IDEA_OUTCOME.nullable() });
+
+export type SavedIdea = z.infer<typeof SAVED_IDEA>;
+export type IdeaOutcome = z.infer<typeof IDEA_OUTCOME>;
+
+/** The Ideas Lab's hold on a memo's ideas, for the worker's memo split. */
+export type MemoIdeas = { owned: boolean; filed: string[] };

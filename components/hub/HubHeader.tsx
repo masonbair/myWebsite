@@ -16,6 +16,9 @@ export function HubHeader() {
         <HubTabs />
       </div>
       <div className="ml-auto flex items-center">
+        <Link href="/hub/analytics" className={quietLink}>
+          Stats
+        </Link>
         <Link href="/" className={quietLink}>
           Site
           <ArrowUpRight size={13} weight="bold" aria-hidden />

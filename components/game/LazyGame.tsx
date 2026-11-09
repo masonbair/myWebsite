@@ -66,7 +66,7 @@ function PillPlaceholder() {
           loadGame();
         }}
         data-pill-placeholder
-        className="relative flex h-10 items-center gap-1.5 rounded-full bg-accent/15 pr-3.5 pl-3 text-sm font-semibold text-accent-ink outline-none before:absolute before:inset-0 before:rounded-full before:bg-accent/15 before:opacity-0 before:transition-opacity before:duration-300 hover:before:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.96]"
+        className="relative flex h-10 items-center gap-1.5 rounded-full border-[2.5px] border-line bg-surface pr-3.5 pl-3 text-sm font-bold text-ink shadow-sticker-sm outline-none before:absolute before:inset-0 before:rounded-full before:bg-ink/5 before:opacity-0 before:transition-opacity before:duration-300 hover:before:opacity-100 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-accent-ink active:scale-[0.96]"
       >
         <Cat weight="light" size={18} aria-hidden className="relative" />
         <span data-testid="score" className="relative inline-block min-w-[1ch] text-center font-mono tabular-nums">

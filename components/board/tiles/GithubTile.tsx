@@ -4,7 +4,7 @@ import { tag } from "@/components/ui/sticker";
 import { Prompt, Tile } from "../Tile";
 
 const PROFILE = "https://github.com/masonbair";
-const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink";
+const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-accent-ink";
 const plural = (n: number, word: string) => `${word}${n === 1 ? "" : "s"}`;
 const countFormat = new Intl.NumberFormat("en-US");
 

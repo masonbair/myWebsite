@@ -27,7 +27,7 @@ export type EventDeps = {
   fetchFn: typeof fetch;
   /** Null when no blob store is connected. */
   backup: (() => Promise<BackupResult>) | null;
-  /** One Ideas Lab run; null when the ideas Claude key is unset. */
+  /** One Ideas Lab run; null only in tests that leave it out. */
   ideas?: (() => Promise<IdeasRunResult>) | null;
   /** One news job run; null when the news Claude key is unset. */
   news: (() => Promise<NewsJobResult>) | null;
@@ -104,6 +104,26 @@ export async function readLatestPlaceZone(client: SupabaseClient): Promise<Place
     .maybeSingle<{ time_zone: string | null; updated_at: string }>();
   if (error) throw error;
   return data ? { timeZone: data.time_zone, updatedAt: data.updated_at } : null;
+}
+
+const DEFAULT_TIME_ZONE = "America/Denver";
+
+/** Mason's zone now: the latest place ping's, else HUB_TIME_ZONE, else America/Denver; a failed read falls back too. */
+export async function masonTimeZone(client: SupabaseClient, now = new Date()): Promise<string> {
+  const fallback = process.env.HUB_TIME_ZONE || DEFAULT_TIME_ZONE;
+  try {
+    return reminderTimeZone(await readLatestPlaceZone(client), fallback, now);
+  } catch (e) {
+    console.error(`place zone not read: ${errorName(e)}`);
+    return fallback;
+  }
+}
+
+/** An error's code or class name, which never holds item text or secrets. */
+export function errorName(e: unknown): string {
+  const code = (e as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && code) return code;
+  return e instanceof Error ? e.name : "error";
 }
 
 /** Starts the routine through its API trigger, with the same headers todo-hub's relay sends. */
@@ -224,7 +244,7 @@ export async function handleEventRequest(request: Request, event: string, deps: 
     }
     return json({ error: "not found" }, 404);
   } catch (e) {
-    console.error("hub event", event, e);
+    console.error(`hub event ${event} failed: ${errorName(e)}`);
     return json({ error: "server error" }, 500);
   }
 }

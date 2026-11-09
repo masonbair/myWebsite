@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reviewIdea, type ReviewCall } from "@/lib/ideas/review";
+import { partialUsage, reviewIdea, type ReviewCall } from "@/lib/ideas/review";
 import { ReviewFailed } from "@/lib/ideas/types";
 import { OTHER, fakeAnthropic, textReply, usage, validReview, type FakeReply } from "./fake-anthropic";
 
@@ -12,6 +12,7 @@ const userText = (params: Record<string, unknown>) =>
 async function run(replies: FakeReply[], extra: { webSearch?: boolean; note?: string | null; description?: string } = {}) {
   const { client, sent } = fakeAnthropic(replies);
   const calls: ReviewCall[] = [];
+  const checks: number[] = [];
   const promise = reviewIdea({
     client,
     idea: { ...idea, description: extra.description ?? idea.description },
@@ -21,8 +22,11 @@ async function run(replies: FakeReply[], extra: { webSearch?: boolean; note?: st
     record: async (call) => {
       calls.push(call);
     },
+    beforeCall: async () => {
+      checks.push(sent.length);
+    },
   });
-  return { promise, sent, calls };
+  return { promise, sent, calls, checks };
 }
 
 describe("reviewIdea without web search", () => {
@@ -38,7 +42,7 @@ describe("reviewIdea without web search", () => {
     expect(params.betas).toEqual(["server-side-fallback-2026-07-01"]);
     expect(params.fallbacks).toBe("default");
     expect(params.tools).toBeUndefined();
-    expect(params.thinking).toBeUndefined();
+    expect(params.thinking).toEqual({ type: "adaptive" });
     const config = params.output_config as { effort: string; format: { type: string } };
     expect(config.effort).toBe("high");
     expect(config.format.type).toBe("json_schema");
@@ -126,6 +130,7 @@ describe("reviewIdea with web search", () => {
     expect(userText(sent[1])).toContain("breadtimer.example");
     expect(userText(sent[1])).toMatch(/untrusted/i);
     expect(calls.map((c) => c.purpose)).toEqual(["similar", "review"]);
+    expect(sent[0].thinking).toEqual({ type: "adaptive" });
     expect(calls[0].usage.server_tool_use?.web_search_requests).toBe(3);
   });
 
@@ -137,6 +142,8 @@ describe("reviewIdea with web search", () => {
     const resent = ok.sent[1].messages as { role: string }[];
     expect(resent.map((m) => m.role)).toEqual(["user", "assistant"]);
 
+    expect(ok.checks).toEqual([0, 1, 2]);
+
     const stuck = await run([paused, paused, paused], { webSearch: true });
     await expect(stuck.promise).rejects.toEqual(new ReviewFailed("paused"));
     expect(stuck.sent).toHaveLength(3);
@@ -147,5 +154,20 @@ describe("reviewIdea with web search", () => {
     const { promise, sent } = await run([textReply("", "refusal")], { webSearch: true });
     await expect(promise).rejects.toEqual(new ReviewFailed("refusal"));
     expect(sent).toHaveLength(1);
+  });
+});
+
+describe("partialUsage", () => {
+  const message = (output: number, content: Record<string, unknown>[]) =>
+    ({ usage: usage(2000, output), content }) as unknown as Parameters<typeof partialUsage>[0];
+
+  it("guesses output tokens from the text and thinking so far when the stream has not counted them", () => {
+    const content = [{ type: "thinking", thinking: "abcde" }, { type: "text", text: "fghij" }, { type: "tool_use", input: {} }];
+    expect(partialUsage(message(1, content))).toMatchObject({ input_tokens: 2000, output_tokens: 3 });
+    expect(partialUsage(message(0, []))).toMatchObject({ output_tokens: 0 });
+  });
+
+  it("keeps a real output count", () => {
+    expect(partialUsage(message(250, [{ type: "text", text: "x".repeat(4000) }])).output_tokens).toBe(250);
   });
 });

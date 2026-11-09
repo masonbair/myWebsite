@@ -1,15 +1,34 @@
 import { costOf } from "@/lib/ai/claude";
-import type { IdeasJobStore } from "@/lib/ideas/store";
-import type { IdeaReview, IdeaSettings, ReviewStatus } from "@/lib/ideas/types";
-import type { Item } from "@/lib/hub/types";
+import { ClaimLost, type IdeasJobStore } from "@/lib/ideas/store";
+import { recordingRef, type DetectKind, type IdeaReview, type IdeaSettings, type ReviewStatus, type SavedIdea, type SourceKind } from "@/lib/ideas/types";
+import type { Comment, Item } from "@/lib/hub/types";
+
+export type FakeSource = {
+  /** The item id, or `rec:<file>` for a recording. */
+  itemId: string;
+  kind: DetectKind;
+  recording?: { file: string; recorded: string; transcript: string };
+  status: "pending" | "done" | "failed";
+  ideas: SavedIdea[];
+  attempts: number;
+  model: string | null;
+  lastError: string | null;
+  claimed: boolean;
+};
 
 export type FakeIdeasRows = {
   items: Map<string, Item>;
   settings: Map<string, IdeaSettings>;
   reviews: { itemId: string; version: number; review: IdeaReview; model: string; costUsd: number; note: string | null }[];
-  usage: { itemId: string; model: string; purpose: string; cost: number }[];
+  usage: { itemId: string | null; model: string; purpose: string; cost: number }[];
   flags: Map<string, unknown>;
   failedDetections: number;
+  sources: Map<string, FakeSource>;
+  comments: Comment[];
+  mentions: Map<string, number>;
+  moved: Set<string>;
+  /** schedule_from per enrolled item, as the job set it. */
+  scheduleFrom: Map<string, string>;
 };
 
 let counter = 0;
@@ -42,6 +61,11 @@ export function createFakeIdeasStore() {
     usage: [],
     flags: new Map(),
     failedDetections: 0,
+    sources: new Map(),
+    comments: [],
+    mentions: new Map(),
+    moved: new Set(),
+    scheduleFrom: new Map(),
   };
   const calls: string[] = [];
 
@@ -72,6 +96,7 @@ export function createFakeIdeasStore() {
       return s ? { ...s } : null;
     },
     async saveReview(id, review, model, costUsd, note) {
+      if (rows.settings.get(id)?.reviewStatus !== "working") throw new ClaimLost(id);
       const version = rows.reviews.filter((r) => r.itemId === id).length + 1;
       rows.reviews.push({ itemId: id, version, review, model, costUsd, note });
       Object.assign(rows.settings.get(id)!, { reviewStatus: "done", reviewAttempts: 0, lastError: null, reviewNote: null });
@@ -83,6 +108,10 @@ export function createFakeIdeasStore() {
       s.reviewStatus = s.reviewAttempts >= 2 ? "failed" : "waiting";
       s.lastError = code;
       return s.reviewStatus;
+    },
+    async releaseClaim(id, status) {
+      const s = rows.settings.get(id)!;
+      if (s.reviewStatus === "working") s.reviewStatus = status;
     },
     pauseWaiting: async () => setStatus("waiting", "paused"),
     resumePaused: async () => setStatus("paused", "waiting"),
@@ -99,7 +128,93 @@ export function createFakeIdeasStore() {
     async setFlag(key, value) {
       rows.flags.set(key, value);
     },
+    async ideaQuote(id) {
+      const entries = [...rows.sources.values()].flatMap((s) => s.ideas).filter((i) => i.outcome?.id === id);
+      return (entries.find((i) => i.outcome?.kind !== "mention") ?? entries[0])?.quote ?? null;
+    },
+    async claimSource(kinds) {
+      const pending = [...rows.sources.values()].filter((s) => s.status === "pending" && s.attempts < 3 && !s.claimed && kinds.includes(s.kind));
+      const next = pending.find((s) => s.kind !== "recording") ?? pending[0];
+      if (!next) return null;
+      next.claimed = true;
+      next.attempts += 1;
+      const saved = next.ideas.length ? { ideas: structuredClone(next.ideas), model: next.model as "claude-haiku-5-5" | null } : null;
+      if (next.recording) return { kind: "recording", ...next.recording, saved };
+      return { itemId: next.itemId, kind: next.kind as SourceKind, saved };
+    },
+    recordingExists: async (memoFile) =>
+      rows.sources.has(recordingRef(memoFile)) || rows.sources.has(recordingRef(memoFile.replace(/\.[^.]*$/, ""))),
+    listComments: async (id) => rows.comments.filter((c) => c.itemId === id),
+    async saveIdeas(id, ideas, model) {
+      const source = rows.sources.get(id)!;
+      if (source.status !== "pending" || !source.claimed) throw new ClaimLost(id);
+      Object.assign(source, { ideas: structuredClone(ideas), model });
+    },
+    async finishSource(id, ideas, model) {
+      const source = rows.sources.get(id)!;
+      if (source.status !== "pending" || !source.claimed) throw new ClaimLost(id);
+      Object.assign(source, { status: "done", ideas: structuredClone(ideas), model, claimed: false });
+    },
+    async failSource(id, code) {
+      const source = rows.sources.get(id)!;
+      source.status = source.attempts >= 3 ? "failed" : "pending";
+      source.lastError = code;
+      source.claimed = false;
+      return source.status;
+    },
+    async releaseSource(id) {
+      const source = rows.sources.get(id)!;
+      source.attempts -= 1;
+      source.claimed = false;
+    },
+    async moveCaptureToIdeas(id, scheduleFrom) {
+      const item = rows.items.get(id);
+      if (!item || item.state !== "open") return false;
+      if (item.list === "ideas") {
+        seedSettings(id, scheduleFrom);
+        return true;
+      }
+      if (item.list !== "inbox") return false;
+      rows.items.set(id, { ...item, list: "ideas", labels: [...item.labels, "idea"] });
+      rows.moved.add(id);
+      seedSettings(id, scheduleFrom);
+      return true;
+    },
+    async addIdeaFrom(origin, n, title, quote) {
+      const key = `idea:${origin.key}#${n}`;
+      const existing = [...rows.items.values()].find((i) => i.description.endsWith(`key:${key}`));
+      if (existing) return existing.id;
+      const item = ideaItem({
+        title,
+        source: "ideas-lab",
+        description: `> ${quote}\n\n${origin.footer}\nkey:${key}`,
+      });
+      rows.items.set(item.id, item);
+      seedSettings(item.id, origin.scheduleFrom);
+      return item.id;
+    },
+    async mentionAgain(ideaId, source, date, quote) {
+      const body = `Mentioned again in ${source} on ${date}\n\n> ${quote}`;
+      if (rows.comments.some((c) => c.itemId === ideaId && c.body === body)) return;
+      rows.comments.push({ id: `c${rows.comments.length}`, itemId: ideaId, body, author: "worker", createdAt: date });
+      rows.mentions.set(ideaId, (rows.mentions.get(ideaId) ?? 1) + 1);
+    },
   };
+
+  function seedSettings(id: string, scheduleFrom: string) {
+    if (rows.settings.has(id)) return;
+    rows.scheduleFrom.set(id, scheduleFrom);
+    rows.settings.set(id, {
+      itemId: id,
+      enrolled: true,
+      noWebSearch: false,
+      reviewStatus: "waiting",
+      reviewRequestedAt: "2026-11-09T12:00:00Z",
+      reviewNote: null,
+      reviewAttempts: 0,
+      lastError: null,
+    });
+  }
 
   const store = new Proxy(impl, {
     get(target, prop) {
@@ -130,5 +245,30 @@ export function createFakeIdeasStore() {
     return seeded;
   }
 
-  return { store, rows, calls, seed };
+  /** An inbox item with a pending detection row, as the intake trigger (or the memo relay) leaves it. */
+  function seedSource(item: Partial<Item> = {}, kind: SourceKind = "capture"): Item {
+    const seeded = ideaItem({ labels: [], list: "inbox", ...item });
+    rows.items.set(seeded.id, seeded);
+    rows.sources.set(seeded.id, { itemId: seeded.id, kind, status: "pending", ideas: [], attempts: 0, model: null, lastError: null, claimed: false });
+    return seeded;
+  }
+
+  /** A recording the Mac sent read-only, pending detection. */
+  function seedRecording(file: string, transcript: string, recorded = "2026-11-08T14:00:00+00:00"): string {
+    const ref = recordingRef(file);
+    rows.sources.set(ref, {
+      itemId: ref,
+      kind: "recording",
+      recording: { file, recorded, transcript },
+      status: "pending",
+      ideas: [],
+      attempts: 0,
+      model: null,
+      lastError: null,
+      claimed: false,
+    });
+    return ref;
+  }
+
+  return { store, rows, calls, seed, seedSource, seedRecording };
 }

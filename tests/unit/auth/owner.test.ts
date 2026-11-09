@@ -98,6 +98,14 @@ describe("requireOwner", () => {
     await expect((await load())()).rejects.toThrow("redirect:/hub/login");
   });
 
+  it("asks the login page to come back to a plain hub path, and drops a hostile one", async () => {
+    const requireOwner = await load();
+    await expect(requireOwner("/hub/ideas/abc")).rejects.toThrow("redirect:/hub/login?next=%2Fhub%2Fideas%2Fabc");
+    for (const hostile of ["//evil.com", "/hub//evil.com", "https://evil.com", "/hub/ideas?x=1"]) {
+      await expect(requireOwner(hostile)).rejects.toThrow(/^redirect:\/hub\/login$/);
+    }
+  });
+
   it("shows a 404 to a signed-in stranger", async () => {
     session.user = githubUser("42");
     session.isOwner = true;
