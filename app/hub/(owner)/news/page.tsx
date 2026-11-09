@@ -71,10 +71,18 @@ export default async function NewsPage() {
               <ul className={`${panel} divide-y divide-ink/5`}>
                 {overview.quarantined.map((q) => (
                   <li key={q.id}>
-                    <Link href={`/hub/news/quarantine/${q.id}`} className={`block rounded-tile px-5 py-4 hover:bg-ink/5 sm:px-6 ${focusRing}`}>
-                      <span className="block font-medium break-words text-ink">{q.subject || "No subject"}</span>
-                      <span className="block text-sm break-all text-mute">
-                        {q.from || "Unknown sender"} · {timeAgo(q.receivedAt)}
+                    <Link
+                      href={`/hub/news/quarantine/${q.id}`}
+                      className={`flex items-center justify-between gap-4 rounded-tile px-5 py-4 hover:bg-ink/5 sm:px-6 ${focusRing}`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block font-medium break-words text-ink">{q.subject || "No subject"}</span>
+                        <span className="block text-sm break-all text-mute">
+                          {q.from || "Unknown sender"} · {timeAgo(q.receivedAt)}
+                        </span>
+                      </span>
+                      <span className="inline-flex h-9 shrink-0 items-center rounded-full bg-ink/5 px-3.5 text-sm font-medium text-ink">
+                        View
                       </span>
                     </Link>
                   </li>

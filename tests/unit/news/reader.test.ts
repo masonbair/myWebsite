@@ -7,16 +7,21 @@ function fakeClient(rows: Rows, failTable?: string) {
   return {
     from(table: string) {
       const q = {
-        filters: [] as [string, unknown][],
+        tests: [] as ((r: Record<string, unknown>) => boolean)[],
+        max: Infinity,
+        newestFirst: false,
         select: () => q,
-        eq: (c: string, v: unknown) => (q.filters.push([c, v]), q),
-        order: () => q,
-        limit: () => q,
+        eq: (c: string, v: unknown) => (q.tests.push((r) => r[c] === v), q),
+        neq: (c: string, v: unknown) => (q.tests.push((r) => r[c] !== v), q),
+        is: (c: string, v: null) => (q.tests.push((r) => r[c] === v), q),
+        order: () => ((q.newestFirst = true), q),
+        limit: (n: number) => ((q.max = n), q),
         not: () => q,
         then: (resolve: (v: unknown) => void) => {
           if (table === failTable) return resolve({ data: null, error: { message: "boom" } });
-          const data = (rows[table] ?? []).filter((r) => q.filters.every(([c, v]) => r[c] === v));
-          resolve({ data, error: null });
+          let data = (rows[table] ?? []).filter((r) => q.tests.every((t) => t(r)));
+          if (q.newestFirst) data = [...data].sort((x, y) => String(y.received_at).localeCompare(String(x.received_at)));
+          resolve({ data: data.slice(0, q.max), error: null });
         },
       };
       return q;
@@ -57,6 +62,22 @@ describe("readNewsOverview", () => {
     expect(rundown?.issues).toHaveLength(10);
     const brew = out.issues.find((s) => s.sourceId === "morning-brew");
     expect(brew?.issues[0]).toMatchObject({ id: "id-50", status: "failed", lastError: "rate limited" });
+  });
+
+  it("keeps a slow source's older failed issue visible next to a busy source", async () => {
+    const busy = Array.from({ length: 40 }, (_, i) => issue(100 + i, { source_id: "rundown-ai", received_at: new Date(Date.UTC(2026, 10, 9, 11, 0, i)).toISOString() }));
+    const old = issue(900, { source_id: "morning-brew", status: "failed", last_error: "bad json", received_at: "2026-09-01T00:00:00Z" });
+    const out = await readNewsOverview(fakeClient({ ...rows, news_issues: [...busy, old] }), now);
+    expect(out.issues.find((s) => s.sourceId === "rundown-ai")?.issues).toHaveLength(10);
+    expect(out.issues.find((s) => s.sourceId === "morning-brew")?.issues).toEqual([
+      { id: "id-900", subject: "Issue 900", receivedAt: "2026-09-01T00:00:00Z", status: "failed", lastError: "bad json" },
+    ]);
+  });
+
+  it("shows the error only for failed issues", async () => {
+    const stale = issue(70, { status: "pending", last_error: "old error" });
+    const out = await readNewsOverview(fakeClient({ ...rows, news_issues: [stale] }), now);
+    expect(out.issues[0].issues[0]).toMatchObject({ status: "pending", lastError: null });
   });
 
   it("lists quarantined mail apart from the source groups", async () => {

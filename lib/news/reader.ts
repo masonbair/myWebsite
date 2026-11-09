@@ -23,6 +23,8 @@ export type NewsOverviewDeps = {
   pausedMonth?: () => Promise<string | null>;
 };
 
+type IssueDbRow = { id: string; subject: string; received_at: string; status: IssueStatus; last_error: string | null };
+
 const PER_SOURCE = 10;
 const UNMATCHED = "unmatched";
 
@@ -34,15 +36,13 @@ async function rows<T>(query: PromiseLike<{ data: T[] | null; error: { message: 
 
 /** Everything the owner's news page shows, read with the owner's session so row security applies. */
 export async function readNewsOverview(client: SupabaseClient, now: Date, deps: NewsOverviewDeps = {}): Promise<NewsOverview> {
-  const [sources, issues, quarantined, stories, costs, pausedMonth] = await Promise.all([
+  const issueColumns = "id, subject, received_at, status, last_error";
+  const latest = (sourceId: string | null) => {
+    const q = client.from("news_issues").select(issueColumns).neq("status", "quarantined");
+    return rows<IssueDbRow>((sourceId === null ? q.is("source_id", null) : q.eq("source_id", sourceId)).order("received_at", { ascending: false }).limit(PER_SOURCE));
+  };
+  const [sources, quarantined, stories, costs, pausedMonth] = await Promise.all([
     rows<{ id: string; name: string }>(client.from("news_sources").select("id, name")),
-    rows<{ id: string; source_id: string | null; subject: string; received_at: string; status: IssueStatus; last_error: string | null }>(
-      client
-        .from("news_issues")
-        .select("id, source_id, subject, received_at, status, last_error")
-        .order("received_at", { ascending: false })
-        .limit(300),
-    ),
     rows<{ id: string; from_address: string; subject: string; received_at: string }>(
       client
         .from("news_issues")
@@ -56,20 +56,21 @@ export async function readNewsOverview(client: SupabaseClient, now: Date, deps: 
     deps.pausedMonth ? deps.pausedMonth().catch(() => null) : Promise.resolve(null),
   ]);
 
-  const names = new Map(sources.map((s) => [s.id, s.name]));
-  const groups = new Map<string, SourceIssues>();
-  for (const row of issues) {
-    if (row.status === "quarantined") continue;
-    const sourceId = row.source_id ?? UNMATCHED;
-    let group = groups.get(sourceId);
-    if (!group) {
-      group = { sourceId, sourceName: names.get(sourceId) ?? "Unmatched sender", issues: [] };
-      groups.set(sourceId, group);
-    }
-    if (group.issues.length < PER_SOURCE) {
-      group.issues.push({ id: row.id, subject: row.subject, receivedAt: row.received_at, status: row.status, lastError: row.last_error });
-    }
-  }
+  // One query per source, so a busy newsletter can never push a slow one's older failed issue out of view.
+  const perSource = await Promise.all([...sources.map((s) => latest(s.id)), latest(null)]);
+  const toRow = (row: IssueDbRow): IssueRow => ({
+    id: row.id,
+    subject: row.subject,
+    receivedAt: row.received_at,
+    status: row.status,
+    lastError: row.status === "failed" ? row.last_error : null,
+  });
+  const groups: SourceIssues[] = [];
+  sources.forEach((s, i) => {
+    if (perSource[i].length > 0) groups.push({ sourceId: s.id, sourceName: s.name, issues: perSource[i].map(toRow) });
+  });
+  const unmatched = perSource[sources.length];
+  if (unmatched.length > 0) groups.push({ sourceId: UNMATCHED, sourceName: "Unmatched sender", issues: unmatched.map(toRow) });
 
   const counts = new Map<string, number>();
   for (const { suggested_topic } of stories) {
@@ -77,7 +78,7 @@ export async function readNewsOverview(client: SupabaseClient, now: Date, deps: 
   }
 
   return {
-    issues: [...groups.values()],
+    issues: groups,
     quarantined: quarantined.map((r) => ({ id: r.id, from: r.from_address, subject: r.subject, receivedAt: r.received_at })),
     costThisMonth: costs?.thisMonth ?? null,
     costLastMonth: costs?.lastMonth ?? null,

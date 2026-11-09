@@ -16,8 +16,8 @@ const TABS = [
 export function HubTabs() {
   const path = usePathname();
   return (
-    <nav aria-label="Hub lists">
-      <ul className="inline-flex rounded-full bg-ink/5 p-1">
+    <nav aria-label="Hub lists" className="max-w-full overflow-x-auto rounded-full [scrollbar-width:none]">
+      <ul className="inline-flex w-max rounded-full bg-ink/5 p-1">
         {TABS.map((tab) => {
           const current = path === tab.href;
           return (
@@ -25,7 +25,7 @@ export function HubTabs() {
               <Link
                 href={tab.href}
                 aria-current={current ? "page" : undefined}
-                className={`block rounded-full px-3 py-1.5 sm:px-4 text-sm font-medium transition-colors duration-300 ease-spring ${
+                className={`block rounded-full px-2.5 py-1.5 sm:px-4 text-sm font-medium transition-colors duration-300 ease-spring ${
                   current ? "bg-surface text-ink shadow-sm ring-1 ring-ink/5" : "text-mute hover:text-ink"
                 } ${focusRing}`}
               >

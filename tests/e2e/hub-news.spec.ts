@@ -47,10 +47,22 @@ test.describe("news page", () => {
       const subject = `e2e held ${randomUUID().slice(0, 8)}`;
       const id = await seedIssue({ subject, status: "quarantined", source_id: null, from_address: "mail-noreply@google.com" });
       await page.goto("/hub/news");
-      await page.getByRole("link", { name: new RegExp(subject) }).click();
+      const link = page.getByRole("link", { name: new RegExp(subject) });
+      await expect(link).toContainText("View");
+      await link.click();
       await expect(page).toHaveURL(new RegExp(`/hub/news/quarantine/${id}$`));
       await expect(page.getByRole("heading", { level: 1, name: subject })).toBeVisible();
       await expect(page.getByText("The raw email could not be loaded.")).toBeVisible();
+    });
+
+    test("the page and the inbox fit a 360px phone with no sideways scroll", async ({ page }) => {
+      await page.setViewportSize({ width: 360, height: 800 });
+      for (const path of ["/hub/news", "/hub"]) {
+        await page.goto(path);
+        await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+        const fits = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+        expect(fits, path).toBe(true);
+      }
     });
 
     test("a made-up or non-held issue id is a 404", async ({ page }) => {

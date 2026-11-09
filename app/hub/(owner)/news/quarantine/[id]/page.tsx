@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { EmailText } from "@/components/hub/EmailText";
 import { focusRing, panel } from "@/components/hub/styles";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { emailPlainText, linkSegments } from "@/lib/news/email-view";
+import { emailPlainText } from "@/lib/news/email-view";
 import { loadRawEmail } from "@/lib/news/raw-email";
 import { sessionClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time";
@@ -46,17 +47,7 @@ export default async function QuarantinePage({ params }: PageProps<"/hub/news/qu
         ) : text === "" ? (
           <p className="text-sm text-mute">This email has no text.</p>
         ) : (
-          <pre className="font-sans text-sm leading-relaxed break-words whitespace-pre-wrap text-ink">
-            {linkSegments(text).map((s, i) =>
-              s.type === "link" ? (
-                <a key={i} href={s.value} target="_blank" rel="noreferrer noopener" className={`break-all text-accent-ink underline ${focusRing}`}>
-                  {s.value}
-                </a>
-              ) : (
-                s.value
-              ),
-            )}
-          </pre>
+          <EmailText text={text} />
         )}
       </section>
     </main>
