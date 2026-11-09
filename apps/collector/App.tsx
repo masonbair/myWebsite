@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { runFix } from './src/health/fix';
@@ -128,7 +128,7 @@ export default function App() {
       </View>
 
       <PrivatePlaces reportPlace={canTrack && locationWanted ? reportPlaceNow : null} />
-      <Button title="Choose Daylio folder" onPress={handlePickFolder} />
+      {input?.daylioFolder && <Button title="Change Daylio folder" onPress={handlePickFolder} />}
 
       <Text style={styles.heading}>Setup</Text>
       {SAMSUNG_SETUP_STEPS.map((step, i) => (

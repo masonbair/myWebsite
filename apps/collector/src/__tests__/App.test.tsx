@@ -285,10 +285,20 @@ it('asks for permission and saves nothing when location is refused', async () =>
   expect(screen.queryByText('Remove Cabin')).toBeNull();
 });
 
-it('chooses the Daylio folder and signs out', async () => {
+it('offers one Choose Daylio folder button while no folder is set', async () => {
+  (runFix as jest.Mock).mockClear();
+  await show({ ...good, daylioFolder: false });
+  expect(screen.getAllByText('Choose Daylio folder')).toHaveLength(1);
+  expect(screen.queryByText('Change Daylio folder')).toBeNull();
+  await fireEvent.press(screen.getByText('Choose Daylio folder'));
+  await waitFor(() => expect(runFix).toHaveBeenCalledWith('pick-folder'));
+});
+
+it('changes the Daylio folder and signs out', async () => {
   (pickDaylioFolder as jest.Mock).mockResolvedValue(true);
   await show();
-  await fireEvent.press(screen.getByText('Choose Daylio folder'));
+  expect(screen.queryByText('Choose Daylio folder')).toBeNull();
+  await fireEvent.press(screen.getByText('Change Daylio folder'));
   await waitFor(() => expect(pickDaylioFolder).toHaveBeenCalled());
   await fireEvent.press(screen.getByText('Sign out'));
   expect(signOut).toHaveBeenCalled();
