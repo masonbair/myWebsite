@@ -7,6 +7,7 @@ import { signedIn, supabase } from '../lib/supabase';
 import { writeJson } from '../lib/store';
 import { JOB_LAST_OK_KEY } from '../lib/storageKeys';
 import { runPhotoJob } from '../photos/photoJob';
+import { refreshStalePlace } from '../place/placeTask';
 
 export const PERIODIC_TASK = 'collector-periodic';
 
@@ -36,7 +37,7 @@ export async function sendHeartbeat(items: HealthItem[], now: number): Promise<v
   }
 }
 
-/** Runs the photo job, then the Daylio job, then sends the heartbeat. One failing never stops the others. */
+/** Runs the photo job, the Daylio job, a stale place resend, then the heartbeat. One failing never stops the others. */
 export async function runPeriodic(now = Date.now()): Promise<void> {
   try {
     await runPhotoJob(now);
@@ -48,6 +49,11 @@ export async function runPeriodic(now = Date.now()): Promise<void> {
     if (!result.error) await writeJson(JOB_LAST_OK_KEY.daylio, now);
   } catch {
     // Same: no new last-ok time.
+  }
+  try {
+    await refreshStalePlace(now);
+  } catch {
+    // The next run tries again.
   }
   try {
     await sendHeartbeat(evaluateHealth(await collectHealth(now)), now);

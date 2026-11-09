@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as BackgroundTask from 'expo-background-task';
 import { runDaylioJob } from '../../daylio/daylioJob';
 import { runPhotoJob } from '../../photos/photoJob';
+import { refreshStalePlace } from '../../place/placeTask';
 import { collectHealth } from '../../health/health';
 import { signedIn, supabase } from '../../lib/supabase';
 import { heartbeatKey, registerPeriodic, runPeriodic, sendHeartbeat } from '../periodicTask';
@@ -20,6 +21,7 @@ jest.mock('../../health/health', () => ({
 }));
 jest.mock('../../photos/photoJob', () => ({ runPhotoJob: jest.fn() }));
 jest.mock('../../daylio/daylioJob', () => ({ runDaylioJob: jest.fn() }));
+jest.mock('../../place/placeTask', () => ({ refreshStalePlace: jest.fn() }));
 
 const photo = runPhotoJob as jest.Mock;
 const daylio = runDaylioJob as jest.Mock;
@@ -36,6 +38,7 @@ beforeEach(async () => {
   (collectHealth as jest.Mock).mockReset().mockResolvedValue(signedOutInput);
   photo.mockReset().mockResolvedValue({ uploaded: 0, skipped: 0, error: null });
   daylio.mockReset().mockResolvedValue({ uploaded: 0, skipped: 0, error: null });
+  (refreshStalePlace as jest.Mock).mockReset().mockResolvedValue(undefined);
 });
 
 describe('runPeriodic', () => {
@@ -59,6 +62,15 @@ describe('runPeriodic', () => {
     await runPeriodic(NOW);
     expect(photo).toHaveBeenCalled();
     expect(await lastOk('daylio')).toBeNull();
+  });
+
+  it('refreshes a stale place before the heartbeat, and a place failure stops nothing', async () => {
+    (refreshStalePlace as jest.Mock).mockRejectedValue(new Error('boom'));
+    await runPeriodic(NOW);
+    expect(refreshStalePlace).toHaveBeenCalledWith(NOW);
+    expect(daylio).toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalled();
+    expect((refreshStalePlace as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(rpc.mock.invocationCallOrder[0]);
   });
 
   it('records no Daylio success when it returns an error', async () => {

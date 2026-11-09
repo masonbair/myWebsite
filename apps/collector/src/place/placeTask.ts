@@ -3,8 +3,9 @@ import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 import { TABLE } from '../../../../shared/collector-contract';
 import { readJson, writeJson } from '../lib/store';
-import { JOB_LAST_OK_KEY } from '../lib/storageKeys';
+import { JOB_LAST_OK_KEY, PLACE_TASK_WANTED_KEY } from '../lib/storageKeys';
 import { signedIn, supabase } from '../lib/supabase';
+import { coarseFix } from './coarseFix';
 import type { Point } from './nearestPlace';
 import { loadPrivatePlaces } from './privatePlaces';
 import { toPlaceRow, toReport, type PlaceReport } from './toReport';
@@ -41,6 +42,17 @@ export async function runPlaceTask(fixes: Fix[], now = Date.now(), timeZone: str
     await writeJson(LAST_SENT_KEY, { report, at: now } satisfies LastSent);
   }
   await writeJson(JOB_LAST_OK_KEY.place, now);
+}
+
+/** Location updates only come on movement, so a phone that sits still is re-sent from the periodic job. */
+export async function refreshStalePlace(now: number): Promise<void> {
+  if (!(await readJson<boolean>(PLACE_TASK_WANTED_KEY, false))) return;
+  if ((await Location.getBackgroundPermissionsAsync()).status !== 'granted') return;
+  if (!(await signedIn())) return;
+  const last = await readJson<LastSent | null>(LAST_SENT_KEY, null);
+  if (last && now - last.at < RESEND_MS) return;
+  const at = await coarseFix({ ask: false });
+  if (at) await runPlaceTask([{ coords: at }], now);
 }
 
 async function startPlaceTask(): Promise<void> {

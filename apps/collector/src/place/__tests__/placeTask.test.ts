@@ -2,7 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { signedIn, supabase } from '../../lib/supabase';
 import { addPrivatePlace } from '../privatePlaces';
-import { deviceTimeZone, PLACE_TASK, runPlaceTask, syncPlaceTask } from '../placeTask';
+import { coarseFix } from '../coarseFix';
+import { deviceTimeZone, PLACE_TASK, refreshStalePlace, runPlaceTask, syncPlaceTask } from '../placeTask';
 
 jest.mock('../../lib/supabase', () => ({ supabase: { from: jest.fn() }, signedIn: jest.fn() }));
 jest.mock('expo-location', () => ({
@@ -13,6 +14,7 @@ jest.mock('expo-location', () => ({
   stopLocationUpdatesAsync: jest.fn(),
 }));
 jest.mock('expo-task-manager', () => ({ defineTask: jest.fn() }));
+jest.mock('../coarseFix', () => ({ coarseFix: jest.fn() }));
 
 const insert = jest.fn();
 const from = supabase.from as jest.Mock;
@@ -23,6 +25,7 @@ const LISBON = [{ coords: { latitude: 38.72, longitude: -9.14 } }];
 const LONDON = [{ coords: { latitude: 51.5074, longitude: -0.1278 } }];
 const HOUR = 3_600_000;
 const ZONE = 'Europe/Lisbon';
+const fix = coarseFix as jest.Mock;
 const granted = { status: 'granted', granted: true, canAskAgain: true };
 
 const stored = async (key: string) => JSON.parse((await AsyncStorage.getItem(key)) ?? 'null');
@@ -34,6 +37,7 @@ beforeEach(async () => {
   signed.mockReset().mockResolvedValue(true);
   bgPerm.mockReset().mockResolvedValue(granted);
   started.mockReset().mockResolvedValue(false);
+  fix.mockReset().mockResolvedValue(LISBON[0].coords);
 });
 
 describe('runPlaceTask', () => {
@@ -109,6 +113,45 @@ describe('runPlaceTask', () => {
       expect(Object.keys(row).filter((k) => /lat|lng|lon/i.test(k))).toEqual([]);
       expect(JSON.stringify(row)).not.toMatch(/38\.7|51\.50|test-a/);
     }
+  });
+});
+
+describe('refreshStalePlace', () => {
+  const wanted = () => AsyncStorage.setItem('place-task-wanted', 'true');
+
+  it('sends a fresh fix when nothing was ever sent, asking for no permission', async () => {
+    await wanted();
+    await refreshStalePlace(1000);
+    expect(fix).toHaveBeenCalledWith({ ask: false });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ city: 'Lisbon' }));
+    expect(await stored('place-last-sent')).toMatchObject({ at: 1000 });
+  });
+
+  it('resends the same place once the last send is 6 hours old', async () => {
+    await wanted();
+    await runPlaceTask(LISBON, 0, ZONE);
+    await refreshStalePlace(6 * HOUR - 1);
+    expect(fix).not.toHaveBeenCalled();
+    await refreshStalePlace(6 * HOUR);
+    expect(insert).toHaveBeenCalledTimes(2);
+  });
+
+  it('does nothing when reporting is off, background location is not allowed, or signed out', async () => {
+    await refreshStalePlace(1000);
+    await wanted();
+    bgPerm.mockResolvedValueOnce({ status: 'denied', granted: false, canAskAgain: false });
+    await refreshStalePlace(1000);
+    signed.mockResolvedValueOnce(false);
+    await refreshStalePlace(1000);
+    expect(fix).not.toHaveBeenCalled();
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing when no fix comes', async () => {
+    await wanted();
+    fix.mockResolvedValue(null);
+    await refreshStalePlace(1000);
+    expect(insert).not.toHaveBeenCalled();
   });
 });
 

@@ -4,6 +4,7 @@ import { coarseFix } from '../coarseFix';
 jest.mock('expo-location', () => ({
   Accuracy: { Lowest: 1 },
   requestForegroundPermissionsAsync: jest.fn(),
+  getForegroundPermissionsAsync: jest.fn(),
   getCurrentPositionAsync: jest.fn(),
   getLastKnownPositionAsync: jest.fn(),
 }));
@@ -61,4 +62,13 @@ it('returns null when neither a fix nor a recent last-known position exists', as
   lastKnown.mockRejectedValue(new Error('x'));
   current.mockRejectedValue(new Error('x'));
   expect(await coarseFix()).toBeNull();
+});
+
+it('with ask false only checks the permission, so a background run never prompts', async () => {
+  (Location.getForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+  current.mockResolvedValue(LISBON);
+  expect(await coarseFix({ ask: false })).toEqual({ latitude: 38.72, longitude: -9.14 });
+  expect(Location.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
+  (Location.getForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'denied' });
+  expect(await coarseFix({ ask: false })).toBeNull();
 });

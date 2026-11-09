@@ -13,9 +13,12 @@ function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-/** One low-accuracy fix, never fine; a recent last-known position if no fix comes in time. Null when location is not allowed or neither exists. */
-export async function coarseFix(): Promise<Point | null> {
-  const { status } = await Location.requestForegroundPermissionsAsync();
+/**
+ * One low-accuracy fix, never fine; a recent last-known position if no fix comes in time.
+ * Null when location is not allowed or neither exists. ask false never prompts (for background runs).
+ */
+export async function coarseFix({ ask = true }: { ask?: boolean } = {}): Promise<Point | null> {
+  const { status } = await (ask ? Location.requestForegroundPermissionsAsync() : Location.getForegroundPermissionsAsync());
   if (status !== 'granted') return null;
   const position =
     (await within(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest }), FIX_TIMEOUT_MS).catch(() => null)) ??
