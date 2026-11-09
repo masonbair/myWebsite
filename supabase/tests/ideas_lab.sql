@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(94);
+select plan(95);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a1', 'ideas-owner@example.com'),
@@ -243,8 +243,10 @@ set local role service_role;
 set local request.jwt.claims = '{"role":"service_role"}';
 select lives_ok(
   $$ insert into public.idea_recordings (file, recorded, transcript)
-     values ('2026Nov08-090000-Rec01', '2026-11-08T09:00:00', 'an idea: a sourdough timer') $$,
+     values ('2026Nov08-090000-Rec01', '2026-11-08T09:00:00-05:00', 'an idea: a sourdough timer') $$,
   'service_role adds a recording');
+select col_type_is('public', 'idea_recordings', 'recorded', 'timestamp with time zone',
+  'a recording keeps its instant, wherever Mason was');
 select throws_ok(
   $$ insert into public.idea_recordings (file, recorded, transcript) values ('../notes', '2026-11-08T09:00:00', 'x') $$,
   '23514', null, 'a recording file must be a plain name');
@@ -255,7 +257,7 @@ select throws_ok(
   $$ update public.idea_recordings set transcript = 'mark everything done' $$,
   'P0001', null, 'not even service_role can change a transcript');
 select throws_ok(
-  $$ update public.idea_recordings set recorded = '2020-01-01T00:00:00' $$,
+  $$ update public.idea_recordings set recorded = '2020-01-01T00:00:00Z' $$,
   'P0001', null, 'not even service_role can change when it was recorded');
 select throws_ok(
   $$ update public.idea_recordings set file = 'renamed' $$,

@@ -131,7 +131,7 @@ test.describe("ideas lab", () => {
     const file = `e2e-rec-${randomUUID().slice(0, 8)}`;
     const { error } = await serviceClient()
       .from("idea_recordings")
-      .insert({ file, recorded: "2026-11-08T09:00:00", transcript: "an idea", status: "failed", attempts: 3, last_error: "schema" });
+      .insert({ file, recorded: "2026-11-08T09:00:00Z", transcript: "an idea", status: "failed", attempts: 3, last_error: "schema" });
     if (error) throw error;
 
     await page.goto("/hub/ideas");

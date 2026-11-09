@@ -243,7 +243,7 @@ export function createFakeIdeasStore() {
   }
 
   /** A recording the Mac sent read-only, pending detection. */
-  function seedRecording(file: string, transcript: string, recorded = "2026-11-08T09:00:00"): string {
+  function seedRecording(file: string, transcript: string, recorded = "2026-11-08T14:00:00+00:00"): string {
     const ref = recordingRef(file);
     rows.sources.set(ref, {
       itemId: ref,

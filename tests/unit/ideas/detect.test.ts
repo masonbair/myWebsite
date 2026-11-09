@@ -321,7 +321,7 @@ describe("detection on HiNote recordings", () => {
     const created = [...h.rows.items.values()].filter((i) => i.source === "ideas-lab");
     expect(created.map((i) => i.title)).toEqual(["Sourdough timer"]);
     expect(created[0].description).toBe(
-      `> a timer for sourdough\n\nFrom HiNote recording ${FILE}, recorded 2026-11-08T09:00:00\nkey:idea:rec:${FILE}#0`,
+      `> a timer for sourdough\n\nFrom HiNote recording ${FILE}, recorded 2026-11-08 14:00 UTC\nkey:idea:rec:${FILE}#0`,
     );
     expect(h.rows.sources.get(ref)).toMatchObject({ status: "done", attempts: 1 });
     expect(outcomes(h, ref)).toEqual([{ kind: "new", id: created[0].id }]);

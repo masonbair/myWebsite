@@ -15,6 +15,13 @@ export function formatDay(date: string): string | null {
   return day.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 }
 
+/** A stored instant as "2026-11-09 21:25 UTC", or null when it is not a time; UTC because the place it was made is not kept. */
+export function formatInstant(iso: string): string | null {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return null;
+  return `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isItemId(value: unknown): value is string {

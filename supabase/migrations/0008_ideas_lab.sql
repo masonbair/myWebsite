@@ -94,7 +94,7 @@ insert into public.idea_google default values;
 -- HiNote transcripts the Mac sends read-only while its memos still go to todo-hub; detection reads them like sources.
 create table public.idea_recordings (
   file text primary key check (file ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'),
-  recorded timestamp not null,
+  recorded timestamptz not null,
   transcript text not null check (length(transcript) <= 1000000),
   status text not null default 'pending' check (status in ('pending', 'done', 'failed')),
   attempts int not null default 0,

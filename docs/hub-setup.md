@@ -132,7 +132,7 @@ Does `calendar.app.created` need Google verification? Not for this use. Google l
 
 Until HiNote memos move to the hub, ideas spoken in Mac HiNote recordings reach the Ideas Lab through a small read-only job. The HiNote flow itself (hinote-sync, then todo-hub, then Todoist) is not touched.
 
-- What it does: every 15 minutes `scripts/ideas-recording-sync.ts` lists `~/HiNotes/transcripts/*.txt` (hinote-sync's folder: `home = ~/HiNotes`, transcripts named `<recording stem>.txt`) and posts each new one to `POST /api/hub/ideas/recording` as `{ file: <stem>, recorded: <file mtime, local>, transcript }`. The hub keeps one `idea_recordings` row per file name and writes nothing else; the Ideas Lab job reads it like a memo.
+- What it does: every 15 minutes `scripts/ideas-recording-sync.ts` lists `~/HiNotes/transcripts/*.txt` (hinote-sync's folder: `home = ~/HiNotes`, transcripts named `<recording stem>.txt`) and posts each new one to `POST /api/hub/ideas/recording` as `{ file: <stem>, recorded: <file mtime with its local offset>, transcript }`. `recorded` is local time with the offset the Mac had at that moment, such as `2026-11-09T16:25:03-05:00`, so a recording made while travelling keeps its true instant; idea footers show it in UTC. The hub keeps one `idea_recordings` row per file name and writes nothing else; the Ideas Lab job reads it like a memo.
 - It never writes in the transcripts folder. It remembers what it sent in `~/.config/hub/ideas-recording-sent.json`. A 200 or 201 counts as sent. A 400 or 413 is marked `rejected <status>` and not sent again. A 401, a 5xx or no network stops the run without marking anything, so the next run tries again. It skips empty transcripts and ones changed in the last two minutes. Its first run sends nothing old (step 4). Its log (`~/Library/Logs/ideas-recording.log`) holds file names and status codes only, never transcript text.
 - It refuses to run unless `~/.config/hub/ideas-recording-token` is a plain file of yours with mode 600.
 
@@ -170,7 +170,7 @@ Install (Mason, on the Mac; migration 0008 must be live first):
    launchctl print gui/$(id -u)/com.masonbair.ideas-recording | grep -E 'state|last exit'
    ```
    Exit 0 is a clean run, 1 means it stopped and will retry, 2 means it refused: the token file is missing, empty or not mode 600; the sent file is not valid JSON; `HUB_URL` is not https (plain http is allowed only to localhost or 127.0.0.1); or an argument is wrong.
-7. Check: within 15 minutes of a new recording's transcript, its ideas show in the Ideas Lab with the footer `From HiNote recording <file>, recorded <time>`. A recording the Ideas Lab could not read after three tries shows under "Could not read" as `HiNote recording <file>` with Try again.
+7. Check: within 15 minutes of a new recording's transcript, its ideas show in the Ideas Lab with the footer `From HiNote recording <file>, recorded <YYYY-MM-DD HH:MM> UTC`. A recording the Ideas Lab could not read after three tries shows under "Could not read" as `HiNote recording <file>` with Try again.
 
 Uninstall (also the first step of the memo-detection cutover in `docs/hub-cutover-notes.md`):
 

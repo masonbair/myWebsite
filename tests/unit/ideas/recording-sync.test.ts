@@ -1,8 +1,8 @@
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
-import { localTime, parseArgs, syncRecordings, type Existing, type SyncDeps } from "@/scripts/ideas-recording-sync";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { localTime, parseArgs, syncRecordings, zonedTime, type Existing, type SyncDeps } from "@/scripts/ideas-recording-sync";
 
 const TOKEN = "laptop-token";
 const OLD = new Date("2026-11-08T09:00:00");
@@ -86,7 +86,7 @@ describe("ideas-recording-sync", () => {
       {
         url: "https://hub.test/api/hub/ideas/recording",
         auth: `Bearer ${TOKEN}`,
-        body: { file: "2026Nov08-090000-Rec01", recorded: "2026-11-08T09:00:00", transcript: "an idea: a sourdough timer" },
+        body: { file: "2026Nov08-090000-Rec01", recorded: zonedTime(OLD), transcript: "an idea: a sourdough timer" },
       },
     ]);
     expect(sent()).toEqual({ "2026Nov08-090000-Rec01.txt": "sent" });
@@ -232,6 +232,36 @@ describe("ideas-recording-sync", () => {
     expect(parseArgs(["--since"], "/d")).toMatch(/real date/);
     expect(parseArgs(["--all"], "/d")).toMatch(/unexpected/);
     expect(parseArgs(["/a", "/b"], "/d")).toMatch(/unexpected/);
+  });
+
+  describe("recorded time with the offset at the file's own instant", () => {
+    const savedTz = process.env.TZ;
+    afterEach(() => {
+      process.env.TZ = savedTz;
+    });
+
+    it.each([
+      ["America/New_York", "2026-01-15T12:00:00Z", "2026-01-15T07:00:00-05:00"],
+      ["America/New_York", "2026-07-15T12:00:00Z", "2026-07-15T08:00:00-04:00"],
+      ["Asia/Kolkata", "2026-07-15T12:00:00Z", "2026-07-15T17:30:00+05:30"],
+      ["UTC", "2026-07-15T12:00:00Z", "2026-07-15T12:00:00Z"],
+    ])("in %s, %s is %s", (tz, instant, expected) => {
+      process.env.TZ = tz;
+      const at = new Date(instant);
+      expect(zonedTime(at)).toBe(expected);
+      const offset = -at.getTimezoneOffset();
+      const sign = offset === 0 ? "Z" : `${offset > 0 ? "+" : "-"}${String(Math.floor(Math.abs(offset) / 60)).padStart(2, "0")}`;
+      expect(zonedTime(at).endsWith(offset === 0 ? "Z" : `${sign}:${String(Math.abs(offset) % 60).padStart(2, "0")}`)).toBe(true);
+      expect(new Date(zonedTime(at)).getTime()).toBe(at.getTime());
+    });
+
+    it("uses the offset at the mtime, not now, for a file made before a DST change", async () => {
+      process.env.TZ = "America/New_York";
+      token();
+      transcript("winter.txt", "x", new Date("2026-01-15T12:00:00Z"));
+      await syncRecordings(deps());
+      expect(posted[0].body.recorded).toBe("2026-01-15T07:00:00-05:00");
+    });
   });
 
   it("formats local time as YYYY-MM-DDTHH:MM:SS", () => {

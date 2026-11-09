@@ -35,6 +35,17 @@ export function localTime(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+/**
+ * A date as local time with this Mac's offset at that instant, e.g. 2026-11-09T16:25:03-05:00, so a recording made before a DST change keeps its own offset.
+ * @param offsetMinutes minutes behind UTC at `d`, as Date#getTimezoneOffset gives; injectable for tests.
+ */
+export function zonedTime(d: Date, offsetMinutes = d.getTimezoneOffset()): string {
+  if (offsetMinutes === 0) return `${localTime(d)}Z`;
+  const ahead = -offsetMinutes;
+  const abs = Math.abs(ahead);
+  return `${localTime(d)}${ahead > 0 ? "+" : "-"}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+}
+
 /** The command line after the script path, or what is wrong with it. */
 export function parseArgs(args: string[], defaultDir: string): { dir: string; existing: Existing } | string {
   let dir: string | null = null;
@@ -160,7 +171,7 @@ export async function syncRecordings(deps: SyncDeps): Promise<number> {
       const res = await deps.fetch(`${deps.hubUrl}/api/hub/ideas/recording`, {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: JSON.stringify({ file: name.slice(0, -".txt".length), recorded: localTime(mtime), transcript }),
+        body: JSON.stringify({ file: name.slice(0, -".txt".length), recorded: zonedTime(mtime), transcript }),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       status = res.status;

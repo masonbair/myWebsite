@@ -26,13 +26,24 @@ export const json = (status: number, body: unknown) => Response.json(body, { sta
 export const fail = (status: number, error: string, message: string) => json(status, { error, message });
 
 // Date rolls 2026-02-30 over to March 2, so a real time must come back unchanged.
-function isRealTime(recorded: string): boolean {
+export function isRealTime(recorded: string): boolean {
   const time = new Date(`${recorded}Z`);
   return !Number.isNaN(time.getTime()) && time.toISOString().slice(0, 19) === recorded;
 }
 
-/** Checks an upload's JSON body for a plain file name, a real local time and a non-empty transcript; a string says what is wrong. */
-export function parseRecording(raw: string): { recording: Recording; body: Record<string, unknown> } | string {
+/** How an uploader's `recorded` must look: the memo relay takes local time with no offset. */
+export type TimeShape = { valid: (recorded: string) => boolean; shape: string };
+
+const LOCAL_TIME: TimeShape = {
+  valid: (recorded) => RECORDED.test(recorded) && isRealTime(recorded),
+  shape: "YYYY-MM-DDTHH:MM:SS",
+};
+
+/**
+ * Checks an upload's JSON body for a plain file name, a real time and a non-empty transcript; a string says what is wrong.
+ * @param time the shape `recorded` must have; local time with no offset unless given.
+ */
+export function parseRecording(raw: string, time: TimeShape = LOCAL_TIME): { recording: Recording; body: Record<string, unknown> } | string {
   let body: unknown;
   try {
     body = JSON.parse(raw);
@@ -42,8 +53,8 @@ export function parseRecording(raw: string): { recording: Recording; body: Recor
   if (typeof body !== "object" || body === null || Array.isArray(body)) return "body must be an object";
   const { file, recorded, transcript } = body as Partial<Record<keyof Recording, unknown>>;
   if (typeof file !== "string" || !MEMO_FILE.test(file)) return "file must be a plain device file name";
-  if (typeof recorded !== "string" || !RECORDED.test(recorded) || !isRealTime(recorded)) {
-    return "recorded must be a real YYYY-MM-DDTHH:MM:SS";
+  if (typeof recorded !== "string" || !time.valid(recorded)) {
+    return `recorded must be a real ${time.shape}`;
   }
   if (typeof transcript !== "string" || !transcript.trim()) return "transcript must be non-empty";
   return { recording: { file, recorded, transcript }, body: body as Record<string, unknown> };

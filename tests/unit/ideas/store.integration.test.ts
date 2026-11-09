@@ -314,7 +314,7 @@ describe.skipIf(!enabled)("HiNote recordings against local Supabase", () => {
 
   async function newRecording(transcript = "an idea: a sourdough timer") {
     const file = newFile();
-    expect(await insertRecording(client(), { file, recorded: "2026-11-08T09:00:00", transcript })).toBe("created");
+    expect(await insertRecording(client(), { file, recorded: "2026-11-08T09:00:00-05:00", transcript })).toBe("created");
     return file;
   }
 
@@ -334,9 +334,9 @@ describe.skipIf(!enabled)("HiNote recordings against local Supabase", () => {
 
   it("saves a recording once per file name; a resend is a duplicate that changes nothing", async () => {
     const file = await newRecording("first words");
-    expect(await insertRecording(client(), { file, recorded: "2026-01-01T00:00:00", transcript: "other words" })).toBe("duplicate");
+    expect(await insertRecording(client(), { file, recorded: "2026-01-01T00:00:00Z", transcript: "other words" })).toBe("duplicate");
     const { data } = await client().from("idea_recordings").select("file, recorded, transcript, status").eq("file", file);
-    expect(data).toEqual([{ file, recorded: "2026-11-08T09:00:00", transcript: "first words", status: "pending" }]);
+    expect(data).toEqual([{ file, recorded: "2026-11-08T14:00:00+00:00", transcript: "first words", status: "pending" }]);
   });
 
   it("claims a recording once, saves progress, gives a passing stop back and resumes from the saved detection", async () => {
@@ -350,7 +350,7 @@ describe.skipIf(!enabled)("HiNote recordings against local Supabase", () => {
     // The winner holds a 10-minute lease; a zero-lease store takes it over, as a run after the lease would.
     const store = createIdeasJobStore(client(), 0);
     const claimed = await store.claimSource(["recording"]);
-    expect(claimed).toEqual({ kind: "recording", file, recorded: "2026-11-08T09:00:00", transcript: "an idea: a sourdough timer", saved: null });
+    expect(claimed).toEqual({ kind: "recording", file, recorded: "2026-11-08T14:00:00+00:00", transcript: "an idea: a sourdough timer", saved: null });
     const ideas = [{ title: "Sourdough timer", quote: "a timer", whole_item: false, sure: false, outcome: null }];
     await store.saveIdeas(recordingRef(file), ideas, "claude-haiku-5-5");
     await store.releaseSource(recordingRef(file));
@@ -398,9 +398,9 @@ describe.skipIf(!enabled)("HiNote recordings against local Supabase", () => {
   it("gives the review the quote a recording filed an idea from", async () => {
     const file = await newRecording();
     const store = createIdeasJobStore(client(), 0);
-    const idea = await store.addIdeaFrom({ key: recordingRef(file), footer: `From HiNote recording ${file}, recorded 2026-11-08T09:00:00` }, 0, "Q", "spoken words");
+    const idea = await store.addIdeaFrom({ key: recordingRef(file), footer: `From HiNote recording ${file}, recorded 2026-11-08 14:00 UTC` }, 0, "Q", "spoken words");
     const { data: keyed } = await client().from("items").select("id, description").eq("client_key", `idea:rec:${file}#0`);
-    expect(keyed).toEqual([{ id: idea, description: `> spoken words\n\nFrom HiNote recording ${file}, recorded 2026-11-08T09:00:00` }]);
+    expect(keyed).toEqual([{ id: idea, description: `> spoken words\n\nFrom HiNote recording ${file}, recorded 2026-11-08 14:00 UTC` }]);
     await client()
       .from("idea_recordings")
       .update({ quotes: [{ title: "Q", quote: "spoken words", whole_item: false, sure: false, outcome: { kind: "new", id: idea } }], idea_item_ids: [idea] })

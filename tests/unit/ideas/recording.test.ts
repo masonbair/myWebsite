@@ -3,7 +3,7 @@ import { handleRecording, type RecordingDeps } from "@/lib/ideas/recording";
 import type { Recording } from "@/lib/hub/memo";
 
 const TOKEN = "recording-token";
-const good = { file: "2026Nov08-090000-Rec01", recorded: "2026-11-08T09:00:00", transcript: "an idea: a sourdough timer" };
+const good = { file: "2026Nov08-090000-Rec01", recorded: "2026-11-08T09:00:00-05:00", transcript: "an idea: a sourdough timer" };
 
 /** An in-memory idea_recordings that keeps the first row per file, like `on conflict (file) do nothing`. */
 function harness() {
@@ -38,6 +38,15 @@ describe("POST /api/hub/ideas/recording", () => {
     expect(h.rows.get(good.file)).toEqual(good);
   });
 
+  it.each(["2026-11-08T14:00:00Z", "2026-11-08T09:00:00-05:00", "2026-11-08T19:30:00+05:30", "2026-11-09T04:00:00+14:00"])(
+    "accepts %s",
+    async (recorded) => {
+      const h = harness();
+      expect((await handleRecording(post({ ...good, recorded }), h.deps)).status).toBe(201);
+      expect(h.rows.get(good.file)?.recorded).toBe(recorded);
+    },
+  );
+
   it("answers a resend with 200 and keeps the first copy", async () => {
     const h = harness();
     await handleRecording(post(good), h.deps);
@@ -64,8 +73,14 @@ describe("POST /api/hub/ideas/recording", () => {
   it.each([
     ["a path as the file name", { ...good, file: "../secrets" }],
     ["a file name with a space", { ...good, file: "my memo" }],
-    ["a time that is not real", { ...good, recorded: "2026-02-30T09:00:00" }],
-    ["a time with a zone", { ...good, recorded: "2026-11-08T09:00:00Z" }],
+    ["a time that is not real", { ...good, recorded: "2026-02-30T09:00:00-05:00" }],
+    ["a time without an offset", { ...good, recorded: "2026-11-08T09:00:00" }],
+    ["an hour that is not real", { ...good, recorded: "2026-11-08T25:00:00Z" }],
+    ["an offset with minutes over 59", { ...good, recorded: "2026-11-08T09:00:00+05:75" }],
+    ["an offset over 14 hours", { ...good, recorded: "2026-11-08T09:00:00+15:00" }],
+    ["an offset without a colon", { ...good, recorded: "2026-11-08T09:00:00-0500" }],
+    ["fractional seconds", { ...good, recorded: "2026-11-08T09:00:00.123Z" }],
+    ["a date only", { ...good, recorded: "2026-11-08" }],
     ["an empty transcript", { ...good, transcript: "  " }],
     ["no file", { recorded: good.recorded, transcript: good.transcript }],
     ["a body that is not JSON", "not json"],

@@ -1,6 +1,7 @@
 import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
 import { APIConnectionError } from "@anthropic-ai/sdk";
+import { formatInstant } from "@/lib/hub/format";
 import { parseMemo } from "@/lib/hub/memo-split";
 import type { Message } from "@/lib/hub/notify";
 import type { ClaudeUsage, ModelId } from "@/lib/ai/claude";
@@ -197,12 +198,13 @@ type SourceView = {
 async function viewOf(store: IdeasJobStore, source: ClaimedSource): Promise<SourceView | null> {
   if (source.kind === "recording") {
     const name = `HiNote recording ${source.file}`;
+    const recorded = new Date(source.recorded).toISOString();
     return {
       text: source.transcript,
       prompt: "memo",
-      origin: { key: recordingRef(source.file), footer: `From ${name}, recorded ${source.recorded}` },
+      origin: { key: recordingRef(source.file), footer: `From ${name}, recorded ${formatInstant(recorded)}` },
       mentionedIn: name,
-      recorded: source.recorded,
+      recorded,
       itemId: null,
     };
   }

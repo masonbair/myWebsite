@@ -1,5 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { authorizedBody, fail, json, parseRecording, type Recording } from "@/lib/hub/memo";
+import { authorizedBody, fail, isRealTime, json, parseRecording, type Recording, type TimeShape } from "@/lib/hub/memo";
+
+const ZONED = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(Z|[+-](\d{2}):(\d{2}))$/;
+
+/** Mason travels, so a recording's time must carry the offset it was made in; real offsets stay within 14 hours. */
+const ZONED_TIME: TimeShape = {
+  valid(recorded) {
+    const m = recorded.match(ZONED);
+    if (!m || !isRealTime(m[1])) return false;
+    if (m[2] === "Z") return true;
+    const minutes = Number(m[3]) * 60 + Number(m[4]);
+    return Number(m[4]) < 60 && minutes <= 14 * 60;
+  },
+  shape: "YYYY-MM-DDTHH:MM:SS with an offset (Z or +HH:MM)",
+};
 
 export type RecordingDeps = {
   token: string | undefined;
@@ -11,7 +25,7 @@ export type RecordingDeps = {
 export async function handleRecording(request: Request, deps: RecordingDeps): Promise<Response> {
   const raw = await authorizedBody(request, deps.token, "recording upload");
   if (typeof raw !== "string") return raw;
-  const parsed = parseRecording(raw);
+  const parsed = parseRecording(raw, ZONED_TIME);
   if (typeof parsed === "string") return fail(400, "bad_request", parsed);
   const { recording } = parsed;
   try {
