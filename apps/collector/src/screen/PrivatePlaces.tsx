@@ -9,10 +9,10 @@ import { ERROR } from './theme';
 
 const NO_FIX = 'Could not get your location. Try again outside or in a minute.';
 
-/** reportPlace is null while place reporting is off; otherwise a change re-sends the place so the site updates now. */
-export function PrivatePlaces({ reportPlace }: { reportPlace: ((at: Point) => Promise<void>) | null }) {
+/** reportPlace is null while place reporting is off; otherwise a change re-sends the place so the site updates now. startOpen shows the mark-private form at once. */
+export function PrivatePlaces({ reportPlace, startOpen = false }: { reportPlace: ((at: Point) => Promise<void>) | null; startOpen?: boolean }) {
   const [labels, setLabels] = useState<string[]>([]);
-  const [asking, setAsking] = useState(false);
+  const [asking, setAsking] = useState(startOpen);
   const [label, setLabel] = useState('');
   const [error, setError] = useState<string | null>(null);
 

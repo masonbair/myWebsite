@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import * as Location from 'expo-location';
+import { Alert } from 'react-native';
 import App from '../../App';
 import { pickDaylioFolder } from '../daylio/daylioJob';
 import { runFix } from '../health/fix';
@@ -110,8 +111,59 @@ it('hints to mark home private while reporting is off and no private place exist
   await AsyncStorage.clear();
   await show();
   expect(await screen.findByText(hint)).toBeTruthy();
+  const ask = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
+    buttons?.find((b) => b.text === 'No, send')?.onPress?.();
+  });
   await fireEvent(screen.getByRole('switch'), 'valueChange', true);
   await waitFor(() => expect(screen.queryByText(hint)).toBeNull());
+  ask.mockRestore();
+});
+
+describe('first-send question', () => {
+  const answer = (text: string) =>
+    jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
+      buttons?.find((b) => b.text === text)?.onPress?.();
+    });
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  it('asks before turning on with no private places; "Mark private first" keeps it off and opens the form', async () => {
+    const ask = answer('Mark private first');
+    await show();
+    await waitFor(() => expect(syncPlaceTask).toHaveBeenCalledWith('off'));
+    (syncPlaceTask as jest.Mock).mockClear();
+    await fireEvent(screen.getByRole('switch'), 'valueChange', true);
+    await screen.findByPlaceholderText('Name for this place');
+    expect(ask).toHaveBeenCalledWith('Private place', 'Are you at a private place (home or family) right now?', expect.any(Array), expect.anything());
+    expect(screen.getByRole('switch').props.value).toBe(false);
+    expect(await AsyncStorage.getItem('place-task-wanted')).toBeNull();
+    expect(syncPlaceTask).not.toHaveBeenCalledWith('on');
+    expect(runPlaceTask).not.toHaveBeenCalled();
+    ask.mockRestore();
+  });
+
+  it('"No, send" stores the choice and starts the task', async () => {
+    const ask = answer('No, send');
+    await show();
+    await fireEvent(screen.getByRole('switch'), 'valueChange', true);
+    await waitFor(() => expect(screen.getByRole('switch').props.value).toBe(true));
+    expect(await AsyncStorage.getItem('place-task-wanted')).toBe('true');
+    expect(syncPlaceTask).toHaveBeenCalledWith('on');
+    ask.mockRestore();
+  });
+
+  it('does not ask when a private place exists', async () => {
+    const ask = jest.spyOn(Alert, 'alert');
+    await AsyncStorage.setItem('private-places', JSON.stringify([{ label: 'test-a', latitude: 1, longitude: 1, radiusKm: 25 }]));
+    await show();
+    await screen.findByText('test-a');
+    await fireEvent(screen.getByRole('switch'), 'valueChange', true);
+    await waitFor(() => expect(screen.getByRole('switch').props.value).toBe(true));
+    expect(ask).not.toHaveBeenCalled();
+    ask.mockRestore();
+  });
 });
 
 it('shows no hint once a private place exists', async () => {

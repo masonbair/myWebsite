@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { runFix } from './src/health/fix';
 import type { HealthFix } from './src/health/health';
@@ -13,16 +13,32 @@ import { signInWithGitHub, signOut, type SignInResult } from './src/lib/signIn';
 import { ABOUT, type Point } from './src/place/nearestPlace';
 import { coarseFix } from './src/place/coarseFix';
 import { runPlaceTask, syncPlaceTask } from './src/place/placeTask';
+import { turnOnPlaceReporting, type FirstSendAnswer } from './src/place/turnOn';
 import { Button } from './src/screen/Button';
 import { HealthList } from './src/screen/HealthList';
 import { PrivatePlaces } from './src/screen/PrivatePlaces';
 import { ACCENT, BACKGROUND, ERROR } from './src/screen/theme';
+
+function askAtPrivatePlace(): Promise<FirstSendAnswer> {
+  return new Promise((resolve) => {
+    Alert.alert(
+      'Private place',
+      'Are you at a private place (home or family) right now?',
+      [
+        { text: 'Mark private first', onPress: () => resolve('mark-first') },
+        { text: 'No, send', onPress: () => resolve('send') },
+      ],
+      { cancelable: true, onDismiss: () => resolve('mark-first') },
+    );
+  });
+}
 
 export default function App() {
   const { items, input, refresh } = useHealth();
   const [result, setResult] = useState<SignInResult | null>(null);
   const [locationWanted, setLocationWanted] = useState(false);
   const [running, setRunning] = useState(false);
+  const [markRequest, setMarkRequest] = useState(0);
 
   const isSignedIn = input === null ? null : input.signedIn;
   const canTrack = input?.backgroundLocation === 'granted';
@@ -87,8 +103,14 @@ export default function App() {
   }
 
   async function handleLocationSwitch(next: boolean) {
-    setLocationWanted(next);
-    await writeJson(PLACE_TASK_WANTED_KEY, next);
+    if (next) {
+      const turnedOn = await turnOnPlaceReporting(askAtPrivatePlace);
+      if (!turnedOn) setMarkRequest((n) => n + 1);
+      setLocationWanted(turnedOn);
+    } else {
+      setLocationWanted(false);
+      await writeJson(PLACE_TASK_WANTED_KEY, false);
+    }
     await refresh();
   }
 
@@ -127,7 +149,7 @@ export default function App() {
         <Switch value={canTrack && locationWanted} disabled={!canTrack} onValueChange={handleLocationSwitch} trackColor={{ true: ACCENT }} />
       </View>
 
-      <PrivatePlaces reportPlace={canTrack && locationWanted ? reportPlaceNow : null} />
+      <PrivatePlaces key={markRequest} startOpen={markRequest > 0} reportPlace={canTrack && locationWanted ? reportPlaceNow : null} />
       {input?.daylioFolder && <Button title="Change Daylio folder" onPress={handlePickFolder} />}
 
       <Text style={styles.heading}>Setup</Text>
