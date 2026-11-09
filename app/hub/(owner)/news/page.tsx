@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { RetryIssueButton } from "@/components/hub/RetryIssueButton";
-import { focusRing, panel } from "@/components/hub/styles";
+import { focusRing, panel, smallButton, sticker } from "@/components/hub/styles";
+import type { ReactNode } from "react";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { readNewsOverview, readPageCosts, type IssueRow } from "@/lib/news/reader";
 import { serviceClient, sessionClient } from "@/lib/supabase/server";
@@ -43,7 +44,7 @@ export default async function NewsPage() {
       ) : (
         <>
           <section aria-labelledby="costs" className={`${panel} mt-8 p-5 sm:p-6`}>
-            <h2 id="costs" className="text-sm font-semibold text-mute">
+            <h2 id="costs" className="text-sm font-semibold text-ink">
               Cost this month
             </h2>
             {overview.paused && (
@@ -63,50 +64,39 @@ export default async function NewsPage() {
             </p>
           </section>
 
-          <section aria-labelledby="held" className="mt-10">
-            <h2 id="held" className="mb-4 px-1 text-lg font-semibold tracking-tight text-ink">
-              Held back
-            </h2>
-            {overview.quarantined.length === 0 ? (
-              <p className="px-1 text-sm text-mute">Nothing held back.</p>
-            ) : (
-              <ul className={`${panel} divide-y divide-ink/5`}>
-                {overview.quarantined.map((q) => (
-                  <li key={q.id}>
-                    <Link
-                      href={`/hub/news/quarantine/${q.id}`}
-                      className={`flex items-center justify-between gap-4 rounded-tile px-5 py-4 hover:bg-ink/5 sm:px-6 ${focusRing}`}
-                    >
-                      <span className="min-w-0">
-                        <span className="block font-medium break-words text-ink">{q.subject || "No subject"}</span>
-                        <span className="block text-sm break-all text-mute">
-                          {q.from || "Unknown sender"} · {timeAgo(q.receivedAt)}
-                        </span>
-                      </span>
-                      <span className="inline-flex h-9 shrink-0 items-center rounded-full bg-ink/5 px-3.5 text-sm font-medium text-ink">
-                        View
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <ListSection id="held" title="Held back" total={overview.quarantined.length} empty="Nothing held back.">
+            {overview.quarantined.map((q) => (
+              <li key={q.id}>
+                <Link
+                  href={`/hub/news/quarantine/${q.id}`}
+                  className={`${sticker} flex items-center justify-between gap-4 bg-surface px-4 py-3 transition-[translate] duration-200 ease-spring hover:-translate-y-px ${focusRing}`}
+                >
+                  <span className="min-w-0">
+                    <span className="block leading-snug font-medium break-words text-ink">{q.subject || "No subject"}</span>
+                    <span className="mt-1 block text-xs break-all text-mute">
+                      {q.from || "Unknown sender"} · {timeAgo(q.receivedAt)}
+                    </span>
+                  </span>
+                  <span className={`${smallButton} shrink-0`}>View</span>
+                </Link>
+              </li>
+            ))}
+          </ListSection>
 
           <section aria-labelledby="issues" className="mt-10">
-            <h2 id="issues" className="mb-4 px-1 text-lg font-semibold tracking-tight text-ink">
+            <h2 id="issues" className={sectionHeading}>
               Latest issues
             </h2>
             {overview.issues.length === 0 ? (
-              <p className="px-1 text-sm text-mute">No issues yet.</p>
+              <p className={emptyBox}>No issues yet.</p>
             ) : (
-              <div className="grid gap-4">
+              <div className="grid gap-6">
                 {overview.issues.map((s) => (
-                  <section key={s.sourceId} aria-labelledby={`src-${s.sourceId}`} className={`${panel} p-5 sm:p-6`}>
-                    <h3 id={`src-${s.sourceId}`} className="text-sm font-semibold text-mute">
+                  <section key={s.sourceId} aria-labelledby={`src-${s.sourceId}`}>
+                    <h3 id={`src-${s.sourceId}`} className="mb-2 px-1 text-xs font-bold tracking-[0.04em] text-mute">
                       {s.sourceName}
                     </h3>
-                    <ul className="mt-3 divide-y divide-ink/5">
+                    <ul className="grid gap-2.5">
                       {s.issues.map((i) => (
                         <IssueItem key={i.id} issue={i} />
                       ))}
@@ -117,23 +107,14 @@ export default async function NewsPage() {
             )}
           </section>
 
-          <section aria-labelledby="topics" className="mt-10">
-            <h2 id="topics" className="mb-4 px-1 text-lg font-semibold tracking-tight text-ink">
-              Topics Claude suggested
-            </h2>
-            {overview.suggestedTopics.length === 0 ? (
-              <p className="px-1 text-sm text-mute">No suggestions yet.</p>
-            ) : (
-              <ul className={`${panel} divide-y divide-ink/5`}>
-                {overview.suggestedTopics.map((t) => (
-                  <li key={t.topic} className="flex items-center justify-between gap-4 px-5 py-3 sm:px-6">
-                    <span className="break-words text-ink">{t.topic}</span>
-                    <span className="text-sm text-mute">{t.count}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <ListSection id="topics" title="Topics Claude suggested" total={overview.suggestedTopics.length} empty="No suggestions yet.">
+            {overview.suggestedTopics.map((t) => (
+              <li key={t.topic} className={`${sticker} flex items-center justify-between gap-4 bg-surface px-4 py-3`}>
+                <span className="break-words text-ink">{t.topic}</span>
+                <span className="font-mono text-sm text-mute">{t.count}</span>
+              </li>
+            ))}
+          </ListSection>
         </>
       )}
     </main>
@@ -144,17 +125,32 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-sm text-mute">{label}</dt>
-      <dd className="text-2xl font-semibold tracking-tight text-ink">{value}</dd>
+      <dd className={`text-2xl tracking-tight text-ink ${value.startsWith("$") ? "font-mono font-medium" : "font-semibold"}`}>{value}</dd>
     </div>
+  );
+}
+
+const sectionHeading = "mb-3 flex items-baseline gap-2 px-1 text-sm font-semibold text-ink";
+const emptyBox = "rounded-tile border-2 border-dashed border-line/40 px-5 py-4 text-sm text-mute";
+
+function ListSection({ id, title, total, empty, children }: { id: string; title: string; total: number; empty: string; children: ReactNode }) {
+  return (
+    <section aria-labelledby={id} className="mt-10">
+      <h2 id={id} className={sectionHeading}>
+        {title}
+        <span className="font-normal text-mute">{total}</span>
+      </h2>
+      {total === 0 ? <p className={emptyBox}>{empty}</p> : <ul className="grid gap-2.5">{children}</ul>}
+    </section>
   );
 }
 
 function IssueItem({ issue }: { issue: IssueRow }) {
   return (
-    <li className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 py-3">
+    <li className={`${sticker} flex flex-wrap items-start justify-between gap-x-4 gap-y-2 bg-surface px-4 py-3`}>
       <div className="min-w-0">
-        <p className="font-medium break-words text-ink">{issue.subject || "No subject"}</p>
-        <p className="text-sm text-mute">
+        <p className="leading-snug font-medium break-words text-ink">{issue.subject || "No subject"}</p>
+        <p className="mt-1 text-xs text-mute">
           <span className="font-semibold text-ink">{STATUS_LABEL[issue.status] ?? issue.status}</span> · {timeAgo(issue.receivedAt)}
         </p>
         {issue.lastError && <p className="mt-1 text-sm break-words text-mute">{issue.lastError}</p>}

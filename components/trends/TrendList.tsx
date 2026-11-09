@@ -1,13 +1,14 @@
 import { ArrowRight, TrendDown, TrendUp } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
+import { focusRing, tag } from "@/components/ui/sticker";
 import { moveText, toneWord, type Mover, type SubjectSummary, type ToneWord } from "@/lib/news/movers";
 
-// Diverging scale: warm tea for negative, the accent for positive, plain ink tint at the middle.
+// Diverging scale: tea for negative, accent for positive, plain surface at the middle; the word carries the meaning.
 const TONE_STYLE: Record<ToneWord, string> = {
   "mostly negative": "bg-tea text-night",
-  "leaning negative": "bg-tea/35 text-ink",
-  mixed: "bg-ink/[0.06] text-ink",
-  "leaning positive": "bg-accent/30 text-ink",
+  "leaning negative": "bg-tea/40 text-ink",
+  mixed: "bg-surface text-ink",
+  "leaning positive": "bg-accent/40 text-ink",
   "mostly positive": "bg-accent text-night",
 };
 
@@ -15,7 +16,7 @@ export const subjectHref = (s: { kind: string; key: string }) => `/trends/${s.ki
 
 export function TonePill({ tone }: { tone: number }) {
   const word = toneWord(tone);
-  return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${TONE_STYLE[word]}`}>{word}</span>;
+  return <span className={`${tag} border-line text-[11px] ${TONE_STYLE[word]}`}>{word}</span>;
 }
 
 export function MoveBadge({ mover }: { mover: Pick<Mover, "direction" | "base"> }) {
@@ -33,14 +34,14 @@ export function MoveBadge({ mover }: { mover: Pick<Mover, "direction" | "base"> 
 /** One kind's subjects as rows that each link to the subject's page. */
 export function TrendList({ subjects, movers }: { subjects: SubjectSummary[]; movers: Map<string, Mover> }) {
   return (
-    <ol className="flex flex-col gap-1">
+    <ol className="flex flex-col divide-y-2 divide-dashed divide-line/30">
       {subjects.map((s) => {
         const mover = movers.get(`${s.kind}:${s.key}`);
         return (
           <li key={s.key}>
             <Link
               href={subjectHref(s)}
-              className="group relative grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1.5 rounded-[calc(1.5rem-0.375rem-0.5rem)] px-4 py-3.5 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:grid-cols-[minmax(0,1fr)_6.5rem_minmax(0,15rem)_9rem_1.25rem]"
+              className={`group relative grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1.5 rounded-xl px-4 py-3.5 md:grid-cols-[minmax(0,1fr)_6.5rem_minmax(0,15rem)_9rem_1.25rem] ${focusRing}`}
             >
               <span
                 aria-hidden
@@ -74,5 +75,5 @@ export function TrendList({ subjects, movers }: { subjects: SubjectSummary[]; mo
 }
 
 export function TrendsFooter() {
-  return <p className="mt-12 max-w-[60ch] text-sm text-mute">Counts of what six newsletters I read talked about. Not financial advice.</p>;
+  return <p className="mt-12 max-w-[60ch] px-1 text-sm text-mute">Counts of what six newsletters I read talked about. Not financial advice.</p>;
 }

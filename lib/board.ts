@@ -34,3 +34,11 @@ export function lowerSpans(keys: string[]): Map<string, string> {
   const odd = keys.length % 2 === 1;
   return new Map(keys.map((k, i) => [k, odd && i === 0 ? FULL : PAIR[(i - (odd ? 1 : 0)) % 2]]));
 }
+
+export const MAX_BOARD_TILES = 8;
+
+/** Which tiles below the first screen to show; news gives way first when the board would pass the cap. */
+export function lowerKeys(firstScreen: number, has: { projects: boolean; news: boolean; bake: boolean }): string[] {
+  const keys = (["projects", "news", "bake"] as const).filter((k) => has[k]);
+  return firstScreen + keys.length > MAX_BOARD_TILES ? keys.filter((k) => k !== "news") : [...keys];
+}

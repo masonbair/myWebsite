@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getBoard, lowerSpans } from "@/lib/board";
+import { getBoard, lowerKeys, lowerSpans, MAX_BOARD_TILES } from "@/lib/board";
 import { parseNow, readNow } from "@/lib/now";
 import type { GithubActivity } from "@/lib/github";
 import type { PublicTrends } from "@/lib/news/public";
@@ -90,4 +90,28 @@ describe("lowerSpans", () => {
       expect(shortRows(spans, "md", 6)).toEqual([]);
     });
   }
+});
+
+describe("lowerKeys", () => {
+  const flags = [true, false];
+
+  it(`keeps the board at ${MAX_BOARD_TILES} tiles or fewer in every combination`, () => {
+    for (const firstScreen of [3, 4, 5, 6])
+      for (const projects of flags)
+        for (const news of flags)
+          for (const bake of flags)
+            expect(firstScreen + lowerKeys(firstScreen, { projects, news, bake }).length).toBeLessThanOrEqual(MAX_BOARD_TILES);
+  });
+
+  it("shows news when there is room", () => {
+    expect(lowerKeys(4, { projects: true, news: true, bake: true })).toEqual(["projects", "news", "bake"]);
+  });
+
+  it("drops news first when the board would pass the cap", () => {
+    expect(lowerKeys(6, { projects: true, news: true, bake: true })).toEqual(["projects", "bake"]);
+  });
+
+  it("leaves news out when it has fewer than three rising topics", () => {
+    expect(lowerKeys(4, { projects: false, news: false, bake: true })).toEqual(["bake"]);
+  });
 });

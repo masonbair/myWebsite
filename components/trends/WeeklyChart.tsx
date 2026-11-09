@@ -1,3 +1,4 @@
+import { focusRing, tag } from "@/components/ui/sticker";
 import { shortDate, toneWord, type Week } from "@/lib/news/movers";
 
 // The charts stretch to their box, so bars keep a fixed height on phones instead of shrinking with the width.
@@ -45,7 +46,7 @@ function Axis({ weeks }: { weeks: Week[] }) {
 function Table({ weeks, caption }: { weeks: Week[]; caption: string }) {
   return (
     <details className="mt-5 text-sm text-mute">
-      <summary className="cursor-pointer rounded-full font-medium text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+      <summary className={`${tag} cursor-pointer border-line bg-surface px-3 py-1 text-sm text-ink ${focusRing}`}>
         Show as a table
       </summary>
       <div className="mt-3 max-h-72 overflow-y-auto">
@@ -120,11 +121,11 @@ export function ToneChart({ weeks }: { weeks: Week[] }) {
     <figure>
       <ul className="mb-4 flex flex-wrap gap-x-5 gap-y-1 text-sm text-mute">
         <li className="flex items-center gap-2">
-          <span aria-hidden className="size-2.5 rounded-sm bg-accent" />
+          <span aria-hidden className="size-2.5 rounded-sm border-[1.5px] border-line bg-accent" />
           Positive
         </li>
         <li className="flex items-center gap-2">
-          <span aria-hidden className="size-2.5 rounded-sm bg-tea" />
+          <span aria-hidden className="size-2.5 rounded-sm border-[1.5px] border-line bg-tea" />
           Negative
         </li>
       </ul>

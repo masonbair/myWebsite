@@ -39,7 +39,7 @@ export default async function QuarantinePage({ params }: PageProps<"/hub/news/qu
       <p className="mt-2 max-w-[60ch] text-mute">This email did not match a newsletter, so it was held back. Links open in a new tab.</p>
 
       <section aria-labelledby="release" className={`${panel} mt-8 p-5 sm:p-6`}>
-        <h2 id="release" className="mb-1 text-sm font-semibold text-mute">
+        <h2 id="release" className="mb-1 text-sm font-semibold text-ink">
           Release
         </h2>
         <p className="mb-4 max-w-[60ch] text-sm text-mute">
@@ -49,13 +49,13 @@ export default async function QuarantinePage({ params }: PageProps<"/hub/news/qu
       </section>
 
       <section aria-labelledby="body" className={`${panel} mt-8 p-5 sm:p-6`}>
-        <h2 id="body" className="mb-3 text-sm font-semibold text-mute">
+        <h2 id="body" className="mb-3 text-sm font-semibold text-ink">
           Email text
         </h2>
         {text === null ? (
-          <p className="text-sm text-mute">The raw email could not be loaded.</p>
+          <p className="rounded-tile border-2 border-dashed border-line/40 px-5 py-4 text-sm text-mute">The raw email could not be loaded.</p>
         ) : text === "" ? (
-          <p className="text-sm text-mute">This email has no text.</p>
+          <p className="rounded-tile border-2 border-dashed border-line/40 px-5 py-4 text-sm text-mute">This email has no text.</p>
         ) : (
           <EmailText text={text} />
         )}

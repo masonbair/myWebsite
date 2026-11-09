@@ -1,4 +1,4 @@
-import { lowerSpans, type Board as BoardData } from "@/lib/board";
+import { lowerKeys, lowerSpans, type Board as BoardData } from "@/lib/board";
 import { movers, risingTopics } from "@/lib/news/movers";
 import type { Photo } from "@/lib/now";
 import { Reveal } from "./Reveal";
@@ -26,9 +26,8 @@ export function Board({ board }: { board: BoardData }) {
   const online = (github?.online ?? []).flatMap((r) => (r.homepage ? [{ ...r, homepage: r.homepage }] : []));
   const photos = now.photos.length > 0 ? now.photos : [FALLBACK_PHOTO];
   const rising = trends ? risingTopics(movers(trends.rows, trends.today), 3) : [];
-  const lower = lowerSpans(
-    [online.length > 0 && "projects", rising.length >= 3 && "news", now.bake && "bake"].filter((k): k is string => !!k),
-  );
+  const shown = lowerKeys(hasLocation ? 4 : 3, { projects: online.length > 0, news: rising.length >= 3, bake: !!now.bake });
+  const lower = lowerSpans(shown);
 
   const tiles = [
     { key: "hello", span: "md:col-span-6 md:row-span-2 lg:col-span-6", node: <HelloTile /> },
@@ -43,13 +42,13 @@ export function Board({ board }: { board: BoardData }) {
       node: <PhotoTile photos={photos.map(({ src, alt }) => ({ src, alt }))} />,
     },
     { key: "github", span: hasLocation ? "md:col-span-3 lg:col-span-3" : TALL, node: <GithubTile github={github} /> },
-    online.length > 0 && {
+    shown.includes("projects") && {
       key: "projects",
       span: lower.get("projects"),
       node: <ProjectsTile repos={online} />,
     },
-    rising.length >= 3 && { key: "news", span: lower.get("news"), node: <NewsTile rising={rising} /> },
-    now.bake && { key: "bake", span: lower.get("bake"), node: <BakeTile bake={now.bake} /> },
+    shown.includes("news") && { key: "news", span: lower.get("news"), node: <NewsTile rising={rising} /> },
+    shown.includes("bake") && now.bake && { key: "bake", span: lower.get("bake"), node: <BakeTile bake={now.bake} /> },
   ].filter((t) => !!t);
 
   return (

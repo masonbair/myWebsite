@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { ArrowLeft, ArrowUpRight } from "@phosphor-icons/react/dist/ssr";
 import { Reveal } from "@/components/board/Reveal";
-import { Tile } from "@/components/board/Tile";
+import { Prompt, Tile } from "@/components/board/Tile";
+import { focusRing, tag } from "@/components/ui/sticker";
 import { JsonLd } from "@/components/JsonLd";
 import { MoveBadge, TonePill, TrendsFooter } from "@/components/trends/TrendList";
 import { CountChart, ToneChart } from "@/components/trends/WeeklyChart";
@@ -64,17 +65,18 @@ export default async function SubjectPage({ params }: Props) {
 
       <Link
         href="/trends"
-        className="group inline-flex items-center gap-2 rounded-full bg-ink/5 py-2 pr-4 pl-3 text-sm font-medium text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className={`group inline-flex items-center gap-2 rounded-full border-2 border-line bg-surface py-1.5 pr-4 pl-3 text-sm font-semibold text-ink shadow-sticker-sm ${focusRing}`}
       >
         <ArrowLeft weight="light" size={16} aria-hidden className="transition-transform duration-300 ease-spring group-hover:-translate-x-0.5" />
         All trends
       </Link>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-12">
-        <Reveal index={0} className="lg:col-span-4">
-          <Tile core="flex h-full flex-col bg-surface p-7 md:p-10">
-            <p className="text-sm font-medium text-mute">{subject.kind === "topic" ? "Topic" : "Company"}</p>
-            <h1 className="mt-2 text-4xl leading-[0.95] font-extrabold tracking-tighter break-words text-ink md:text-5xl">
+      <div className="mt-5 grid gap-4 md:gap-5 lg:grid-cols-12">
+        <div className="lg:col-span-4">
+          <Tile tilt="left" core="flex h-full flex-col bg-surface p-7 md:p-10">
+            <Prompt className="text-accent-ink">cd ./that-page</Prompt>
+            <span className={`${tag} mt-2 self-start border-line bg-tea text-[11px] text-night`}>{subject.kind === "topic" ? "Topic" : "Company"}</span>
+            <h1 className="mt-3 text-4xl leading-[0.95] font-bold tracking-[-0.04em] break-words text-ink md:text-5xl">
               {subject.label}
             </h1>
             {subject.ticker && <p className="mt-3 font-mono text-sm text-mute">{subject.ticker}</p>}
@@ -91,24 +93,24 @@ export default async function SubjectPage({ params }: Props) {
               ))}
             </dl>
           </Tile>
-        </Reveal>
+        </div>
 
-        <Reveal index={1} className="lg:col-span-8">
+        <div className="lg:col-span-8">
           <section aria-labelledby="weekly-title" className="h-full">
             <Tile core="bg-surface p-7 md:p-10">
-              <h2 id="weekly-title" className="text-2xl font-bold tracking-tight text-ink">
+              <h2 id="weekly-title" className="text-3xl leading-none font-bold tracking-[-0.04em] text-ink">
                 Stories per week
               </h2>
               <p className="mt-1 mb-6 text-sm text-mute">Last 12 months. Open the table for exact counts.</p>
               <CountChart weeks={weeks} />
             </Tile>
           </section>
-        </Reveal>
+        </div>
 
         <Reveal index={2} className="lg:col-span-7">
           <section aria-labelledby="tone-title" className="h-full">
             <Tile core="bg-surface p-7 md:p-10">
-              <h2 id="tone-title" className="text-2xl font-bold tracking-tight text-ink">
+              <h2 id="tone-title" className="text-3xl leading-none font-bold tracking-[-0.04em] text-ink">
                 Tone per week
               </h2>
               <p className="mt-1 mb-5 text-sm text-mute">How positive or negative the coverage read, week by week.</p>
@@ -119,8 +121,8 @@ export default async function SubjectPage({ params }: Props) {
 
         <Reveal index={3} className="lg:col-span-5">
           <section aria-labelledby="coverage-title" className="h-full">
-            <Tile core="bg-surface p-7 md:p-10">
-              <h2 id="coverage-title" className="text-2xl font-bold tracking-tight text-ink">
+            <Tile tilt="right" core="h-full bg-tea p-7 text-night md:p-10">
+              <h2 id="coverage-title" className="text-3xl leading-none font-bold tracking-[-0.04em]">
                 Who covered it
               </h2>
               {coverage.length > 0 ? (
@@ -131,7 +133,7 @@ export default async function SubjectPage({ params }: Props) {
                         href={c.publicUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="group inline-flex items-center gap-1.5 rounded-full bg-ink/5 py-1.5 pr-3 pl-3.5 text-sm font-medium text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        className="group inline-flex items-center gap-1.5 rounded-full border-2 border-line bg-surface py-1 pr-3 pl-3.5 text-sm font-semibold text-ink shadow-sticker-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-night"
                       >
                         {`${c.sourceName}, ${shortDate(c.day)}`}
                         <ArrowUpRight
@@ -145,7 +147,7 @@ export default async function SubjectPage({ params }: Props) {
                   ))}
                 </ul>
               ) : (
-                <p className="mt-3 text-mute">No newsletter links for this one yet.</p>
+                <p className="mt-3">No newsletter links for this one yet.</p>
               )}
             </Tile>
           </section>

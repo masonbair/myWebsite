@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Newspaper, TrendUp } from "@phosphor-icons/react/dist/ssr";
 import { Reveal } from "@/components/board/Reveal";
-import { Tile } from "@/components/board/Tile";
+import { Prompt, Tile } from "@/components/board/Tile";
+import { tag } from "@/components/ui/sticker";
 import { JsonLd } from "@/components/JsonLd";
 import {
   subjectHref,
@@ -57,10 +58,11 @@ export default async function TrendsPage() {
         }}
       />
 
-      <div className="grid gap-4 lg:grid-cols-12">
-        <Reveal index={0} className="lg:col-span-7">
+      <div className="grid gap-4 md:gap-5 lg:grid-cols-12">
+        <div className="lg:col-span-7">
           <Tile core="flex h-full flex-col bg-surface p-7 md:p-12">
-            <h1 className="max-w-[16ch] text-4xl leading-[0.95] font-extrabold tracking-tighter text-ink md:text-6xl">
+            <Prompt className="text-accent-ink">cat trends.txt</Prompt>
+            <h1 className="mt-2 max-w-[16ch] text-5xl leading-[0.95] font-bold tracking-[-0.04em] text-ink md:text-6xl">
               What six newsletters talked about
             </h1>
             <p className="mt-6 max-w-[52ch] text-lg leading-relaxed text-mute">
@@ -78,25 +80,28 @@ export default async function TrendsPage() {
               ))}
             </dl>
           </Tile>
-        </Reveal>
+        </div>
 
-        <Reveal index={1} className="lg:col-span-5">
+        <div className="lg:col-span-5">
           <section aria-labelledby="rising-title" className="h-full">
-            <Tile core="flex h-full flex-col bg-accent p-7 text-night md:p-10">
-              <TrendUp weight="light" size={36} aria-hidden />
+            <Tile tilt="right" core="flex h-full flex-col bg-accent p-7 text-night md:p-10">
+              <div className="flex items-start justify-between gap-4">
+                <span className={`${tag} border-night bg-surface text-[11px] text-ink`}>This week</span>
+                <TrendUp weight="light" size={40} aria-hidden />
+              </div>
               <h2
                 id="rising-title"
-                className="mt-6 text-2xl font-bold tracking-tight"
+                className="mt-6 text-3xl leading-none font-bold tracking-[-0.04em]"
               >
                 Topics rising this week
               </h2>
               {rising.length > 0 ? (
-                <ul className="mt-5 flex flex-col gap-2">
+                <ul className="mt-5 flex flex-col divide-y-2 divide-dashed divide-night/30">
                   {rising.map((m) => (
                     <li key={`${m.kind}:${m.key}`}>
                       <Link
                         href={subjectHref(m)}
-                        className="flex flex-col rounded-lg outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-night sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
+                        className="flex flex-col rounded-lg py-2 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-night sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
                       >
                         <span className="min-w-0 truncate text-lg font-semibold underline-offset-4 hover:underline">
                           {m.label}
@@ -117,43 +122,46 @@ export default async function TrendsPage() {
               )}
             </Tile>
           </section>
-        </Reveal>
+        </div>
       </div>
 
       {topics.length === 0 && companies.length === 0 ? (
-        <Reveal index={2} className="mt-4 block">
-          <Tile core="flex flex-col items-start gap-4 bg-surface p-7 md:p-12">
+        <Reveal index={2} className="mt-4 block md:mt-5">
+          <div className="rounded-tile border-2 border-dashed border-line/40 px-7 py-10 md:px-12">
             <Newspaper
               weight="light"
-              size={36}
+              size={40}
               className="text-accent-ink"
               aria-hidden
             />
-            <p className="text-2xl font-bold tracking-tight text-ink">
+            <p className="mt-4 text-2xl font-bold tracking-tight text-ink">
               Nothing to show yet.
             </p>
-            <p className="max-w-[52ch] text-mute">
+            <p className="mt-2 max-w-[52ch] text-mute">
               Counts show up here once the first newsletters have been read.
             </p>
-          </Tile>
+          </div>
         </Reveal>
       ) : (
-        <div className="mt-4 grid gap-4">
+        <div className="mt-4 grid gap-4 md:mt-5 md:gap-5 lg:grid-cols-12">
           {[
-            { id: "topics", title: "Topics", subjects: topics },
-            { id: "companies", title: "Companies", subjects: companies },
-          ].map(({ id, title, subjects }, i) =>
+            { id: "topics", title: "Topics", prompt: "ls topics/", subjects: topics },
+            { id: "companies", title: "Companies", prompt: "ls companies/", subjects: companies },
+          ].map(({ id, title, prompt, subjects }, i) =>
             subjects.length > 0 ? (
-              <Reveal key={id} index={i + 2}>
+              <Reveal key={id} index={i + 2} className="lg:col-span-12">
                 <section aria-labelledby={`${id}-title`}>
                   <Tile core="bg-surface p-3 md:p-6">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-4 pb-3">
-                      <h2
-                        id={`${id}-title`}
-                        className="text-2xl font-bold tracking-tight text-ink md:text-3xl"
-                      >
-                        {title}
-                      </h2>
+                    <div className="flex flex-wrap items-end justify-between gap-2 px-4 pt-4 pb-3">
+                      <div>
+                        <Prompt className="text-accent-ink">{prompt}</Prompt>
+                        <h2
+                          id={`${id}-title`}
+                          className="mt-2 text-3xl leading-none font-bold tracking-[-0.04em] text-ink md:text-4xl"
+                        >
+                          {title}
+                        </h2>
+                      </div>
                       <p className="text-sm text-mute">
                         Stories in the last 30 days
                       </p>
