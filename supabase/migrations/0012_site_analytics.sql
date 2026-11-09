@@ -72,7 +72,7 @@ $$;
 revoke execute on function public.analytics_roll_visitors() from public, anon, authenticated;
 grant execute on function public.analytics_roll_visitors() to service_role;
 
--- 00:10 Eastern (05:10 UTC; 04:10 in summer is still after midnight Eastern).
+-- 05:10 UTC is 00:10 EST or 01:10 EDT, always just after the Eastern day ends.
 select cron.schedule('analytics-roll-visitors', '10 5 * * *', $$ select public.analytics_roll_visitors() $$);
 create trigger analytics_visitors_no_update before update on public.analytics_visitors
   for each row execute function public.hub_no_delete();
@@ -121,7 +121,8 @@ begin
     where day = today and path = v_path and kind = p_kind and agent = v_agent and ref_host = v_ref
       and from_assistant = v_assistant and country = v_country and ua_sample = v_ua
   ) and (select count(*) from public.analytics_daily where day = today) >= 5000 then
-    v_path := 'other'; v_agent := 'overflow'; v_ref := ''; v_assistant := ''; v_country := ''; v_ua := '';
+    -- Overflow counts as plain bot traffic so it never shows up as a named crawler or a person.
+    p_kind := 'bot'; v_path := 'other'; v_agent := 'overflow'; v_ref := ''; v_assistant := ''; v_country := ''; v_ua := '';
   end if;
 
   insert into public.analytics_daily as d (day, path, kind, agent, ref_host, from_assistant, country, ua_sample, hits)
@@ -196,7 +197,7 @@ as $$
                  from d group by day) agg on agg.day = g.day
     ),
     'pages', (
-      select coalesce(jsonb_agg(p order by p.views desc), '[]') from (
+      select coalesce(jsonb_agg(p order by p.views desc nulls last, p."botReads" desc nulls last), '[]') from (
         select w.path, sum(w.hits) filter (where w.kind = 'human') as views,
                sum(w.hits) filter (where w.kind <> 'human') as "botReads",
                (select coalesce(sum(wu.visitors), 0) from week_u wu where wu.path = w.path) as visitors
@@ -216,7 +217,7 @@ as $$
         select agent, kind, sum(hits) as hits, max(day) as "lastSeen",
                jsonb_object_agg_strict(path, hits) as "byPath"
         from (select agent, kind, path, sum(hits) as hits, max(day) as day from d
-              where kind in ('ai', 'search') group by agent, kind, path) per_path
+              where kind in ('ai', 'search') and agent <> 'overflow' group by agent, kind, path) per_path
         group by agent, kind
       ) a
     ),
@@ -235,7 +236,7 @@ as $$
     'unknownBots', (
       select coalesce(jsonb_agg(u order by u.hits desc), '[]') from (
         select ua_sample as "userAgent", sum(hits) as hits from d
-        where agent in ('unknown', 'overflow') group by ua_sample order by sum(hits) desc limit 10
+        where kind = 'bot' and agent = 'unknown' group by ua_sample order by sum(hits) desc limit 10
       ) u
     )
   );

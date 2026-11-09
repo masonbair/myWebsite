@@ -10,15 +10,12 @@ const AGENTS: [RegExp, VisitKind, string][] = [
   [/Claude-SearchBot/i, "ai", "Claude-SearchBot"],
   [/Claude-User/i, "ai", "Claude-User"],
   [/ClaudeBot/i, "ai", "ClaudeBot"],
-  [/anthropic-ai/i, "ai", "anthropic-ai"],
   [/Perplexity-User/i, "ai", "Perplexity-User"],
   [/PerplexityBot/i, "ai", "PerplexityBot"],
-  [/Google-Extended/i, "ai", "Google-Extended"],
   [/Google-CloudVertexBot/i, "ai", "Google-CloudVertexBot"],
   [/Gemini-Deep-Research/i, "ai", "Gemini-Deep-Research"],
   [/meta-externalagent/i, "ai", "Meta-ExternalAgent"],
   [/meta-externalfetcher/i, "ai", "Meta-ExternalFetcher"],
-  [/Applebot-Extended/i, "ai", "Applebot-Extended"],
   [/Amazonbot/i, "ai", "Amazonbot"],
   [/Bytespider/i, "ai", "Bytespider"],
   [/CCBot/i, "ai", "CCBot"],
@@ -36,7 +33,7 @@ const AGENTS: [RegExp, VisitKind, string][] = [
   [/Slurp/i, "search", "Yahoo"],
 ];
 
-const GENERIC_BOT = /bot|crawl|spider|slurp|fetch|scrape|curl|wget|python-requests|httpx|axios|node-fetch|go-http-client|headless|lighthouse|preview/i;
+const GENERIC_BOT = /\bbot\b|bot\/|bot;|bot\)|crawl|spider|slurp|fetch|scrape|curl|wget|python-requests|httpx|axios|node-fetch|go-http-client|headless|lighthouse|preview/i;
 
 /** Names the crawler or agent behind a user-agent; unknown automated clients become { kind: "bot", name: "unknown" }. */
 export function classifyAgent(userAgent: string | null): Agent {

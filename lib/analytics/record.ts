@@ -29,11 +29,14 @@ function isOwnerBrowser(request: NextRequest): boolean {
   return request.cookies.getAll().some((c) => /^sb-.+-auth-token/.test(c.name));
 }
 
-/** Prefetches and client-side navigations are not page reads. */
+// Next 16 strips its rsc/prefetch headers before the proxy, so a browser's full page load is recognised by
+// sec-fetch-dest instead; prefetches and client-side clicks between pages are therefore not counted.
 function isPageRead(request: NextRequest): boolean {
   if (request.method !== "GET") return false;
   const h = request.headers;
-  return !h.get("rsc") && !h.get("next-router-prefetch") && h.get("purpose") !== "prefetch" && h.get("sec-purpose") !== "prefetch";
+  const dest = h.get("sec-fetch-dest");
+  if (dest !== null && dest !== "document") return false;
+  return h.get("purpose") !== "prefetch" && h.get("sec-purpose") !== "prefetch";
 }
 
 /** Builds the analytics row for a request, or null when it should not be counted. */
@@ -76,12 +79,13 @@ export async function recordVisit(request: NextRequest): Promise<void> {
     const visit = await visitFor(request, process.env.ANALYTICS_SALT);
     if (!visit) return;
     if (visit.p_agent === "unknown" && !sampleUnknownBot(new Date())) return;
-    await fetch(`${url}/rest/v1/rpc/analytics_record`, {
+    const response = await fetch(`${url}/rest/v1/rpc/analytics_record`, {
       method: "POST",
       headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify(visit),
       signal: AbortSignal.timeout(3000),
     });
+    if (!response.ok) console.warn(`analytics_record failed: ${response.status}`);
   } catch {
     // Dropped on purpose: analytics must never affect the page.
   }

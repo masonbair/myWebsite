@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(35);
+select plan(36);
 
 create temporary table today_value as select (now() at time zone 'America/New_York')::date as d;
 grant select on today_value to service_role, authenticated;
@@ -67,6 +67,7 @@ set local role service_role;
 select public.analytics_record('/', 'human', '', 'brand-new.example', '', 'DE', '', repeat('b', 64));
 reset role;
 select is((select hits from public.analytics_daily where agent = 'overflow'), 1, 'past 5,000 daily rows new combinations fold into overflow');
+select is((select kind from public.analytics_daily where agent = 'overflow'), 'bot', 'overflow counts as plain bot traffic');
 select is((select count(*)::int from public.analytics_visitors where visitor_hash = repeat('b', 64)), 0, 'past 20,000 visitor hashes no more are stored');
 
 set local role authenticated;

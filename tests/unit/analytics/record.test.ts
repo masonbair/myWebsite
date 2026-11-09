@@ -45,9 +45,14 @@ describe("visitFor", () => {
     expect(await visitFor(req, "salt", NOON)).toBeNull();
   });
 
+  it("counts a browser's full page load", async () => {
+    const visit = await visitFor(request("/coffee", { "user-agent": CHROME, "sec-fetch-dest": "document" }), "salt", NOON);
+    expect(visit?.p_kind).toBe("human");
+  });
+
   it.each([
-    [{ rsc: "1" }, "GET"],
-    [{ "next-router-prefetch": "1" }, "GET"],
+    [{ "sec-fetch-dest": "empty" }, "GET"],
+    [{ "sec-purpose": "prefetch" }, "GET"],
     [{}, "POST"],
   ])("skips prefetches and non-reads (%j %s)", async (headers, method) => {
     expect(await visitFor(request("/", { "user-agent": CHROME, ...headers }, method), "salt", NOON)).toBeNull();

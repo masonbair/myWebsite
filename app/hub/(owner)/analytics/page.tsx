@@ -80,12 +80,13 @@ export default async function AnalyticsPage() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Analytics</h1>
         <p className="mt-1 text-sm text-mute">
-          Last 7 days unless noted. Your own signed-in visits are not counted. No cookies, no IP addresses stored.
+          Last 7 days unless noted. Counts full page loads, so clicks from one page to another inside the site are not
+          counted. Your own signed-in visits are not counted. No cookies, no IP addresses stored.
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Tile label="Visitors" value={report.week.visitors} note={`${n(report.week.views)} page views`} />
+        <Tile label="Visitor-days" value={report.week.visitors} note={`${n(report.week.views)} page views`} />
         <Tile label="/coffee visits" value={report.week.coffee} note="page views by people" />
         <Tile label="AI bot reads" value={report.week.aiReads} note="crawlers and agents" />
         <Tile label="From assistants" value={report.week.fromAssistants} note="ChatGPT, Claude, Perplexity…" />

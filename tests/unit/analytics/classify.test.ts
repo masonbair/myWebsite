@@ -14,7 +14,6 @@ const BOTS: [string, string, string][] = [
   ["Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-User/1.0; +Claude-User@anthropic.com)", "ai", "Claude-User"],
   ["Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)", "ai", "PerplexityBot"],
   ["Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Perplexity-User/1.0; +https://perplexity.ai/perplexity-user)", "ai", "Perplexity-User"],
-  ["Mozilla/5.0 (compatible; Google-Extended)", "ai", "Google-Extended"],
   ["Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", "search", "Googlebot"],
   ["Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm) Chrome/116.0.1938.76 Safari/537.36", "search", "Bingbot"],
   ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Safari/605.1.15 (Applebot/0.1; +http://www.apple.com/go/applebot)", "search", "Applebot"],
@@ -37,6 +36,11 @@ describe("classifyAgent", () => {
       expect(classifyAgent(ua)).toEqual({ kind: "bot", name: "unknown" });
     },
   );
+
+  it("does not mistake a phone model containing BOT for a bot", () => {
+    const cubot = "Mozilla/5.0 (Linux; Android 12; CUBOT X30) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36";
+    expect(classifyAgent(cubot)).toEqual({ kind: "human", name: "" });
+  });
 
   it("handles a missing header", () => {
     expect(classifyAgent(null)).toEqual({ kind: "bot", name: "unknown" });

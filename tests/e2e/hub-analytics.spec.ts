@@ -26,6 +26,14 @@ test.describe("site analytics", () => {
     await expect.poll(() => hits({ path: "/", agent: "GPTBot" })).toBe(gptBefore + 1);
     await expect.poll(() => hits({ path: "/coffee", kind: "human", from_assistant: "ChatGPT" })).toBe(coffeeBefore + 1);
 
+    // A prefetch reaches the proxy without Next's own headers, so only sec-fetch-dest tells it apart.
+    const coffeeHumans = await hits({ path: "/coffee", kind: "human" });
+    await request.get("/coffee", { headers: { "user-agent": CHROME, "sec-fetch-dest": "empty", rsc: "1", "next-router-prefetch": "1" } });
+    const gptMarker = await hits({ path: "/", agent: "GPTBot" });
+    await request.get("/", { headers: { "user-agent": GPTBOT } });
+    await expect.poll(() => hits({ path: "/", agent: "GPTBot" })).toBe(gptMarker + 1);
+    expect(await hits({ path: "/coffee", kind: "human" })).toBe(coffeeHumans);
+
     const owner = await seededOwner();
     await signInAs(context, owner);
     const hubBefore = await hits({ kind: "human" });

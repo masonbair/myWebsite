@@ -10,7 +10,7 @@ function label(day: string): string {
   return dayLabel.format(new Date(`${day}T00:00:00Z`));
 }
 
-/** Single-series daily bar chart with a hover/focus tooltip and a table fallback. */
+/** Single-series daily bar chart with a hover readout; the page supplies the table view. */
 export function DailyBars({ title, unit, points }: { title: string; unit: string; points: Point[] }) {
   const [active, setActive] = useState<number | null>(null);
   const max = Math.max(1, ...points.map((p) => p.value));
@@ -22,7 +22,7 @@ export function DailyBars({ title, unit, points }: { title: string; unit: string
     <figure className="m-0">
       <figcaption className="mb-3 flex items-baseline justify-between gap-4">
         <span className="text-sm font-semibold text-ink">{title}</span>
-        <span className="text-xs text-mute tabular-nums" aria-live="polite">
+        <span className="text-xs text-mute tabular-nums" aria-hidden>
           {shown ? `${label(shown.day)}: ${shown.value.toLocaleString()} ${unit}` : `peak ${max.toLocaleString()} ${unit}`}
         </span>
       </figcaption>
@@ -44,17 +44,10 @@ export function DailyBars({ title, unit, points }: { title: string; unit: string
             );
           })}
         </svg>
-        <div className="absolute inset-0 flex">
+        {/* Mouse-only readout; keyboard and screen-reader users get the same numbers from the table view. */}
+        <div className="absolute inset-0 flex" aria-hidden>
           {points.map((p, i) => (
-            <button
-              key={p.day}
-              type="button"
-              className="h-full flex-1 cursor-default outline-none focus-visible:bg-ink/5"
-              aria-label={`${label(p.day)}: ${p.value} ${unit}`}
-              onMouseEnter={() => setActive(i)}
-              onFocus={() => setActive(i)}
-              onBlur={() => setActive(null)}
-            />
+            <div key={p.day} className="h-full flex-1" onMouseEnter={() => setActive(i)} />
           ))}
         </div>
       </div>
