@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { mcpRequestGuard, withCappedBody } from "@/lib/hub/mcp-guard";
 import { handleMcpRequest } from "@/lib/hub/mcp-tools";
 import { createHubStore } from "@/lib/hub/store";
+import { timelineWriter } from "@/lib/hub/timeline";
 import { loadNow } from "@/lib/now";
 import { serviceClient } from "@/lib/supabase/server";
 
@@ -19,6 +20,7 @@ async function handle(request: NextRequest, ctx: { params: Promise<{ transport: 
     readNow: () => loadNow(),
     ideasClient: serviceClient(),
     now: () => new Date(),
+    timelineFor: (client) => timelineWriter(serviceClient(), { kind: "agent", client }),
   });
 }
 
