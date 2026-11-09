@@ -78,8 +78,8 @@ export function PhotoTile({ photos }: { photos: Photo[] }) {
             aria-hidden={i !== active}
             fill
             loading={i === 0 ? "eager" : "lazy"}
-            // Low priority also stops React adding a preload that would jump ahead of the hero photo.
-            fetchPriority="low"
+            // The first photo is often the largest paint now that the hello tile is text.
+            fetchPriority={i === 0 ? "high" : "low"}
             sizes="(min-width: 1024px) 25vw, (min-width: 768px) 50vw, 100vw"
             className={`object-cover transition-opacity duration-[1200ms] ease-spring motion-reduce:transition-none ${
               i === active ? "opacity-100" : "opacity-0"

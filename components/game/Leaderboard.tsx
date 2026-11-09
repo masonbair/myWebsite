@@ -85,7 +85,7 @@ export function Leaderboard({ onClose }: { onClose: () => void }) {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: reduce ? 0 : -6 }}
       transition={{ duration: reduce ? 0 : 0.35, ease: [0.32, 0.72, 0, 1] }}
-      className="pointer-events-auto fixed inset-x-4 top-20 origin-top-right rounded-tile bg-surface/80 p-1.5 shadow-tile ring-1 ring-ink/5 backdrop-blur-xl md:absolute md:inset-x-auto md:top-[calc(100%+0.875rem)] md:right-0 md:w-[22rem]"
+      className="pointer-events-auto fixed inset-x-4 top-20 origin-top-right rounded-tile border-[2.5px] border-line bg-surface p-1.5 shadow-tile md:absolute md:inset-x-auto md:top-[calc(100%+0.875rem)] md:right-0 md:w-[22rem]"
     >
       <div className="rounded-[calc(1.5rem-0.375rem)] bg-surface p-5">
         <div className="flex items-center justify-between gap-4">
@@ -115,7 +115,7 @@ export function Leaderboard({ onClose }: { onClose: () => void }) {
               maxLength={MAX_NAME}
               autoComplete="nickname"
               placeholder={playerName ? `e.g. ${playerName}` : undefined}
-              className="h-11 min-w-0 flex-1 rounded-full bg-ink/[0.04] px-4 text-sm text-ink ring-1 ring-ink/10 placeholder:text-mute focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+              className="h-11 min-w-0 flex-1 rounded-full border-2 border-line bg-canvas px-4 text-sm text-ink placeholder:text-mute focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
             />
             <button
               type="submit"

@@ -18,7 +18,7 @@ test("home shows its headings and photo tile without JavaScript", async ({ page 
     await expect(heading).toBeVisible();
     await expect.poll(() => shownOpacity(heading)).toBe(1);
   }
-  const tile = page.getByRole("img", { name: /Mason standing on a glass ledge/ });
+  const tile = page.getByRole("group", { name: "Photo slideshow" }).getByRole("img").first();
   await expect(tile).toBeVisible();
   await expect.poll(() => shownOpacity(tile)).toBe(1);
 });

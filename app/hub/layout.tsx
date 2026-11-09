@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f7f6fd" },
-    { media: "(prefers-color-scheme: dark)", color: "#121120" },
+    { media: "(prefers-color-scheme: dark)", color: "#15142a" },
   ],
 };
 
@@ -19,7 +19,7 @@ export default function HubLayout({ children }: LayoutProps<"/hub">) {
   return (
     <div className="mx-auto min-h-dvh w-full max-w-3xl px-4 pt-6 pb-16 sm:px-5 sm:pt-10">
       <noscript>
-        <p role="status" className="mb-6 rounded-tile bg-surface p-4 text-sm font-medium text-accent-ink shadow-tile">
+        <p role="status" className="mb-6 rounded-tile border-[2.5px] border-line bg-surface p-4 text-sm font-medium text-accent-ink shadow-tile">
           This page needs JavaScript. Turn it on for masonbair.com in your browser settings.
         </p>
       </noscript>

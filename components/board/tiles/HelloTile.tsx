@@ -6,7 +6,7 @@ import { Tile } from "../Tile";
 export function HelloTile() {
   return (
     <Tile core="flex flex-col bg-surface p-6 md:p-9">
-      <span className={`${tag} self-start bg-tea text-night`}>{hello.tag}</span>
+      <span className={`${tag} self-start border-line bg-tea text-night`}>{hello.tag}</span>
       <h1 className="mt-5 text-5xl leading-[0.98] font-bold tracking-[-0.04em] text-ink md:mt-6 md:text-7xl xl:text-8xl">
         {hello.heading}
       </h1>

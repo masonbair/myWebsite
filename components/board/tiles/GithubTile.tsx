@@ -50,7 +50,7 @@ export function GithubTile({ github }: { github: GithubActivity | null }) {
       <div>
         <Prompt className="text-mute">git log --me</Prompt>
         <div className="mt-2 flex items-center justify-between gap-2">
-          <span className={`${tag} bg-surface text-ink`}>GitHub</span>
+          <span className={`${tag} border-line bg-surface text-ink`}>GitHub</span>
           <a href={PROFILE} target="_blank" rel="noopener noreferrer" className={`rounded-full font-bold text-ink ${focusRing}`}>
             masonbair
           </a>

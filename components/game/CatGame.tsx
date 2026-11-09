@@ -167,7 +167,7 @@ export function CatGame() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: reduce ? 0 : 6 }}
                 transition={{ duration: reduce ? 0 : 0.4, ease }}
-                className="max-w-[min(20rem,calc(100vw-2rem))] rounded-tile bg-surface px-4 py-3 text-sm leading-snug font-medium text-ink shadow-tile ring-1 ring-ink/5"
+                className="max-w-[min(20rem,calc(100vw-2rem))] rounded-tile bg-surface px-4 py-3 text-sm leading-snug font-medium text-ink border-2 border-line shadow-sticker-sm"
               >
                 {toast.text}
               </motion.p>
@@ -183,7 +183,7 @@ export function CatGame() {
                 initial={reduce ? false : { opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1, transition: { delay: reduce ? 0 : 1.2, duration: 0.5, ease } }}
                 exit={{ opacity: 0, transition: { duration: reduce ? 0 : 0.15 } }}
-                className="rounded-full bg-surface px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap text-ink shadow-tile ring-1 ring-ink/5 min-[501px]:mb-3 min-[501px]:px-3.5 min-[501px]:py-2 min-[501px]:text-xs"
+                className="rounded-full bg-surface px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap text-ink border-2 border-line shadow-sticker-sm min-[501px]:mb-3 min-[501px]:px-3.5 min-[501px]:py-2 min-[501px]:text-xs"
               >
                 Play with me
               </motion.span>
@@ -204,7 +204,7 @@ export function CatGame() {
               {color && <Cat stage={stage} color={color} />}
             </span>
             {color && (playing || score > 0) && (
-              <span className="absolute -top-1 -left-1 grid size-6 place-items-center rounded-full bg-surface text-ink shadow-tile ring-1 ring-ink/10">
+              <span className="absolute -top-1 -left-1 grid size-6 place-items-center rounded-full bg-surface text-ink border-2 border-line">
                 {playing ? <Pause weight="light" size={12} /> : <Play weight="light" size={12} />}
               </span>
             )}

@@ -22,7 +22,7 @@ export function LocationTile({ place, countriesVisited }: { place: Place | null;
     <Tile tilt="left" core="flex flex-col justify-between gap-5 bg-tea p-6 text-night">
       <div>
         <Prompt>whereami</Prompt>
-        <span className={`${tag} mt-1.5 bg-surface text-ink`}>{place ? "Right now" : "So far"}</span>
+        <span className={`${tag} mt-1.5 border-line bg-surface text-ink`}>{place ? "Right now" : "So far"}</span>
       </div>
       {place ? (
         <>

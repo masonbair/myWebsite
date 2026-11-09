@@ -24,7 +24,7 @@ export function Tile({
 /** Tiny command-line prompt above a tile label, e.g. `$ whereami`. Decorative, so screen readers skip it. */
 export function Prompt({ children, className = "" }: { children: string; className?: string }) {
   return (
-    <p aria-hidden className={`font-mono text-[11px] leading-none font-medium opacity-75 ${className}`}>
+    <p aria-hidden className={`font-mono text-[11px] leading-none font-medium ${className}`}>
       $ {children}
     </p>
   );

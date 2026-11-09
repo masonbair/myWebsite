@@ -61,8 +61,8 @@ export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
           save();
         }}
       >
-        <div className="rounded-[2rem] bg-ink/5 p-1.5 ring-1 ring-ink/5">
-          <div className="rounded-[calc(2rem-0.375rem)] bg-surface shadow-tile">
+        <div>
+          <div className="rounded-tile border-[2.5px] border-line bg-surface shadow-tile">
             <label htmlFor="capture-text" className="sr-only">
               Capture
             </label>
@@ -79,7 +79,7 @@ export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
                   save();
                 }
               }}
-              className="block min-h-[38dvh] w-full resize-none rounded-[calc(2rem-0.375rem)] border-0 bg-transparent px-5 pt-5 pb-2 text-lg leading-relaxed text-ink outline-none placeholder:text-mute"
+              className="block min-h-[38dvh] w-full resize-none rounded-tile border-0 bg-transparent px-5 pt-5 pb-2 text-lg leading-relaxed text-ink outline-none placeholder:text-mute"
             />
             <div className="flex items-center justify-between gap-3 px-3 pb-3">
               {voice.supported ? (
@@ -89,7 +89,7 @@ export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
                   aria-pressed={voice.listening}
                   aria-label={voice.listening ? "Stop listening" : "Speak"}
                   className={`inline-flex size-12 items-center justify-center rounded-full transition-[background-color,transform] duration-300 ease-spring active:scale-[0.96] ${
-                    voice.listening ? "bg-accent text-night" : "bg-ink/5 text-ink hover:bg-ink/10"
+                    voice.listening ? "bg-accent text-night" : "border-2 border-line bg-surface text-ink hover:bg-canvas"
                   } ${focusRing}`}
                 >
                   {voice.listening ? <Stop size={20} weight="fill" aria-hidden /> : <Microphone size={22} aria-hidden />}
@@ -99,7 +99,7 @@ export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
               )}
               <button
                 type="submit"
-                className={`group inline-flex h-12 items-center gap-3 rounded-full bg-accent pr-1.5 pl-6 text-base font-semibold text-night transition-[opacity,transform] duration-300 ease-spring hover:opacity-90 active:scale-[0.98] ${focusRing}`}
+                className={`group inline-flex h-12 items-center gap-3 rounded-full border-[2.5px] border-line bg-accent pr-1.5 pl-6 text-base font-bold text-night shadow-sticker-sm transition-[translate,box-shadow] duration-200 ease-spring active:translate-x-0.5 active:translate-y-0.5 active:shadow-none ${focusRing}`}
               >
                 Save
                 <span className="inline-flex size-9 items-center justify-center rounded-full bg-night/10 transition-transform duration-300 ease-spring group-hover:-translate-y-px">
@@ -126,7 +126,7 @@ export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
           </span>
         )}
         {waiting > 0 && (
-          <span className="rounded-full bg-ink/5 px-3 py-1 font-medium text-ink">{waiting} waiting</span>
+          <span className="rounded-full border-2 border-line bg-surface px-3 py-1 font-semibold text-ink">{waiting} waiting</span>
         )}
         {status?.needsSignIn && (
           <Link href="/hub/login" className={`rounded-full px-1 font-medium text-accent-ink underline ${focusRing}`}>
