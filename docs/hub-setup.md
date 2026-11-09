@@ -90,3 +90,8 @@ Local (`npm run dev`, with `HUB_AGENT_TOKEN` in `.env.local`):
 ```sh
 claude mcp add --transport http hub-local http://localhost:3000/api/mcp/mcp --header "Authorization: Bearer $HUB_AGENT_TOKEN" --header "X-Client-Name: claude-code"
 ```
+
+## Ideas Lab
+
+- Migration `0008_ideas_lab.sql` adds the Ideas Lab tables, guards, the review claim, the Google token helpers (Vault secret `ideas_google_refresh_token`) and the `hub-ideas` cron job (every 15 minutes, `POST /api/hub/events/ideas`). Not applied live yet; Mason runs `supabase db push` after review.
+- Local testing: `scripts/ideas-local-stack.sh` starts a private stack (project `ideas-lab`, every port +100) from a copy of `supabase/` under `$TMPDIR/ideas-lab-supabase`, then `supabase db reset --workdir <that dir> && supabase test db --workdir <that dir>`.
