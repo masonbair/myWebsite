@@ -10,6 +10,7 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "e2e:hub": "E2E_SERVERS=hub playwright test --project=hub",
+    "news:backfill": "node --experimental-transform-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-paths.mjs scripts/news-backfill.ts",
     "e2e:site": "E2E_SERVERS=site playwright test --project=desktop --project=mobile"
   },
   "dependencies": {

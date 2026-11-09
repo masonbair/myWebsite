@@ -128,7 +128,7 @@ function totalUsage(charges: ModelCharge[]): ClaudeUsage {
   return charges.reduce((sum, c) => sumUsage(sum, c.usage), ZERO);
 }
 
-type Attempt = { ok: true; stories: ExtractedStory[] } | { ok: false; reason: ExtractFailure; detail: string };
+export type ExtractAttempt = { ok: true; stories: ExtractedStory[] } | { ok: false; reason: ExtractFailure; detail: string };
 
 /** Text after the last fallback block: earlier text belongs to a model that declined part way. */
 function replyText(content: Anthropic.Beta.Messages.BetaContentBlock[]): string {
@@ -156,7 +156,7 @@ function tidy(raw: unknown, allowed: Set<string>): unknown {
   return { ...(raw as object), stories: kept };
 }
 
-function readReply(message: Anthropic.Beta.Messages.BetaMessage, allowed: Set<string>): Attempt {
+function readReply(message: Anthropic.Beta.Messages.BetaMessage, allowed: Set<string>): ExtractAttempt {
   if (message.stop_reason === "refusal") return { ok: false, reason: "refusal", detail: "model declined" };
   if (message.stop_reason === "max_tokens") return { ok: false, reason: "max_tokens", detail: "reply cut off" };
   let raw: unknown;
@@ -173,6 +173,17 @@ function readReply(message: Anthropic.Beta.Messages.BetaMessage, allowed: Set<st
   };
 }
 
+/** Reads one finished reply with extractIssue's rules (for Batch results); `charges` is what each model billed. */
+export function readExtractMessage(
+  message: Anthropic.Beta.Messages.BetaMessage,
+  requested: ModelId,
+  topics: Topic[],
+): { outcome: ExtractAttempt; charges: ModelCharge[] } {
+  const charges: ModelCharge[] = [];
+  chargeMessage(charges, message, requested);
+  return { outcome: readReply(message, new Set(topics.map((t) => t.slug))), charges };
+}
+
 export type ExtractResult = { stories: ExtractedStory[]; usage: ClaudeUsage; charges: ModelCharge[] };
 
 /** Splits one issue into stories; retries once on refusal, cut-off or bad shape, then throws ExtractError. */
@@ -183,7 +194,7 @@ export async function extractIssue(
   const request = buildExtractRequest(input, deps.model, deps.topics);
   const allowed = new Set(deps.topics.map((t) => t.slug));
   const charges: ModelCharge[] = [];
-  let last: Attempt | null = null;
+  let last: ExtractAttempt | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     let message: Anthropic.Beta.Messages.BetaMessage;
     try {
@@ -197,6 +208,6 @@ export async function extractIssue(
     last = readReply(message, allowed);
     if (last.ok) return { stories: last.stories, usage: totalUsage(charges), charges };
   }
-  const failed = last as Extract<Attempt, { ok: false }>;
+  const failed = last as Extract<ExtractAttempt, { ok: false }>;
   throw new ExtractError(failed.reason, totalUsage(charges), charges, failed.detail);
 }

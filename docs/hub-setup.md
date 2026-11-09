@@ -118,3 +118,14 @@ Forwarded newsletters arrive by email, get read by Claude, and feed `/trends` an
 9. Backfill. When the import estimate appears, read it and type `yes`.
 
 How it is checked: a mail is processed only when Gmail forwarding names `NEWS_FORWARD_FROM` as the sender and a DKIM signature (the mail's proof of origin) that matches the From domain verifies. Any other mail waits in `/hub/news` under "Held back" and is never picked up for reading: the job that claims issues takes only pending, failed and stuck ones, never held ones.
+
+### Import past newsletters and re-run extraction
+
+`scripts/news-backfill.ts`, run with `npm run news:backfill -- <command>`. It reads its settings from the shell. Load them once per terminal: `vercel env pull --environment=production .env.production.local`, then `set -a; . ./.env.production.local; set +a`. It needs `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY_NEWS`, and `BLOB_STORE_ID` with `VERCEL_OIDC_TOKEN` (good for 12 hours; pull again when it expires). It refuses a Supabase URL that is not https unless you pass `--local`, which also keeps raw emails in a temp folder instead of Blob.
+
+1. Fill each newsletter's `sender_addresses` or `sender_domains` in `news_sources` first. Mail that matches no newsletter is held back (quarantined), not read.
+2. `import --mbox <Takeout .mbox> --since <YYYY-MM-DD>`: stores every message dated on or after that day as a `backfill` issue. It prints counts per newsletter, duplicates (safe to run twice), held-back mail, and mail before the date.
+3. `reclean`: refills empty issue text from the raw email in Blob (after a restore, or if cleaning failed at import).
+4. `estimate [--model claude-sonnet-5-5|claude-haiku-5-5|claude-opus-5-5]`: prints the issue count per newsletter and the cost at batch (half) price. It counts input tokens on 10 sample issues and assumes 2,500 output tokens per issue. Then it asks `Type yes to submit`. Anything else sends nothing. `submit` does the same.
+5. `collect`: run it once the batches end (usually within an hour, at most 24). It writes the stories under a new `backfill` run, logs each issue's cost in `ai_usage` (purpose `backfill`, not counted toward the monthly cap), moves issues to done, clusters the new stories, and rebuilds trends for their dates. Issues that failed go to the daily job as `failed`. Running it again is safe.
+6. Re-run after a prompt or topic change: `estimate --rerun --from <YYYY-MM-DD> --to <YYYY-MM-DD>`, type `yes`, then `collect`. New stories go under a new `rerun` run that becomes current; old rows stay, so a bad run can be undone by pointing issues back at the old run.

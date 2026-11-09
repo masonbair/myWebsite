@@ -177,8 +177,8 @@ function shiftDay(date: string, days: number): string {
   return new Date(Date.parse(`${date}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
 }
 
-/** ClusterStore over Supabase; the pool is one paged query per run. */
-export function supabaseClusterStore(client: SupabaseClient): ClusterStore {
+/** ClusterStore over Supabase; the pool is one paged query per run. `purpose` labels the Haiku charges in ai_usage. */
+export function supabaseClusterStore(client: SupabaseClient, purpose = "dedupe"): ClusterStore {
   return {
     async fresh(storyIds) {
       const { data, error } = await client.from("news_stories").select(STORY_COLUMNS).in("id", storyIds);
@@ -238,7 +238,7 @@ export function supabaseClusterStore(client: SupabaseClient): ClusterStore {
     },
 
     async recordDedupe(charge) {
-      await recordUsage(client, { feature: "news", model: charge.model, itemId: null, purpose: "dedupe", usage: charge.usage });
+      await recordUsage(client, { feature: "news", model: charge.model, itemId: null, purpose, usage: charge.usage });
     },
   };
 }
@@ -287,7 +287,12 @@ export async function clusterStories(store: ClusterStore, anthropic: Anthropic, 
   }
 }
 
-/** Gives each new news story a cluster; see clusterStories. */
-export async function assignClusters(client: SupabaseClient, anthropic: Anthropic, storyIds: number[]): Promise<void> {
-  await clusterStories(supabaseClusterStore(client), anthropic, storyIds);
+/** Gives each new news story a cluster; see clusterStories. Backfill and re-runs pass their own purpose so the cap ignores them. */
+export async function assignClusters(
+  client: SupabaseClient,
+  anthropic: Anthropic,
+  storyIds: number[],
+  purpose = "dedupe",
+): Promise<void> {
+  await clusterStories(supabaseClusterStore(client, purpose), anthropic, storyIds);
 }
