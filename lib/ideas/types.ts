@@ -44,6 +44,14 @@ export class ReviewFailed extends Error {
   }
 }
 
+/** The idea or source is no longer claimed by this run (a stale re-claim or Mason's change); its result must not be saved. */
+export class ClaimLost extends Error {
+  constructor(id: string) {
+    super(`claim lost for ${id}`);
+    this.name = "ClaimLost";
+  }
+}
+
 /** Spend reached the monthly cap before a paid call; the idea goes back in line, not counted as a failure. */
 export class CapReached extends Error {
   constructor() {
@@ -63,6 +71,14 @@ export type DetectedIdea = z.infer<typeof DETECT_SCHEMA>["ideas"][number];
 export const SAME_IDEA_SCHEMA = z.object({ match_id: z.string().nullable() });
 
 export type SourceKind = "capture" | "memo";
+/** What detection reads: an item source, or a HiNote recording the Mac sent read-only. */
+export type DetectKind = SourceKind | "recording";
+
+const RECORDING_REF = "rec:";
+/** A recording's source ref; `:` never appears in an item id or a recording file name, so the two cannot collide. */
+export const recordingRef = (file: string) => `${RECORDING_REF}${file}`;
+/** The recording file a source ref names, or null for an item id. */
+export const recordingFile = (ref: string) => (ref.startsWith(RECORDING_REF) ? ref.slice(RECORDING_REF.length) : null);
 
 /** A detection that cannot be used; `code` is safe to log and store, it never holds idea text. */
 export class DetectFailed extends Error {

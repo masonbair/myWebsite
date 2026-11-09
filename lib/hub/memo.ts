@@ -9,7 +9,9 @@ export const MEMO_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const RECORDED = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
 export const TRANSCRIPT_PART = /^transcript \(part (\d+) of \d+\):\n/;
 
-type Upload = { file: string; recorded: string; transcript: string; device: "phone" | "mac" };
+/** One transcript as an uploader sends it: a plain file name, a local time and the text. */
+export type Recording = { file: string; recorded: string; transcript: string };
+type Upload = Recording & { device: "phone" | "mac" };
 
 export type MemoDeps = {
   token: string | undefined;
@@ -20,8 +22,8 @@ export type MemoDeps = {
   queueIdeas?: (itemId: string) => Promise<void>;
 };
 
-const json = (status: number, body: unknown) => Response.json(body, { status });
-const fail = (status: number, error: string, message: string) => json(status, { error, message });
+export const json = (status: number, body: unknown) => Response.json(body, { status });
+export const fail = (status: number, error: string, message: string) => json(status, { error, message });
 
 // Date rolls 2026-02-30 over to March 2, so a real time must come back unchanged.
 function isRealTime(recorded: string): boolean {
@@ -29,7 +31,8 @@ function isRealTime(recorded: string): boolean {
   return !Number.isNaN(time.getTime()) && time.toISOString().slice(0, 19) === recorded;
 }
 
-function parseUpload(raw: string): Upload | string {
+/** Checks an upload's JSON body for a plain file name, a real local time and a non-empty transcript; a string says what is wrong. */
+export function parseRecording(raw: string): { recording: Recording; body: Record<string, unknown> } | string {
   let body: unknown;
   try {
     body = JSON.parse(raw);
@@ -37,14 +40,36 @@ function parseUpload(raw: string): Upload | string {
     return "body is not JSON";
   }
   if (typeof body !== "object" || body === null || Array.isArray(body)) return "body must be an object";
-  const { file, recorded, transcript, device } = body as Partial<Record<keyof Upload, unknown>>;
+  const { file, recorded, transcript } = body as Partial<Record<keyof Recording, unknown>>;
   if (typeof file !== "string" || !MEMO_FILE.test(file)) return "file must be a plain device file name";
   if (typeof recorded !== "string" || !RECORDED.test(recorded) || !isRealTime(recorded)) {
     return "recorded must be a real YYYY-MM-DDTHH:MM:SS";
   }
   if (typeof transcript !== "string" || !transcript.trim()) return "transcript must be non-empty";
+  return { recording: { file, recorded, transcript }, body: body as Record<string, unknown> };
+}
+
+function parseUpload(raw: string): Upload | string {
+  const parsed = parseRecording(raw);
+  if (typeof parsed === "string") return parsed;
+  const { device } = parsed.body;
   if (device !== "phone" && device !== "mac") return 'device must be "phone" or "mac"';
-  return { file, recorded, transcript, device };
+  return { ...parsed.recording, device };
+}
+
+/**
+ * The raw body once the bearer token and the 1 MB cap pass, or the error reply.
+ * @param what names the upload in the 503 reply when its token is not configured.
+ */
+export async function authorizedBody(request: Request, token: string | undefined, what: string): Promise<string | Response> {
+  if (!token) return fail(503, "misconfigured", `${what} is not configured`);
+  if (!tokenMatches(request.headers.get("authorization"), token)) {
+    return fail(401, "unauthorized", "bad or missing bearer token");
+  }
+  if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) return fail(413, "too_large", "body over 1 MB");
+  const raw = await request.text();
+  if (Buffer.byteLength(raw) > MAX_BODY) return fail(413, "too_large", "body over 1 MB");
+  return raw;
 }
 
 const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff;
@@ -79,13 +104,8 @@ async function queueIdeas(queue: (itemId: string) => Promise<void>, itemId: stri
 
 /** HiDock memo upload: one `hidock-memo` inbox item per device file name, however often it is sent. */
 export async function handleMemo(request: Request, deps: MemoDeps): Promise<Response> {
-  if (!deps.token) return fail(503, "misconfigured", "memo upload is not configured");
-  if (!tokenMatches(request.headers.get("authorization"), deps.token)) {
-    return fail(401, "unauthorized", "bad or missing bearer token");
-  }
-  if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) return fail(413, "too_large", "body over 1 MB");
-  const raw = await request.text();
-  if (Buffer.byteLength(raw) > MAX_BODY) return fail(413, "too_large", "body over 1 MB");
+  const raw = await authorizedBody(request, deps.token, "memo upload");
+  if (typeof raw !== "string") return raw;
   const upload = parseUpload(raw);
   if (typeof upload === "string") return fail(400, "bad_request", upload);
 

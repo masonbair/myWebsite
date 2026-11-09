@@ -6,8 +6,8 @@ import type { Message } from "@/lib/hub/notify";
 import type { ClaudeUsage, ModelId } from "@/lib/ai/claude";
 import { detectIdeas, sameIdea } from "./detect";
 import { reviewIdea } from "./review";
-import { ClaimLost, type ClaimedSource, type IdeasJobStore } from "./store";
-import { CapReached, DetectFailed, ReviewFailed, type SourceKind } from "./types";
+import { ClaimLost, sourceRef, type ClaimedSource, type IdeaOrigin, type IdeasJobStore } from "./store";
+import { CapReached, DetectFailed, recordingRef, ReviewFailed, type DetectKind, type SourceKind } from "./types";
 
 export type IdeasJobDeps = {
   store: IdeasJobStore;
@@ -162,7 +162,7 @@ async function reviewOne(
 }
 
 /** Spend checked before every paid call and usage recorded after it, against one item. */
-function paidHooks(deps: IdeasJobDeps, itemId: string, allowed: (spend: number) => boolean) {
+function paidHooks(deps: IdeasJobDeps, itemId: string | null, allowed: (spend: number) => boolean) {
   return {
     beforeCall: async () => {
       const spend = await deps.spend().catch(() => {
@@ -181,6 +181,51 @@ function paidHooks(deps: IdeasJobDeps, itemId: string, allowed: (spend: number) 
   };
 }
 
+/** What detection reads from one source, and how ideas filed from it name it. */
+type SourceView = {
+  text: string;
+  prompt: SourceKind;
+  origin: IdeaOrigin;
+  /** Named in a mention comment: the source item's link, or the recording. */
+  mentionedIn: string;
+  recorded: string;
+  /** The source's own item, or null for a recording, which has none. */
+  itemId: string | null;
+};
+
+/** Reads a claimed source, or null when it needs no reading: Mason filed the capture himself, or the Mac already sent the memo's recording. */
+async function viewOf(store: IdeasJobStore, source: ClaimedSource): Promise<SourceView | null> {
+  if (source.kind === "recording") {
+    const name = `HiNote recording ${source.file}`;
+    return {
+      text: source.transcript,
+      prompt: "memo",
+      origin: { key: recordingRef(source.file), footer: `From ${name}, recorded ${source.recorded}` },
+      mentionedIn: name,
+      recorded: source.recorded,
+      itemId: null,
+    };
+  }
+  const id = source.itemId;
+  const item = await store.getIdea(id);
+  if (!item) throw new Error("missing");
+  // Mason filed or closed the capture himself first; a memo is read even once its split archived it.
+  const filedByMason = item.state !== "open" || item.list === "ideas" || item.labels.includes("idea");
+  if (source.kind === "capture" && !source.saved && filedByMason) return null;
+  const memo = source.kind === "memo" ? parseMemo(item, await store.listComments(id)) : null;
+  // Dedupe by file name at cutover: the read-only HiNote intake already read this recording's ideas.
+  if (memo && !source.saved && (await store.recordingExists(memo.file))) return null;
+  const recorded = memo ? memo.recorded : item.createdAt;
+  return {
+    text: memo ? memo.transcript : [item.title, item.description].filter((t) => t.trim()).join("\n\n"),
+    prompt: source.kind,
+    origin: { key: id, footer: `Source: ${item.url}, recorded ${recorded}` },
+    mentionedIn: item.url,
+    recorded,
+    itemId: id,
+  };
+}
+
 /** Finds the ideas in one claimed source and files them: a mention, a moved capture, or new idea items. */
 async function detectOne(
   deps: IdeasJobDeps,
@@ -189,19 +234,14 @@ async function detectOne(
   signal: AbortSignal,
 ): Promise<{ outcome: Outcome; found: number }> {
   const { store } = deps;
-  const id = source.itemId;
+  const ref = sourceRef(source);
   try {
-    const item = await store.getIdea(id);
-    if (!item) throw new Error("missing");
-    // Mason filed or closed the capture himself first; a memo is read even once its split archived it.
-    const filedByMason = item.state !== "open" || item.list === "ideas" || item.labels.includes("idea");
-    if (source.kind === "capture" && !source.saved && filedByMason) {
-      await store.finishSource(id, [], null);
+    const view = await viewOf(store, source);
+    if (!view) {
+      await store.finishSource(ref, [], null);
       return { outcome: "next", found: 0 };
     }
-    const memo = source.kind === "memo" ? parseMemo(item, await store.listComments(id)) : null;
-    const origin = { itemId: id, url: item.url, recorded: memo ? memo.recorded : item.createdAt };
-    const hooks = paidHooks(deps, id, (spend) => capState(spend, deps.budgetUsd).detection);
+    const hooks = paidHooks(deps, view.itemId, (spend) => capState(spend, deps.budgetUsd).detection);
     const ctx = {
       client: anthropic,
       signal,
@@ -212,49 +252,48 @@ async function detectOne(
     };
     let saved = source.saved;
     if (!saved) {
-      const text = memo ? memo.transcript : [item.title, item.description].filter((t) => t.trim()).join("\n\n");
-      const detected = await detectIdeas({ ...ctx, text, kind: source.kind });
+      const detected = await detectIdeas({ ...ctx, text: view.text, kind: view.prompt });
       saved = { ideas: detected.ideas.map((i) => ({ ...i, outcome: null })), model: detected.model };
       // Saved before anything is filed, so a retry files the same ideas at the same indexes without asking again.
-      if (saved.ideas.length) await store.saveIdeas(id, saved.ideas, saved.model);
+      if (saved.ideas.length) await store.saveIdeas(ref, saved.ideas, saved.model);
     }
     const ideas = saved.ideas;
     const ownIds = new Set(ideas.flatMap((i) => (i.outcome && i.outcome.kind !== "mention" ? [i.outcome.id] : [])));
-    const open = ideas.some((i) => !i.outcome) ? (await store.openIdeaTitles()).filter((o) => !ownIds.has(o.id) && o.id !== id) : [];
-    const moveWhole = source.kind === "capture" && ideas.length === 1 && ideas[0].whole_item && ideas[0].sure;
+    const open = ideas.some((i) => !i.outcome) ? (await store.openIdeaTitles()).filter((o) => !ownIds.has(o.id) && o.id !== view.itemId) : [];
+    const moveWhole = source.kind === "capture" && ideas.length === 1 && ideas[0].whole_item && ideas[0].sure ? source.itemId : null;
     for (const [n, idea] of ideas.entries()) {
       if (idea.outcome) continue;
       const { matchId } = open.length ? await sameIdea({ ...ctx, candidate: `${idea.title}\n${idea.quote}`, open }) : { matchId: null };
       if (matchId) {
-        await store.mentionAgain(matchId, item.url, origin.recorded.slice(0, 10), idea.quote);
+        await store.mentionAgain(matchId, view.mentionedIn, view.recorded.slice(0, 10), idea.quote);
         idea.outcome = { kind: "mention", id: matchId };
       } else if (moveWhole) {
-        await store.moveCaptureToIdeas(id);
-        idea.outcome = { kind: "moved", id };
+        await store.moveCaptureToIdeas(moveWhole);
+        idea.outcome = { kind: "moved", id: moveWhole };
       } else {
-        idea.outcome = { kind: "new", id: await store.addIdeaFrom(origin, n, idea.title, idea.quote) };
+        idea.outcome = { kind: "new", id: await store.addIdeaFrom(view.origin, n, idea.title, idea.quote) };
       }
-      if (n < ideas.length - 1) await store.saveIdeas(id, ideas, saved.model);
+      if (n < ideas.length - 1) await store.saveIdeas(ref, ideas, saved.model);
     }
-    await store.finishSource(id, ideas, saved.model);
+    await store.finishSource(ref, ideas, saved.model);
     return { outcome: "next", found: ideas.length };
   } catch (e) {
     // At the detection cap the source stays pending for next month or a higher cap; nothing is lost.
     if (e instanceof CapReached) {
-      await store.releaseSource(id);
+      await store.releaseSource(ref);
       return { outcome: "stop", found: 0 };
     }
     if (e instanceof ClaimLost) {
-      console.error(`ideas detection for ${id} lost its claim before saving`);
+      console.error(`ideas detection for ${ref} lost its claim before saving`);
       return { outcome: "next", found: 0 };
     }
     const code = failCode(e, signal);
-    console.error(`ideas detection failed for ${id}: ${code}`);
+    console.error(`ideas detection failed for ${ref}: ${code}`);
     if (isPassing(e, signal)) {
-      await store.releaseSource(id);
+      await store.releaseSource(ref);
       return { outcome: "stop", found: 0 };
     }
-    await store.failSource(id, code);
+    await store.failSource(ref, code);
     return { outcome: signal.aborted ? "stop" : "next", found: 0 };
   }
 }
@@ -263,7 +302,7 @@ async function detectStep(deps: IdeasJobDeps, startedAt: number): Promise<number
   const anthropic = deps.anthropic;
   if (!anthropic) return 0;
   // IDEAS_MEMO_DETECTION only gates queueing in the relay; a memo already queued is always read, or its ideas would be stranded.
-  const kinds: SourceKind[] = ["capture", "memo"];
+  const kinds: DetectKind[] = ["capture", "memo", "recording"];
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(0, startedAt + DETECT_ABORT_MS - deps.now().getTime()));
   let found = 0;

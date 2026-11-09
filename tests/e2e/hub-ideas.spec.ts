@@ -115,7 +115,7 @@ test.describe("ideas lab", () => {
     if (sourceError) throw sourceError;
 
     await page.goto("/hub/ideas");
-    const section = page.getByRole("region", { name: /Could not read \d+ captures? or memos?/ });
+    const section = page.getByRole("region", { name: /Could not read \d+ (capture, memo or recording|captures, memos or recordings)/ });
     await expect(section).toBeVisible();
     await expect(section.getByText("looks for ideas in them again within half an hour")).toBeVisible();
     const row = section.getByRole("listitem").filter({ hasText: title });
@@ -125,6 +125,24 @@ test.describe("ideas lab", () => {
     const { data: row2, error: readError } = await serviceClient().from("idea_sources").select("status, attempts, last_error, quotes").eq("source_item_id", id).single();
     if (readError) throw readError;
     expect(row2).toEqual({ status: "pending", attempts: 0, last_error: null, quotes: saved });
+  });
+
+  test("a failed HiNote recording shows under Could not read with no link, and Try again puts it back in line", async ({ page }) => {
+    const file = `e2e-rec-${randomUUID().slice(0, 8)}`;
+    const { error } = await serviceClient()
+      .from("idea_recordings")
+      .insert({ file, recorded: "2026-11-08T09:00:00", transcript: "an idea", status: "failed", attempts: 3, last_error: "schema" });
+    if (error) throw error;
+
+    await page.goto("/hub/ideas");
+    const row = page.getByRole("listitem").filter({ hasText: `HiNote recording ${file}` });
+    await expect(row).toBeVisible();
+    await expect(row.getByRole("link")).toHaveCount(0);
+    await row.getByRole("button", { name: "Try again" }).click();
+    await expect(page.getByText(`HiNote recording ${file}`)).toHaveCount(0);
+    const { data, error: readError } = await serviceClient().from("idea_recordings").select("status, attempts, last_error").eq("file", file).single();
+    if (readError) throw readError;
+    expect(data).toEqual({ status: "pending", attempts: 0, last_error: null });
   });
 
   test("the idea page shows the review, folds earlier versions and keeps links safe", async ({ page }) => {

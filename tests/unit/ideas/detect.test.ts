@@ -310,6 +310,109 @@ describe("detection on memos", () => {
   });
 });
 
+describe("detection on HiNote recordings", () => {
+  const FILE = "2026Nov08-090000-Rec01";
+
+  it("files a recording's idea as a new item with the recording footer and an idea:rec key", async () => {
+    const h = harness([found({ title: "Sourdough timer", quote: "a timer for sourdough" })]);
+    const ref = h.seedRecording(FILE, "Call the bank. An idea: a timer for sourdough.");
+    const result = await runIdeasJob(h.deps);
+    expect(result.detected).toBe(1);
+    const created = [...h.rows.items.values()].filter((i) => i.source === "ideas-lab");
+    expect(created.map((i) => i.title)).toEqual(["Sourdough timer"]);
+    expect(created[0].description).toBe(
+      `> a timer for sourdough\n\nFrom HiNote recording ${FILE}, recorded 2026-11-08T09:00:00\nkey:idea:rec:${FILE}#0`,
+    );
+    expect(h.rows.sources.get(ref)).toMatchObject({ status: "done", attempts: 1 });
+    expect(outcomes(h, ref)).toEqual([{ kind: "new", id: created[0].id }]);
+    expect(h.rows.usage.map((u) => u.itemId)).toEqual([null]);
+    const content = (h.anthropic.sent[0].messages as { content: string }[])[0].content;
+    expect(content).toContain("voice memo transcript");
+    expect(content).toContain("Call the bank. An idea");
+  });
+
+  it("adds a mention comment on an open idea instead of a second item", async () => {
+    const h = harness();
+    const existing = h.seed({ title: "Sourdough timer" }, { reviewStatus: "done" });
+    const ref = h.seedRecording(FILE, "That sourdough timer again.");
+    const claude = byPurpose(() => found({ quote: "that sourdough timer again" }), [same(existing.id)]);
+    await runIdeasJob({ ...h.deps, anthropic: claude.client });
+    expect([...h.rows.items.values()].filter((i) => i.source === "ideas-lab")).toHaveLength(0);
+    expect(h.rows.comments.map((c) => c.body)).toEqual([
+      `Mentioned again in HiNote recording ${FILE} on 2026-11-08\n\n> that sourdough timer again`,
+    ]);
+    expect(h.rows.mentions.get(existing.id)).toBe(2);
+    expect(outcomes(h, ref)).toEqual([{ kind: "mention", id: existing.id }]);
+  });
+
+  it("resumes a recording from its saved detection after a passing error, filing each idea once", async () => {
+    const h = harness();
+    const ref = h.seedRecording(FILE, "two ideas");
+    const ideaA = { title: "Sourdough timer", quote: "a timer" };
+    const ideaB = { title: "Bakery map", quote: "a map of bakeries" };
+    const existing = h.seed({ title: "Something else" }, { reviewStatus: "done" });
+    const overloaded = Object.assign(new Error("overloaded"), { status: 529 });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const first = byPurpose(() => found(ideaA, ideaB), [same(null), overloaded]);
+    await runIdeasJob({ ...h.deps, anthropic: first.client });
+    expect(h.rows.sources.get(ref)).toMatchObject({ status: "pending", attempts: 0, claimed: false });
+    const second = byPurpose(() => found(ideaB), [same(null)]);
+    await runIdeasJob({ ...h.deps, anthropic: second.client });
+    vi.mocked(console.error).mockRestore();
+    expect(second.detectCalls()).toBe(0);
+    expect(existing.id).toBeTruthy();
+    const created = [...h.rows.items.values()].filter((i) => i.source === "ideas-lab");
+    expect(created.map((i) => i.title)).toEqual(["Sourdough timer", "Bakery map"]);
+    expect(created[1].description).toContain(`key:idea:rec:${FILE}#1`);
+    expect(h.rows.sources.get(ref)?.status).toBe("done");
+  });
+
+  it("marks a recording failed after three real failures", async () => {
+    const h = harness([], { anthropic: failing(400) });
+    const ref = h.seedRecording(FILE, "an idea");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    for (let run = 0; run < 3; run += 1) await runIdeasJob(h.deps);
+    const logged = vi.mocked(console.error).mock.calls.flat().join(" ");
+    vi.mocked(console.error).mockRestore();
+    expect(h.rows.sources.get(ref)).toMatchObject({ status: "failed", attempts: 3, lastError: "api_400" });
+    expect(logged).not.toContain("an idea");
+  });
+
+  it("reads item sources before recordings", async () => {
+    const h = harness([found(), found(), same(null)]);
+    h.seedRecording(FILE, "an idea from the Mac");
+    const capture = h.seedSource();
+    await runIdeasJob(h.deps);
+    expect(h.calls.filter((c) => c === "finishSource")).toHaveLength(2);
+    expect((h.anthropic.sent[0].messages as { content: string }[])[0].content).toContain(capture.title);
+  });
+
+  it("finishes a memo whose recording the Mac already sent with no Claude call, so the memo stays owned", async () => {
+    const h = harness([found()]);
+    h.seedRecording(FILE, "already read");
+    h.rows.sources.get(`rec:${FILE}`)!.status = "done";
+    const m = memoItem({ file: `${FILE}.hda`, recorded: "2026-11-08T09:00:00", transcript: "An idea: a sourdough timer." });
+    const memo = h.seedSource({ title: m.title, description: m.description, labels: ["hidock-memo"], source: "memo:mac" }, "memo");
+    h.rows.comments.push({ id: "c1", itemId: memo.id, body: m.transcriptParts[0], author: "worker", createdAt: NOW.toISOString() });
+    await runIdeasJob(h.deps);
+    expect(h.anthropic.sent).toHaveLength(0);
+    expect(h.rows.sources.get(memo.id)).toMatchObject({ status: "done", ideas: [] });
+    expect([...h.rows.items.values()].filter((i) => i.source === "ideas-lab")).toHaveLength(0);
+  });
+
+  it("still reads a memo whose file name the Mac never sent", async () => {
+    const h = harness([found()]);
+    h.seedRecording("2026Nov07-080000-Rec09", "another recording");
+    h.rows.sources.get("rec:2026Nov07-080000-Rec09")!.status = "done";
+    const m = memoItem({ file: `${FILE}.hda`, recorded: "2026-11-08T09:00:00", transcript: "An idea: a sourdough timer." });
+    const memo = h.seedSource({ title: m.title, description: m.description, labels: ["hidock-memo"], source: "memo:mac" }, "memo");
+    h.rows.comments.push({ id: "c1", itemId: memo.id, body: m.transcriptParts[0], author: "worker", createdAt: NOW.toISOString() });
+    await runIdeasJob(h.deps);
+    expect(h.anthropic.sent).toHaveLength(1);
+    expect([...h.rows.items.values()].filter((i) => i.source === "ideas-lab")).toHaveLength(1);
+  });
+});
+
 describe("detection feeds the review", () => {
   it("passes the detected quote to the new idea's review", async () => {
     const h = harness([found({ quote: "a timer that knows my starter" }), textReply(JSON.stringify(validReview({ links: [] })))], {

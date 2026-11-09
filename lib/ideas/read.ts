@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createHubStore } from "@/lib/hub/store";
 import type { Comment, HubStore, Item } from "@/lib/hub/types";
-import { REVIEW_SCHEMA, type IdeaReview, type ReviewStatus } from "./types";
+import { recordingRef, REVIEW_SCHEMA, type IdeaReview, type ReviewStatus } from "./types";
 
 export const IDEA_LABEL = "idea";
 export const IDEA_FILTERS = ["active", "stopped", "promoted", "done"] as const;
@@ -139,24 +139,56 @@ function listQuery(client: SupabaseClient, filter: IdeaFilter) {
 
 export type IdeaList = { ideas: IdeaListRow[]; total: number };
 
-/** A capture or memo the job could not read after three tries. */
-export type FailedSource = { itemId: string; title: string; kind: "capture" | "memo" };
+/**
+ * A capture, memo or HiNote recording the job could not read after three tries.
+ * @param ref what Try again takes: the item id, or `rec:<file>` for a recording.
+ * @param itemId the source's own item to link to; a recording has none.
+ */
+export type FailedSource = { ref: string; itemId: string | null; title: string; kind: "capture" | "memo" | "recording"; failedAt: string };
 
-/** Sources whose detection failed, newest first, for the Ideas Lab's retry list; read with the owner session. */
-export async function listFailedSources(client: SupabaseClient): Promise<FailedSource[]> {
+async function failedItemSources(client: SupabaseClient): Promise<FailedSource[]> {
   const { data, error } = await client
     .from("idea_sources")
-    .select("source_item_id, kind")
+    .select("source_item_id, kind, updated_at")
     .eq("status", "failed")
     .order("updated_at", { ascending: false })
     .limit(LIST_LIMIT);
   if (error) throw error;
-  const rows = (data ?? []) as { source_item_id: string; kind: FailedSource["kind"] }[];
+  const rows = (data ?? []) as { source_item_id: string; kind: "capture" | "memo"; updated_at: string }[];
   if (rows.length === 0) return [];
   const { data: items, error: itemsError } = await client.from("items").select("id, title").in("id", rows.map((r) => r.source_item_id));
   if (itemsError) throw itemsError;
   const titles = new Map(((items ?? []) as { id: string; title: string }[]).map((i) => [i.id, i.title]));
-  return rows.map((r) => ({ itemId: r.source_item_id, kind: r.kind, title: titles.get(r.source_item_id) ?? "Untitled" }));
+  return rows.map((r) => ({
+    ref: r.source_item_id,
+    itemId: r.source_item_id,
+    kind: r.kind,
+    title: titles.get(r.source_item_id) ?? "Untitled",
+    failedAt: r.updated_at,
+  }));
+}
+
+async function failedRecordings(client: SupabaseClient): Promise<FailedSource[]> {
+  const { data, error } = await client
+    .from("idea_recordings")
+    .select("file, updated_at")
+    .eq("status", "failed")
+    .order("updated_at", { ascending: false })
+    .limit(LIST_LIMIT);
+  if (error) throw error;
+  return ((data ?? []) as { file: string; updated_at: string }[]).map((r) => ({
+    ref: recordingRef(r.file),
+    itemId: null,
+    kind: "recording",
+    title: `HiNote recording ${r.file}`,
+    failedAt: r.updated_at,
+  }));
+}
+
+/** Sources whose detection failed, newest first, for the Ideas Lab's retry list; read with the owner session. */
+export async function listFailedSources(client: SupabaseClient): Promise<FailedSource[]> {
+  const [items, recordings] = await Promise.all([failedItemSources(client), failedRecordings(client)]);
+  return [...items, ...recordings].sort((a, b) => b.failedAt.localeCompare(a.failedAt)).slice(0, LIST_LIMIT);
 }
 
 /** Up to 200 ideas for one filter of the Ideas Lab list, newest first, plus how many match in all; works with the owner session or the service client. */

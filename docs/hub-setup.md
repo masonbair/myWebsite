@@ -95,3 +95,55 @@ claude mcp add --transport http hub-local http://localhost:3000/api/mcp/mcp --he
 
 - Migration `0008_ideas_lab.sql` adds the Ideas Lab tables, guards, the review claim, the Google token helpers (Vault secret `ideas_google_refresh_token`) and the `hub-ideas` cron job (every 15 minutes, `POST /api/hub/events/ideas`). Not applied live yet; Mason runs `supabase db push` after review.
 - Local testing: `scripts/ideas-local-stack.sh` starts a private stack (project `ideas-lab`, every port +100) from a copy of `supabase/` under `$TMPDIR/ideas-lab-supabase`, then `supabase db reset --workdir <that dir> && supabase test db --workdir <that dir>`.
+
+### HiNote recording intake (read-only, Mac)
+
+Until HiNote memos move to the hub, ideas spoken in Mac HiNote recordings reach the Ideas Lab through a small read-only job. The HiNote flow itself (hinote-sync, then todo-hub, then Todoist) is not touched.
+
+- What it does: every 15 minutes `scripts/ideas-recording-sync.ts` lists `~/HiNotes/transcripts/*.txt` (hinote-sync's folder: `home = ~/HiNotes`, transcripts named `<recording stem>.txt`) and posts each new one to `POST /api/hub/ideas/recording` as `{ file: <stem>, recorded: <file mtime, local>, transcript }`. The hub keeps one `idea_recordings` row per file name and writes nothing else; the Ideas Lab job reads it like a memo.
+- It never writes in the transcripts folder. It remembers what it sent in `~/.config/hub/ideas-recording-sent.json`. A 200 or 201 counts as sent. A 400 or 413 is marked `rejected <status>` and not sent again. A 401, a 5xx or no network stops the run without marking anything, so the next run tries again. It skips empty transcripts and ones changed in the last two minutes. Its log (`~/Library/Logs/ideas-recording.log`) holds file names and status codes only, never transcript text.
+- It refuses to run unless `~/.config/hub/ideas-recording-token` is a plain file of yours with mode 600.
+
+Install (Mason, on the Mac; migration 0008 must be live first):
+
+1. Make the token without printing it:
+   ```sh
+   mkdir -p ~/.config/hub && chmod 700 ~/.config/hub
+   (umask 077 && openssl rand -hex 32 > ~/.config/hub/ideas-recording-token)
+   chmod 600 ~/.config/hub/ideas-recording-token
+   ```
+2. In Vercel (myWebsite, Production) add `IDEAS_RECORDING_TOKEN` with the same value, then redeploy: `vercel env add IDEAS_RECORDING_TOKEN production < ~/.config/hub/ideas-recording-token`. Until it is set the route answers 503.
+3. Copy the script out of `~/Desktop`, since a launchd job cannot read Desktop files without a privacy grant. Copy it again after any change to the script:
+   ```sh
+   cp ~/Desktop/programming/myWebsite/scripts/ideas-recording-sync.ts ~/.config/hub/ideas-recording-sync.ts
+   ```
+4. Optional, to skip recordings made before today (otherwise the first run sends every transcript in the folder, and each one costs a Haiku detection call, a few cents at most): mark them all as handled.
+   ```sh
+   node -e 'const fs=require("fs"),p=require("path"),d=p.join(process.env.HOME,"HiNotes/transcripts"),o={};for(const f of fs.readdirSync(d))if(f.endsWith(".txt"))o[f]="skipped at install";fs.writeFileSync(p.join(process.env.HOME,".config/hub/ideas-recording-sent.json"),JSON.stringify(o,null,2),{mode:0o600})'
+   ```
+5. Fill the plist's placeholders and install it. `ABSOLUTE_NODE_24_PATH` is the full path of a Node 24 binary (`command -v node`, and check `node --version` prints v24). If that path changes (a Node upgrade under nvm), fill and reload the plist again.
+   ```sh
+   NODE="$(command -v node)"; "$NODE" --version
+   sed -e "s#ABSOLUTE_NODE_24_PATH#$NODE#" -e "s#ABSOLUTE_HOME_PATH#$HOME#g" \
+     ~/Desktop/programming/myWebsite/hub/ideas-recording/com.masonbair.ideas-recording.plist \
+     > ~/Library/LaunchAgents/com.masonbair.ideas-recording.plist
+   plutil -lint ~/Library/LaunchAgents/com.masonbair.ideas-recording.plist
+   ```
+6. Try one run by hand, then load the job (it also runs once at load):
+   ```sh
+   "$NODE" ~/.config/hub/ideas-recording-sync.ts; echo "exit $?"
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.masonbair.ideas-recording.plist
+   launchctl print gui/$(id -u)/com.masonbair.ideas-recording | grep -E 'state|last exit'
+   ```
+   Exit 0 is a clean run, 1 means it stopped and will retry, 2 means it refused (token file missing, empty or not mode 600).
+7. Check: within 15 minutes of a new recording's transcript, its ideas show in the Ideas Lab with the footer `From HiNote recording <file>, recorded <time>`. A recording the Ideas Lab could not read after three tries shows under "Could not read" as `HiNote recording <file>` with Try again.
+
+Uninstall (also the first step of the memo-detection cutover in `docs/hub-cutover-notes.md`):
+
+```sh
+launchctl bootout gui/$(id -u)/com.masonbair.ideas-recording
+rm ~/Library/LaunchAgents/com.masonbair.ideas-recording.plist
+rm ~/.config/hub/ideas-recording-sync.ts
+```
+
+Keep `~/.config/hub/ideas-recording-sent.json` if you may install it again. To close the route as well, remove `IDEAS_RECORDING_TOKEN` in Vercel and redeploy (it then answers 503). Rows already in `idea_recordings` stay; they are never deleted.

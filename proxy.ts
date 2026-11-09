@@ -13,14 +13,14 @@ const PUBLIC_HUB_PATHS = new Set([
   // The browser refetches the worker script to update it, and a redirect to login would fail that update.
   "/hub/sw.js",
 ]);
-const MACHINE_API = /^\/api\/hub\/(worker|events)(\/|$)/;
+const MACHINE_API = /^\/api\/hub\/(worker|events|ideas\/recording)(\/|$)/;
 
 function noindex(response: NextResponse): NextResponse {
   response.headers.set("X-Robots-Tag", "noindex, nofollow");
   return response;
 }
 
-// Cheap pre-check only: each worker or events route still verifies its own token.
+// Cheap pre-check only: each worker, events or recording route still verifies its own token.
 function gateMachineApi(request: NextRequest): NextResponse {
   if (!/^Bearer \S+/.test(request.headers.get("authorization") ?? "")) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

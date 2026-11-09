@@ -39,12 +39,14 @@ function fakeSessionClient() {
 }
 
 let sources: Map<string, Row>;
+let recordings: Map<string, Row>;
 
-/** Just the guarded idea_sources update retryDetection makes through the service client. */
+/** Just the guarded idea_sources and idea_recordings updates retryDetection makes through the service client. */
 function fakeServiceClient() {
   return {
     from(table: string) {
-      if (table !== "idea_sources") throw new Error(`unexpected table ${table}`);
+      const rows = { idea_sources: sources, idea_recordings: recordings }[table];
+      if (!rows) throw new Error(`unexpected table ${table}`);
       return {
         update: (cols: Row) => {
           const filters: [string, unknown][] = [];
@@ -54,9 +56,9 @@ function fakeServiceClient() {
               return chain;
             },
             async select() {
-              const hits = [...sources.values()].filter((row) => filters.every(([c, v]) => row[c] === v));
+              const hits = [...rows.values()].filter((row) => filters.every(([c, v]) => row[c] === v));
               for (const row of hits) Object.assign(row, cols);
-              return { data: hits.map((row) => ({ source_item_id: row.source_item_id })), error: null };
+              return { data: hits, error: null };
             },
           };
           return chain;
@@ -90,6 +92,7 @@ describe("ideas actions", () => {
     store = createFakeStore({ kind: "mason" });
     settings = new Map();
     sources = new Map();
+    recordings = new Map();
     updateError = null;
     requireOwner.mockReset();
     requireOwner.mockImplementation(async () => ({ userId: "owner" }));
@@ -252,7 +255,18 @@ describe("ideas actions", () => {
     });
 
     it("refuses a bad id", async () => {
-      await expect(retryDetection("not-an-id; drop table")).rejects.toThrow("bad item id");
+      for (const ref of ["not-an-id; drop table", "rec:../etc", "rec:", "rec:a b"]) {
+        await expect(retryDetection(ref)).rejects.toThrow("bad source");
+      }
+    });
+
+    it("puts a failed HiNote recording back in line by its rec: ref, keeping its saved detection", async () => {
+      const FILE = "2026Nov08-090000-Rec01";
+      recordings.set(FILE, { file: FILE, status: "failed", attempts: 3, last_error: "schema", quotes: saved });
+      await retryDetection(`rec:${FILE}`);
+      expect(recordings.get(FILE)).toEqual({ file: FILE, status: "pending", attempts: 0, last_error: null, quotes: saved });
+      recordings.get(FILE)!.status = "done";
+      await expect(retryDetection(`rec:${FILE}`)).rejects.toThrow("only a failed detection");
     });
 
     it.each(["pending", "done"])("refuses a %s source and leaves it as it is", async (status) => {

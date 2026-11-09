@@ -91,6 +91,40 @@ create table public.idea_google (
 
 insert into public.idea_google default values;
 
+-- HiNote transcripts the Mac sends read-only while its memos still go to todo-hub; detection reads them like sources.
+create table public.idea_recordings (
+  file text primary key check (file ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'),
+  recorded timestamp not null,
+  transcript text not null check (length(transcript) <= 1000000),
+  status text not null default 'pending' check (status in ('pending', 'done', 'failed')),
+  attempts int not null default 0,
+  idea_item_ids uuid[] not null default '{}',
+  quotes jsonb not null default '[]',
+  model text,
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index idea_recordings_status_idx on public.idea_recordings (status, created_at);
+
+-- No role bypass: a resent or forged upload must never rewrite what Mason said or when.
+create function public.idea_recordings_guard() returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  if new.file is distinct from old.file or new.recorded is distinct from old.recorded
+     or new.transcript is distinct from old.transcript then
+    raise exception 'a recording''s file, time and transcript never change';
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+create trigger idea_recordings_guard before update on public.idea_recordings
+  for each row execute function public.idea_recordings_guard();
+
 -- The owner may only ask for a review or set it back to none; the job's bookkeeping columns belong to the service role.
 create function public.idea_settings_guard() returns trigger
 language plpgsql set search_path = ''
@@ -166,6 +200,8 @@ create trigger idea_resurface_no_delete before delete on public.idea_resurface
   for each row execute function public.hub_no_delete();
 create trigger idea_google_no_delete before delete on public.idea_google
   for each row execute function public.hub_no_delete();
+create trigger idea_recordings_no_delete before delete on public.idea_recordings
+  for each row execute function public.hub_no_delete();
 
 -- Statement-level guard too, since a row trigger never fires on truncate.
 create trigger ai_usage_no_truncate before truncate on public.ai_usage
@@ -179,6 +215,8 @@ create trigger idea_sources_no_truncate before truncate on public.idea_sources
 create trigger idea_resurface_no_truncate before truncate on public.idea_resurface
   for each statement execute function public.hub_no_delete();
 create trigger idea_google_no_truncate before truncate on public.idea_google
+  for each statement execute function public.hub_no_delete();
+create trigger idea_recordings_no_truncate before truncate on public.idea_recordings
   for each statement execute function public.hub_no_delete();
 
 -- Security definer so a capture saved by the owner can queue rows in tables the owner cannot write; errors roll the capture back.
@@ -279,6 +317,7 @@ alter table public.idea_reviews enable row level security;
 alter table public.idea_sources enable row level security;
 alter table public.idea_resurface enable row level security;
 alter table public.idea_google enable row level security;
+alter table public.idea_recordings enable row level security;
 
 create policy ai_usage_owner_read on public.ai_usage
   for select to authenticated using (public.is_owner());
@@ -294,13 +333,15 @@ create policy idea_sources_owner_read on public.idea_sources
   for select to authenticated using (public.is_owner());
 create policy idea_resurface_owner_read on public.idea_resurface
   for select to authenticated using (public.is_owner());
+create policy idea_recordings_owner_read on public.idea_recordings
+  for select to authenticated using (public.is_owner());
 
 revoke all on table public.ai_usage, public.idea_settings, public.idea_reviews,
-  public.idea_sources, public.idea_resurface, public.idea_google from public, anon, authenticated;
+  public.idea_sources, public.idea_resurface, public.idea_google, public.idea_recordings from public, anon, authenticated;
 revoke all on sequence public.ai_usage_id_seq, public.idea_reviews_id_seq, public.idea_resurface_id_seq
   from public, anon, authenticated;
 grant select on table public.ai_usage, public.idea_settings, public.idea_reviews,
-  public.idea_sources, public.idea_resurface to authenticated;
+  public.idea_sources, public.idea_resurface, public.idea_recordings to authenticated;
 grant insert on table public.idea_settings to authenticated;
 grant update (reminders_stopped_at, no_web_search, review_status, review_requested_at, review_note, enrolled, schedule_from)
   on table public.idea_settings to authenticated;

@@ -94,8 +94,14 @@ Behavior change: the old skill finished a laptop task by setting `claude-done`. 
 
 Memo detection ships off. While it is off, the memo relay files memos exactly as before and queues none for the Ideas Lab, so it reads only phone and web captures. Switch it on only after step 5 above, once the uploaders send memos to the hub:
 
-1. Unload the HiNote recording intake first, if task 6b installed it on the Mac (its plist and the uninstall commands are in `docs/hub-setup.md`). Otherwise the same recordings reach the Ideas Lab twice.
+1. Stop the read-only HiNote recording intake first, before the switch, if it is installed on the Mac (full steps under "HiNote recording intake" in `docs/hub-setup.md`):
+   ```sh
+   launchctl bootout gui/$(id -u)/com.masonbair.ideas-recording
+   rm ~/Library/LaunchAgents/com.masonbair.ideas-recording.plist
+   ```
+   Check it is gone: `launchctl print gui/$(id -u)/com.masonbair.ideas-recording` should say it cannot find the service. If it kept running after the switch, a new recording could be read twice: once as a recording and once as a memo.
 2. In Vercel (myWebsite, Production) set `IDEAS_MEMO_DETECTION=on` and redeploy. From then on each new memo the relay files also gets an `idea_sources` row (kind `memo`, pending), and the Ideas Lab job reads it. Memos filed before the switch are not read.
+   Recordings the intake already sent are not read again: a memo whose device file name (or its stem, which is how hinote-sync names transcripts) is already in `idea_recordings` finishes detection with no Claude call. Its source row still exists, so the memo split treats its ideas as owned by the Ideas Lab and files none of its own.
 3. Nothing to change in the worker: the memo split already skips ideas the Ideas Lab owns. `hub memos` gives each memo `ideasOwnedByIdeasLab` (true whenever the memo was queued for the Ideas Lab, even if its reading failed; false only when it was never queued) and `ideasFiled` (idea item ids filed so far). When owned, the worker leaves its `ideas` list empty for that memo, and `hub memo-split` drops the pieces file's ideas anyway. To-dos and notes, including notes for no known project, are still the memo split's. A memo the split archives is still read for ideas.
 4. Check: upload a test memo that holds one idea. Within 15 minutes it should appear in the Ideas list with the quote and a link back to the memo, and the memo should stay open in the inbox.
 

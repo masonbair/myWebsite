@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import { createHubStore } from "@/lib/hub/store";
-import { ClaimLost, createIdeasJobStore, ideasFiledFrom, queueMemoIdeas } from "@/lib/ideas/store";
+import { listFailedSources } from "@/lib/ideas/read";
+import { insertRecording } from "@/lib/ideas/recording";
+import { ClaimLost, createIdeasJobStore, ideasFiledFrom, queueMemoIdeas, sourceRef } from "@/lib/ideas/store";
+import { recordingRef } from "@/lib/ideas/types";
 import { validReview } from "./fake-anthropic";
 
 // Run against the Ideas Lab's own stack (scripts/ideas-local-stack.sh) with the same env as tests/unit/hub/store.integration.test.ts.
@@ -151,8 +154,9 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
   /** Claims and closes every pending source left by other tests, leased or not, so the next claim sees only ours. */
   async function drain() {
     const store = createIdeasJobStore(client(), 0);
-    for (let claimed = await store.claimSource(["capture", "memo"]); claimed; claimed = await store.claimSource(["capture", "memo"])) {
-      await store.finishSource(claimed.itemId, [], null);
+    const all = ["capture", "memo", "recording"] as const;
+    for (let claimed = await store.claimSource([...all]); claimed; claimed = await store.claimSource([...all])) {
+      await store.finishSource(sourceRef(claimed), [], null);
     }
   }
 
@@ -164,7 +168,7 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
       createIdeasJobStore(client()).claimSource(["capture"]),
       createIdeasJobStore(client()).claimSource(["capture"]),
     ]);
-    expect([a, b].filter((c) => c?.itemId === capture.id)).toHaveLength(1);
+    expect([a, b].filter((c) => c && sourceRef(c) === capture.id)).toHaveLength(1);
     expect(await createIdeasJobStore(client()).claimSource(["capture"])).toBeNull();
     await expect(createIdeasJobStore(client()).finishSource(capture.id, [], null)).rejects.toBeInstanceOf(ClaimLost);
   });
@@ -203,7 +207,7 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
   it("adds a new idea once per client key, with no detection row of its own", async () => {
     const store = createIdeasJobStore(client());
     const capture = await newCapture();
-    const origin = { itemId: capture.id, url: capture.url, recorded: capture.createdAt };
+    const origin = { key: capture.id, footer: `Source: ${capture.url}, recorded ${capture.createdAt}` };
     const first = await store.addIdeaFrom(origin, 0, "Sourdough timer", "a timer for sourdough");
     expect(await store.addIdeaFrom(origin, 0, "Sourdough timer", "a timer for sourdough")).toBe(first);
     const idea = await hub().getItem(first);
@@ -224,7 +228,7 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
     await drain();
     const store = createIdeasJobStore(client());
     const capture = await newCapture();
-    const origin = { itemId: capture.id, url: capture.url, recorded: capture.createdAt };
+    const origin = { key: capture.id, footer: `Source: ${capture.url}, recorded ${capture.createdAt}` };
     const idea = await store.addIdeaFrom(origin, 0, "Bakery map", "a map of bakeries");
     expect(await store.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture", saved: null });
     const saved = [{ title: "Bakery map", quote: "a map of bakeries", whole_item: false, sure: false, outcome: { kind: "new" as const, id: idea } }];
@@ -285,7 +289,7 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
     await drain();
     const capture = await newCapture();
     for (let run = 0; run < 3; run += 1) {
-      expect((await createIdeasJobStore(client(), 0).claimSource(["capture"]))?.itemId).toBe(capture.id);
+      expect(((c) => c && sourceRef(c))(await createIdeasJobStore(client(), 0).claimSource(["capture"]))).toBe(capture.id);
     }
     expect(await createIdeasJobStore(client(), 0).claimSource(["capture"])).toBeNull();
     expect(await source(capture.id)).toMatchObject({ status: "failed", attempts: 3, last_error: "stale" });
@@ -296,10 +300,111 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
     // The mention's source is older, so a plain oldest-first pick would get the wrong quote.
     const later = await newCapture();
     const ideaSource = await newCapture();
-    const idea = await store.addIdeaFrom({ itemId: ideaSource.id, url: ideaSource.url, recorded: ideaSource.createdAt }, 0, "Q", "first words");
+    const idea = await store.addIdeaFrom({ key: ideaSource.id, footer: `Source: ${ideaSource.url}, recorded ${ideaSource.createdAt}` }, 0, "Q", "first words");
     const entry = { title: "Q", whole_item: false, sure: false };
     await client().from("idea_sources").update({ quotes: [{ ...entry, quote: "said again", outcome: { kind: "mention", id: idea } }], idea_item_ids: [idea] }).eq("source_item_id", later.id);
     await client().from("idea_sources").update({ quotes: [{ ...entry, quote: "first words", outcome: { kind: "new", id: idea } }], idea_item_ids: [idea] }).eq("source_item_id", ideaSource.id);
     expect(await store.ideaQuote(idea)).toBe("first words");
+  });
+});
+
+describe.skipIf(!enabled)("HiNote recordings against local Supabase", () => {
+  const client = () => createClient(apiUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const newFile = () => `rec-${randomUUID()}`;
+
+  async function newRecording(transcript = "an idea: a sourdough timer") {
+    const file = newFile();
+    expect(await insertRecording(client(), { file, recorded: "2026-11-08T09:00:00", transcript })).toBe("created");
+    return file;
+  }
+
+  async function recording(file: string) {
+    const { data, error } = await client().from("idea_recordings").select("*").eq("file", file).single();
+    if (error) throw error;
+    return data;
+  }
+
+  /** Closes every pending recording left by other tests, so the next claim sees only ours. */
+  async function drain() {
+    const store = createIdeasJobStore(client(), 0);
+    for (let claimed = await store.claimSource(["recording"]); claimed; claimed = await store.claimSource(["recording"])) {
+      await store.finishSource(sourceRef(claimed), [], null);
+    }
+  }
+
+  it("saves a recording once per file name; a resend is a duplicate that changes nothing", async () => {
+    const file = await newRecording("first words");
+    expect(await insertRecording(client(), { file, recorded: "2026-01-01T00:00:00", transcript: "other words" })).toBe("duplicate");
+    const { data } = await client().from("idea_recordings").select("file, recorded, transcript, status").eq("file", file);
+    expect(data).toEqual([{ file, recorded: "2026-11-08T09:00:00", transcript: "first words", status: "pending" }]);
+  });
+
+  it("claims a recording once, saves progress, gives a passing stop back and resumes from the saved detection", async () => {
+    await drain();
+    const file = await newRecording();
+    const [a, b] = await Promise.all([
+      createIdeasJobStore(client()).claimSource(["recording"]),
+      createIdeasJobStore(client()).claimSource(["recording"]),
+    ]);
+    expect([a, b].filter((c) => c && sourceRef(c) === recordingRef(file))).toHaveLength(1);
+    // The winner holds a 10-minute lease; a zero-lease store takes it over, as a run after the lease would.
+    const store = createIdeasJobStore(client(), 0);
+    const claimed = await store.claimSource(["recording"]);
+    expect(claimed).toEqual({ kind: "recording", file, recorded: "2026-11-08T09:00:00", transcript: "an idea: a sourdough timer", saved: null });
+    const ideas = [{ title: "Sourdough timer", quote: "a timer", whole_item: false, sure: false, outcome: null }];
+    await store.saveIdeas(recordingRef(file), ideas, "claude-haiku-5-5");
+    await store.releaseSource(recordingRef(file));
+    expect(await recording(file)).toMatchObject({ status: "pending", attempts: 1, quotes: ideas });
+    expect((await store.claimSource(["recording"]))?.saved).toEqual({ ideas, model: "claude-haiku-5-5" });
+    await store.finishSource(recordingRef(file), ideas, "claude-haiku-5-5");
+    expect(await recording(file)).toMatchObject({ status: "done", attempts: 2 });
+    const { data: audit } = await client().from("audit_log").select("item_id, action, detail").eq("detail->>recording", file);
+    expect(audit).toEqual([{ item_id: null, action: "idea-detect", detail: { recording: file, ideas: 1, model: "claude-haiku-5-5" } }]);
+  });
+
+  it("fails a recording on its third failure, lists it under Could not read, and counts it", async () => {
+    await drain();
+    const file = await newRecording();
+    const store = createIdeasJobStore(client(), 0);
+    for (const expected of ["pending", "pending", "failed"]) {
+      expect(await store.claimSource(["recording"])).toMatchObject({ kind: "recording", file });
+      expect(await store.failSource(recordingRef(file), "schema")).toBe(expected);
+    }
+    expect(await store.claimSource(["recording"])).toBeNull();
+    expect(await listFailedSources(client())).toContainEqual(
+      expect.objectContaining({ ref: recordingRef(file), itemId: null, kind: "recording", title: `HiNote recording ${file}` }),
+    );
+    expect((await store.failureCounts(new Date(Date.now() - 60_000))).detections).toBeGreaterThanOrEqual(1);
+  });
+
+  it("fails a recording whose third claim died without a finish, instead of claiming it again", async () => {
+    await drain();
+    const file = await newRecording();
+    for (let run = 0; run < 3; run += 1) {
+      expect(await createIdeasJobStore(client(), 0).claimSource(["recording"])).toMatchObject({ file });
+    }
+    expect(await createIdeasJobStore(client(), 0).claimSource(["recording"])).toBeNull();
+    expect(await recording(file)).toMatchObject({ status: "failed", attempts: 3, last_error: "stale" });
+  });
+
+  it("knows a memo's recording by its device file name or its stem", async () => {
+    const file = await newRecording();
+    const store = createIdeasJobStore(client());
+    expect(await store.recordingExists(`${file}.hda`)).toBe(true);
+    expect(await store.recordingExists(file)).toBe(true);
+    expect(await store.recordingExists(`${newFile()}.hda`)).toBe(false);
+  });
+
+  it("gives the review the quote a recording filed an idea from", async () => {
+    const file = await newRecording();
+    const store = createIdeasJobStore(client(), 0);
+    const idea = await store.addIdeaFrom({ key: recordingRef(file), footer: `From HiNote recording ${file}, recorded 2026-11-08T09:00:00` }, 0, "Q", "spoken words");
+    const { data: keyed } = await client().from("items").select("id, description").eq("client_key", `idea:rec:${file}#0`);
+    expect(keyed).toEqual([{ id: idea, description: `> spoken words\n\nFrom HiNote recording ${file}, recorded 2026-11-08T09:00:00` }]);
+    await client()
+      .from("idea_recordings")
+      .update({ quotes: [{ title: "Q", quote: "spoken words", whole_item: false, sure: false, outcome: { kind: "new", id: idea } }], idea_item_ids: [idea] })
+      .eq("file", file);
+    expect(await store.ideaQuote(idea)).toBe("spoken words");
   });
 });

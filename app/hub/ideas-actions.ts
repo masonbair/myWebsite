@@ -5,8 +5,9 @@ import { requireOwner } from "@/lib/auth/require-owner";
 import { isItemId } from "@/lib/hub/format";
 import { masonStore } from "@/lib/hub/mason-store";
 import type { HubStore, Item } from "@/lib/hub/types";
+import { MEMO_FILE } from "@/lib/hub/memo";
 import { IDEA_LABEL, isIdea } from "@/lib/ideas/read";
-import { MAX_REVIEW_NOTE } from "@/lib/ideas/types";
+import { MAX_REVIEW_NOTE, recordingFile } from "@/lib/ideas/types";
 import { serviceClient, sessionClient } from "@/lib/supabase/server";
 
 const REVIEW_RUNNING = "A review is running. Try again in a few minutes.";
@@ -116,17 +117,22 @@ export async function backToInbox(id: string): Promise<void> {
   refreshHub();
 }
 
-/** Puts a failed detection back in line; the saved detection is kept, so the retry files from it without a second Claude call. */
-export async function retryDetection(sourceItemId: string): Promise<void> {
+/**
+ * Puts a failed detection back in line; the saved detection is kept, so the retry files from it without a second Claude call.
+ * @param ref the source item's id, or `rec:<file>` for a HiNote recording.
+ */
+export async function retryDetection(ref: string): Promise<void> {
   await requireOwner();
-  if (!isItemId(sourceItemId)) throw new Error("bad item id");
-  // The owner has no write grant on idea_sources; the service client may, and only a failed row changes.
+  const file = typeof ref === "string" ? recordingFile(ref) : null;
+  if (file === null ? !isItemId(ref) : !MEMO_FILE.test(file)) throw new Error("bad source");
+  const [table, key, value] = file === null ? (["idea_sources", "source_item_id", ref] as const) : (["idea_recordings", "file", file] as const);
+  // The owner has no write grant on either table; the service client may, and only a failed row changes.
   const { data, error } = await serviceClient()
-    .from("idea_sources")
+    .from(table)
     .update({ status: "pending", attempts: 0, last_error: null })
-    .eq("source_item_id", sourceItemId)
+    .eq(key, value)
     .eq("status", "failed")
-    .select("source_item_id");
+    .select(key);
   if (error) throw error;
   if ((data ?? []).length === 0) throw new Error("only a failed detection can be tried again");
   refreshHub();

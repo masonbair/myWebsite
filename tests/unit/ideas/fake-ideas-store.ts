@@ -1,11 +1,13 @@
 import { costOf } from "@/lib/ai/claude";
 import { ClaimLost, type IdeasJobStore } from "@/lib/ideas/store";
-import type { IdeaReview, IdeaSettings, ReviewStatus, SavedIdea, SourceKind } from "@/lib/ideas/types";
+import { recordingRef, type DetectKind, type IdeaReview, type IdeaSettings, type ReviewStatus, type SavedIdea, type SourceKind } from "@/lib/ideas/types";
 import type { Comment, Item } from "@/lib/hub/types";
 
 export type FakeSource = {
+  /** The item id, or `rec:<file>` for a recording. */
   itemId: string;
-  kind: SourceKind;
+  kind: DetectKind;
+  recording?: { file: string; recorded: string; transcript: string };
   status: "pending" | "done" | "failed";
   ideas: SavedIdea[];
   attempts: number;
@@ -18,7 +20,7 @@ export type FakeIdeasRows = {
   items: Map<string, Item>;
   settings: Map<string, IdeaSettings>;
   reviews: { itemId: string; version: number; review: IdeaReview; model: string; costUsd: number; note: string | null }[];
-  usage: { itemId: string; model: string; purpose: string; cost: number }[];
+  usage: { itemId: string | null; model: string; purpose: string; cost: number }[];
   flags: Map<string, unknown>;
   failedDetections: number;
   sources: Map<string, FakeSource>;
@@ -128,13 +130,17 @@ export function createFakeIdeasStore() {
       return (entries.find((i) => i.outcome?.kind !== "mention") ?? entries[0])?.quote ?? null;
     },
     async claimSource(kinds) {
-      const next = [...rows.sources.values()].find((s) => s.status === "pending" && s.attempts < 3 && !s.claimed && kinds.includes(s.kind));
+      const pending = [...rows.sources.values()].filter((s) => s.status === "pending" && s.attempts < 3 && !s.claimed && kinds.includes(s.kind));
+      const next = pending.find((s) => s.kind !== "recording") ?? pending[0];
       if (!next) return null;
       next.claimed = true;
       next.attempts += 1;
       const saved = next.ideas.length ? { ideas: structuredClone(next.ideas), model: next.model as "claude-haiku-5-5" | null } : null;
-      return { itemId: next.itemId, kind: next.kind, saved };
+      if (next.recording) return { kind: "recording", ...next.recording, saved };
+      return { itemId: next.itemId, kind: next.kind as SourceKind, saved };
     },
+    recordingExists: async (memoFile) =>
+      rows.sources.has(recordingRef(memoFile)) || rows.sources.has(recordingRef(memoFile.replace(/\.[^.]*$/, ""))),
     listComments: async (id) => rows.comments.filter((c) => c.itemId === id),
     async saveIdeas(id, ideas, model) {
       const source = rows.sources.get(id)!;
@@ -165,20 +171,20 @@ export function createFakeIdeasStore() {
       seedSettings(id);
     },
     async addIdeaFrom(origin, n, title, quote) {
-      const key = `idea:${origin.itemId}#${n}`;
+      const key = `idea:${origin.key}#${n}`;
       const existing = [...rows.items.values()].find((i) => i.description.endsWith(`key:${key}`));
       if (existing) return existing.id;
       const item = ideaItem({
         title,
         source: "ideas-lab",
-        description: `> ${quote}\n\nSource: ${origin.url}, recorded ${origin.recorded}\nkey:${key}`,
+        description: `> ${quote}\n\n${origin.footer}\nkey:${key}`,
       });
       rows.items.set(item.id, item);
       seedSettings(item.id);
       return item.id;
     },
-    async mentionAgain(ideaId, sourceUrl, date, quote) {
-      const body = `Mentioned again in ${sourceUrl} on ${date}\n\n> ${quote}`;
+    async mentionAgain(ideaId, source, date, quote) {
+      const body = `Mentioned again in ${source} on ${date}\n\n> ${quote}`;
       if (rows.comments.some((c) => c.itemId === ideaId && c.body === body)) return;
       rows.comments.push({ id: `c${rows.comments.length}`, itemId: ideaId, body, author: "worker", createdAt: date });
       rows.mentions.set(ideaId, (rows.mentions.get(ideaId) ?? 1) + 1);
@@ -236,5 +242,22 @@ export function createFakeIdeasStore() {
     return seeded;
   }
 
-  return { store, rows, calls, seed, seedSource };
+  /** A recording the Mac sent read-only, pending detection. */
+  function seedRecording(file: string, transcript: string, recorded = "2026-11-08T09:00:00"): string {
+    const ref = recordingRef(file);
+    rows.sources.set(ref, {
+      itemId: ref,
+      kind: "recording",
+      recording: { file, recorded, transcript },
+      status: "pending",
+      ideas: [],
+      attempts: 0,
+      model: null,
+      lastError: null,
+      claimed: false,
+    });
+    return ref;
+  }
+
+  return { store, rows, calls, seed, seedSource, seedRecording };
 }
