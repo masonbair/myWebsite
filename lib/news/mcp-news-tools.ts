@@ -13,11 +13,12 @@ const MAX_DAILY_RANGE_DAYS = 366;
 const DAY_MS = 86_400_000;
 
 const date = z.iso.date();
+const slug = z.string().regex(/^[a-z0-9-]{1,40}$/, "a topic slug: lowercase letters, digits and dashes");
 const word = z.string().trim().min(1).max(200);
 
 const searchInput = z.object({
   text: word.optional().describe("Case-insensitive match in the story headline"),
-  topic: z.string().trim().min(1).max(40).optional().describe("Topic slug"),
+  topic: slug.optional().describe("Topic slug"),
   company: word.optional().describe("Company name, partial match"),
   ticker: z.string().trim().min(1).max(12).optional(),
   source: z.string().trim().min(1).max(40).optional().describe("Newsletter source id, for example rundown-ai"),
@@ -25,13 +26,18 @@ const searchInput = z.object({
   to: date.optional().describe("Latest story date"),
   limit: z.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT),
 });
-const trendInput = z.object({
-  kind: z.enum(["topic", "company"]),
-  key: word.describe("Topic slug, or company name or ticker"),
-  from: date,
-  to: date,
-  by: z.enum(["day", "week", "month"]).default("week"),
-});
+const trendInput = z
+  .object({
+    kind: z.enum(["topic", "company"]),
+    key: z.string().trim().describe("Topic slug, or a company id as returned in news_search results"),
+    from: date,
+    to: date,
+    by: z.enum(["day", "week", "month"]).default("week"),
+  })
+  .refine((v) => (v.kind === "topic" ? slug.safeParse(v.key).success : /^\d{1,18}$/.test(v.key)), {
+    message: "key must be a topic slug, or a numeric company id for kind company",
+    path: ["key"],
+  });
 const moversInput = z.object({
   days: z.number().int().min(1).max(MAX_DAYS).default(7),
   limit: z.number().int().min(1).max(50).default(10),
@@ -94,6 +100,7 @@ export function registerNewsTools(server: McpServer, reader: NewsReader): void {
       run(async () => {
         const issue = await reader.getIssue(id);
         if (!issue) throw new ToolError(`no issue ${id}`);
+        if (issue.status === "quarantined") throw new ToolError("this issue is held back; open it in /hub/news");
         return issue;
       }),
   );

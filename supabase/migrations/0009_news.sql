@@ -375,6 +375,69 @@ begin
 end;
 $$;
 
+-- The owner's connector counts current-run news stories from issues and shared reads, grouped here so no row limit can cut them short.
+create function public.news_story_counts(p_kind text, p_keys text[], p_from date, p_to date, p_bucket text)
+returns table (bucket date, stories int, mentions int, tone_avg numeric)
+language sql stable set search_path = ''
+as $$
+  select date_trunc(p_bucket, s.story_date)::date,
+         count(distinct coalesce('c' || s.cluster_id::text, 's' || s.id::text))::int,
+         count(*)::int,
+         round(avg(s.sentiment), 2)
+  from public.news_stories s
+  left join public.news_issues i on i.id = s.issue_id
+  left join public.news_shared sh on sh.id = s.shared_id
+  where s.kind = 'news'
+    and s.run_id = coalesce(i.current_run_id, sh.current_run_id)
+    and s.story_date between p_from and p_to
+    and p_bucket in ('day', 'week', 'month')
+    and case p_kind
+          when 'topic' then s.topics && p_keys
+          when 'company' then s.company_ids::text[] && p_keys
+          else false
+        end
+  group by 1
+  order by 1;
+$$;
+
+-- Coverage only: a topic or company with at least 3 stories in the last p_days days and more than before is "more", the reverse is "less".
+create function public.news_story_movers(p_days int, p_limit int)
+returns table (kind text, key text, recent int, previous int)
+language sql stable set search_path = ''
+as $$
+  with today as (select (now() at time zone 'utc')::date as d),
+  cur as (
+    select s.id, s.story_date, s.cluster_id, s.topics, s.company_ids
+    from public.news_stories s
+    left join public.news_issues i on i.id = s.issue_id
+    left join public.news_shared sh on sh.id = s.shared_id
+    where s.kind = 'news'
+      and s.run_id = coalesce(i.current_run_id, sh.current_run_id)
+      and s.story_date between (select d from today) - (2 * p_days - 1) and (select d from today)
+  ),
+  mentions as (
+    select c.id, c.story_date, c.cluster_id, 'topic'::text as kind, t as key
+    from cur c, unnest(c.topics) as t
+    union all
+    select c.id, c.story_date, c.cluster_id, 'company', co::text
+    from cur c, unnest(c.company_ids) as co
+  ),
+  tally as (
+    select m.kind, m.key,
+           count(distinct coalesce('c' || m.cluster_id::text, 's' || m.id::text))
+             filter (where m.story_date > (select d from today) - p_days)::int as recent,
+           count(distinct coalesce('c' || m.cluster_id::text, 's' || m.id::text))
+             filter (where m.story_date <= (select d from today) - p_days)::int as previous
+    from mentions m
+    group by m.kind, m.key
+  )
+  select t.kind, t.key, t.recent, t.previous
+  from tally t
+  where (t.recent >= 3 and t.recent > t.previous) or (t.previous >= 3 and t.recent < t.previous)
+  order by abs(t.recent - t.previous) desc, t.kind, t.key
+  limit least(greatest(p_limit, 1), 50);
+$$;
+
 create function public.news_public_trends(p_from date, p_to date)
 returns table (day date, kind text, key text, label text, ticker text, stories int, mentions int, tone_avg numeric, sources text[])
 language sql stable set search_path = ''
@@ -404,10 +467,12 @@ $$;
 revoke execute on function public.news_issues_guard(), public.news_stories_guard(), public.news_shared_guard()
   from public, anon, authenticated;
 revoke execute on function public.news_claim(text, int, interval), public.news_refresh_trends(date, date),
-  public.news_public_trends(date, date), public.news_public_coverage(text, text, date)
+  public.news_public_trends(date, date), public.news_public_coverage(text, text, date),
+  public.news_story_counts(text, text[], date, date, text), public.news_story_movers(int, int)
   from public, anon, authenticated;
 grant execute on function public.news_claim(text, int, interval), public.news_refresh_trends(date, date),
-  public.news_public_trends(date, date), public.news_public_coverage(text, text, date)
+  public.news_public_trends(date, date), public.news_public_coverage(text, text, date),
+  public.news_story_counts(text, text[], date, date, text), public.news_story_movers(int, int)
   to service_role;
 revoke execute on function public.news_retry(uuid) from public, anon, authenticated, service_role;
 grant execute on function public.news_retry(uuid) to authenticated;

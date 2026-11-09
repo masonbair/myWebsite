@@ -100,7 +100,7 @@ export type SearchQuery = {
   to?: string;
   limit: number;
 };
-export type CompanyRef = { name: string; ticker: string | null };
+export type CompanyRef = { id: number; name: string; ticker: string | null };
 export type StoryHit = {
   id: number;
   headline: string;
@@ -168,21 +168,10 @@ const PAGE = 500;
 const MAX_PAGES = 20;
 const COMPANY_MATCH_LIMIT = 50;
 const MAX_ISSUE_TEXT = 60_000;
-const DAY_MS = 86_400_000;
 
-const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const likeEscape = (s: string) => s.replace(/[\\%_]/g, "\\$&");
-const storyKey = (r: Pick<StoryDbRow, "id" | "cluster_id">) => (r.cluster_id === null ? `s${r.id}` : `c${r.cluster_id}`);
 const isCurrent = (r: StoryDbRow) => r.run_id === (r.news_issues?.current_run_id ?? r.news_shared?.current_run_id ?? null);
-const round2 = (n: number) => Math.round(n * 100) / 100;
-
-function bucketOf(day: string, by: TrendQuery["by"]): string {
-  if (by === "day") return day;
-  if (by === "month") return `${day.slice(0, 7)}-01`;
-  const ms = Date.parse(day);
-  const sinceMonday = (new Date(ms).getUTCDay() + 6) % 7;
-  return isoDay(ms - sinceMonday * DAY_MS);
-}
+const cents = (n: number) => Math.round(n * 100) / 100;
 
 /** Read-only news queries for the hub connector, run with the service client and bounded by date range and page count. */
 export function createNewsReader(client: SupabaseClient, now: () => Date = () => new Date()): NewsReader {
@@ -211,19 +200,19 @@ export function createNewsReader(client: SupabaseClient, now: () => Date = () =>
     return (await rows<{ id: number }>(q)).map((r) => r.id);
   }
 
-  async function companyMap(ids: number[]): Promise<Map<number, CompanyRef & { verified: boolean }>> {
+  async function companyMap(ids: number[]): Promise<Map<number, Omit<CompanyRef, "id">>> {
     const unique = [...new Set(ids)];
     if (unique.length === 0) return new Map();
     const found = await rows<{ id: number; name: string; ticker: string | null; ticker_verified: boolean }>(
       client.from("news_companies").select("id, name, ticker, ticker_verified").in("id", unique),
     );
-    return new Map(found.map((c) => [c.id, { name: c.name, ticker: c.ticker_verified ? c.ticker : null, verified: c.ticker_verified }]));
+    return new Map(found.map((c) => [c.id, { name: c.name, ticker: c.ticker_verified ? c.ticker : null }]));
   }
 
-  const refs = (ids: number[], map: Map<number, CompanyRef>): CompanyRef[] =>
+  const refs = (ids: number[], map: Map<number, Omit<CompanyRef, "id">>): CompanyRef[] =>
     ids.flatMap((id) => {
       const c = map.get(id);
-      return c ? [{ name: c.name, ticker: c.ticker }] : [];
+      return c ? [{ id, name: c.name, ticker: c.ticker }] : [];
     });
 
   async function sourceNames(): Promise<Map<string, string>> {
@@ -263,52 +252,16 @@ export function createNewsReader(client: SupabaseClient, now: () => Date = () =>
     },
 
     async trend(q) {
-      let filter: Filter;
-      if (q.kind === "topic") {
-        filter = (query) => query.contains("topics", [q.key]).gte("story_date", q.from).lte("story_date", q.to);
-      } else {
-        const byTicker = await companyIds({ ticker: q.key });
-        const ids = byTicker.length > 0 ? byTicker : await companyIds({ name: q.key });
-        if (ids.length === 0) return [];
-        filter = (query) => query.overlaps("company_ids", ids).gte("story_date", q.from).lte("story_date", q.to);
-      }
-      const found = await currentStories(filter, "asc", Infinity);
-      const buckets = new Map<string, { clusters: Set<string>; mentions: number; tone: number }>();
-      for (const r of found) {
-        const key = bucketOf(r.story_date, q.by);
-        const b = buckets.get(key) ?? { clusters: new Set<string>(), mentions: 0, tone: 0 };
-        b.clusters.add(storyKey(r));
-        b.mentions += 1;
-        b.tone += r.sentiment;
-        buckets.set(key, b);
-      }
-      return [...buckets]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([bucket, b]) => ({ bucket, stories: b.clusters.size, mentions: b.mentions, tone: b.mentions ? round2(b.tone / b.mentions) : null }));
+      const points = await rows<{ bucket: string; stories: number; mentions: number; tone_avg: number | string | null }>(
+        client.rpc("news_story_counts", { p_kind: q.kind, p_keys: [q.key], p_from: q.from, p_to: q.to, p_bucket: q.by }),
+      );
+      return points.map((p) => ({ bucket: p.bucket, stories: p.stories, mentions: p.mentions, tone: p.tone_avg === null ? null : Number(p.tone_avg) }));
     },
 
     async movers({ days, limit }) {
-      const today = Date.parse(now().toISOString().slice(0, 10));
-      const recentStart = isoDay(today - (days - 1) * DAY_MS);
-      const previousStart = isoDay(today - (2 * days - 1) * DAY_MS);
-      const found = await currentStories((query) => query.gte("story_date", previousStart).lte("story_date", isoDay(today)), "asc", Infinity);
-      const tally = new Map<string, { kind: Mover["kind"]; key: string; recent: Set<string>; previous: Set<string> }>();
-      const add = (kind: Mover["kind"], key: string, r: StoryDbRow) => {
-        const id = `${kind}:${key}`;
-        const t = tally.get(id) ?? { kind, key, recent: new Set<string>(), previous: new Set<string>() };
-        (r.story_date >= recentStart ? t.recent : t.previous).add(storyKey(r));
-        tally.set(id, t);
-      };
-      for (const r of found) {
-        for (const topic of r.topics) add("topic", topic, r);
-        for (const id of r.company_ids) add("company", String(id), r);
-      }
-      const ranked = [...tally.values()]
-        .map((t) => ({ ...t, change: t.recent.size - t.previous.size }))
-        .filter((t) => t.change !== 0)
-        .sort((a, b) => Math.abs(b.change) - Math.abs(a.change) || a.key.localeCompare(b.key))
-        .slice(0, limit);
-
+      const ranked = await rows<{ kind: Mover["kind"]; key: string; recent: number; previous: number }>(
+        client.rpc("news_story_movers", { p_days: days, p_limit: limit }),
+      );
       const topicKeys = ranked.filter((t) => t.kind === "topic").map((t) => t.key);
       const topicNames = new Map<string, string>();
       if (topicKeys.length > 0) {
@@ -321,9 +274,9 @@ export function createNewsReader(client: SupabaseClient, now: () => Date = () =>
         kind: t.kind,
         key: t.key,
         label: t.kind === "topic" ? (topicNames.get(t.key) ?? t.key) : (companies.get(Number(t.key))?.name ?? t.key),
-        recentStories: t.recent.size,
-        previousStories: t.previous.size,
-        coverage: t.change > 0 ? "more" : "less",
+        recentStories: t.recent,
+        previousStories: t.previous,
+        coverage: t.recent > t.previous ? "more" : "less",
       }));
     },
 
@@ -386,6 +339,10 @@ export function createNewsReader(client: SupabaseClient, now: () => Date = () =>
       const at = now();
       const start = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() - (months - 1), 1)).toISOString();
       const byMonth = new Map<string, CostMonth>();
+      for (let i = 0; i < months; i++) {
+        const month = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() - i, 1)).toISOString().slice(0, 7);
+        byMonth.set(month, { month, total: 0, byPurpose: {}, byModel: {} });
+      }
       for (let from = 0; ; from += 1000) {
         const batch = await rows<{ model: string; purpose: string; cost_usd: number | string; at: string }>(
           client
@@ -398,19 +355,26 @@ export function createNewsReader(client: SupabaseClient, now: () => Date = () =>
         );
         for (const r of batch) {
           const month = r.at.slice(0, 7);
-          const m = byMonth.get(month) ?? { month, total: 0, byPurpose: {}, byModel: {} };
+          const m = byMonth.get(month);
+          if (!m) continue;
           const cost = Number(r.cost_usd);
           m.total += cost;
           m.byPurpose[r.purpose] = (m.byPurpose[r.purpose] ?? 0) + cost;
           m.byModel[r.model] = (m.byModel[r.model] ?? 0) + cost;
-          byMonth.set(month, m);
         }
         if (batch.length < 1000) break;
       }
       return {
         cap: capUsd(process.env),
-        capSpendThisMonth: await newsCapSpend(client, at),
-        months: [...byMonth.values()].sort((a, b) => b.month.localeCompare(a.month)),
+        capSpendThisMonth: cents(await newsCapSpend(client, at)),
+        months: [...byMonth.values()]
+          .sort((a, b) => b.month.localeCompare(a.month))
+          .map((m) => ({
+            month: m.month,
+            total: cents(m.total),
+            byPurpose: Object.fromEntries(Object.entries(m.byPurpose).map(([k, v]) => [k, cents(v)])),
+            byModel: Object.fromEntries(Object.entries(m.byModel).map(([k, v]) => [k, cents(v)])),
+          })),
       };
     },
   };

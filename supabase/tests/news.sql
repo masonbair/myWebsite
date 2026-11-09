@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(86);
+select plan(92);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a9', 'news-owner@example.com'),
@@ -53,7 +53,9 @@ select ok(
   has_function_privilege('service_role', 'public.news_claim(text, integer, interval)', 'execute')
   and has_function_privilege('service_role', 'public.news_refresh_trends(date, date)', 'execute')
   and has_function_privilege('service_role', 'public.news_public_trends(date, date)', 'execute')
-  and has_function_privilege('service_role', 'public.news_public_coverage(text, text, date)', 'execute'),
+  and has_function_privilege('service_role', 'public.news_public_coverage(text, text, date)', 'execute')
+  and has_function_privilege('service_role', 'public.news_story_counts(text, text[], date, date, text)', 'execute')
+  and has_function_privilege('service_role', 'public.news_story_movers(integer, integer)', 'execute'),
   'service_role can run the job and public functions');
 select ok(
   not has_function_privilege('service_role', 'public.news_retry(uuid)', 'execute'),
@@ -250,6 +252,30 @@ select results_eq(
   $$ select source_name, public_url from public.news_public_coverage('topic', 'test-chips', '2001-01-01') order by source_name $$,
   $$ values ('Morning Brew', 'https://www.morningbrew.com/daily/issues/2001-01-02'), ('Tech Brew', 'https://www.morningbrew.com/tech') $$,
   'public coverage names each newsletter');
+
+select results_eq(
+  $$ select bucket, stories, mentions, tone_avg from public.news_story_counts('topic', array['test-chips'], '2001-01-01', '2001-01-03', 'day') $$,
+  $$ values ('2001-01-02'::date, 2, 3, 0.67::numeric) $$,
+  'story counts use the current run, include shared reads, skip sponsors and count a cluster once');
+select results_eq(
+  $$ select stories, mentions from public.news_story_counts('company', array['900001'], '2001-01-01', '2001-01-03', 'month') $$,
+  $$ values (2, 3) $$,
+  'story counts match companies and bucket by month');
+select is(
+  (select count(*)::int from public.news_story_counts('topic', array['test-chips'], '2001-01-03', '2001-01-04', 'day')),
+  0, 'story counts honour the date range');
+select is(
+  (select count(*)::int from public.news_story_counts('topic', array['test-chips'], '2001-01-01', '2001-01-03', 'year')),
+  0, 'story counts refuse an unknown bucket');
+select lives_ok(
+  $$ insert into public.news_stories (run_id, issue_id, source_id, story_date, headline, kind, sentiment, topics)
+     select 900001, '90000000-0000-0000-0000-000000000001', 'morning-brew', (now() at time zone 'utc')::date, 'm' || n, 'news', 0, '{test-mover}'
+     from generate_series(1, 3) n $$,
+  'three recent stories are added');
+select results_eq(
+  $$ select kind, key, recent, previous from public.news_story_movers(7, 50) where key = 'test-mover' $$,
+  $$ values ('topic', 'test-mover', 3, 0) $$,
+  'a topic with three recent stories and none before shows as more coverage');
 
 select throws_ok(
   $$ select public.news_retry('90000000-0000-0000-0000-000000000007') $$,

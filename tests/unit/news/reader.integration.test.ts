@@ -71,15 +71,18 @@ describe.skipIf(!enabled)("news reader against local Supabase", () => {
         story(newRun.id, { headline: `Sponsor ${tag}`, kind: "sponsor" }),
       ]),
     );
-    return { tag, topic, verified: verified.id, issue: issue.id };
+    return { tag, topic, verified: verified.id, issue: issue.id, run: newRun.id };
   }
 
   it("searches only current-run news stories, with a ticker only when verified", async () => {
-    const { tag, topic } = await seed();
+    const { tag, topic, verified: verifiedId } = await seed();
     const hits = await reader.search({ topic, limit: 20 });
     expect(hits.map((h) => h.headline).sort()).toEqual([`Current A ${tag}`, `Current B ${tag}`]);
     const a = hits.find((h) => h.headline.startsWith("Current A"))!;
-    expect(a.companies).toEqual(expect.arrayContaining([{ name: `Verified ${tag} Corp`, ticker: "ZZVT" }, { name: `Guess ${tag} Inc`, ticker: null }]));
+    expect(a.companies).toEqual(expect.arrayContaining([
+        { id: verifiedId, name: `Verified ${tag} Corp`, ticker: "ZZVT" },
+        { id: expect.any(Number), name: `Guess ${tag} Inc`, ticker: null },
+      ]));
     expect(a).toMatchObject({ tone: 2, source: "rundown-ai", sourceName: "The Rundown AI" });
     expect(await reader.search({ topic, ticker: "zzvt", text: "current a", limit: 20 })).toHaveLength(1);
     expect(await reader.search({ topic, company: `guess ${tag}`, limit: 20 })).toHaveLength(1);
@@ -89,17 +92,20 @@ describe.skipIf(!enabled)("news reader against local Supabase", () => {
   });
 
   it("trend counts a cluster as one story and each row as a mention", async () => {
-    const { topic } = await seed();
+    const { topic, verified } = await seed();
     const points = await reader.trend({ kind: "topic", key: topic, from: day(-10), to: day(0), by: "day" });
     expect(points).toEqual([{ bucket: day(-1), stories: 1, mentions: 2, tone: 1 }]);
-    const byCompany = await reader.trend({ kind: "company", key: "ZZVT", from: day(-10), to: day(0), by: "month" });
-    expect(byCompany.reduce((n, p) => n + p.mentions, 0)).toBeGreaterThanOrEqual(2);
+    const byCompany = await reader.trend({ kind: "company", key: String(verified), from: day(-10), to: day(0), by: "month" });
+    expect(byCompany).toEqual([{ bucket: `${day(-1).slice(0, 7)}-01`, stories: 1, mentions: 2, tone: 1 }]);
   });
 
   it("movers reports more coverage for a topic that only appears in the recent window", async () => {
-    const { topic } = await seed();
+    const { topic, tag, issue, run } = await seed();
+    const extra = (n: number) => ({ run_id: run, issue_id: issue, source_id: "rundown-ai", story_date: day(-1), headline: `Extra ${n} ${tag}`, kind: "news", sentiment: 0, topics: [topic] });
+    expect((await reader.movers({ days: 7, limit: 50 })).find((m) => m.key === topic)).toBeUndefined();
+    ok(await client.from("news_stories").insert([extra(1), extra(2)]));
     const movers = await reader.movers({ days: 7, limit: 50 });
-    expect(movers.find((m) => m.key === topic)).toMatchObject({ kind: "topic", recentStories: 1, previousStories: 0, coverage: "more" });
+    expect(movers.find((m) => m.key === topic)).toMatchObject({ kind: "topic", label: `Topic ${tag}`, recentStories: 3, previousStories: 0, coverage: "more" });
   });
 
   it("getIssue returns current-run stories and null for an unknown id", async () => {
@@ -112,7 +118,8 @@ describe.skipIf(!enabled)("news reader against local Supabase", () => {
 
   it("costs lists this month by purpose with the cap", async () => {
     ok(await client.from("ai_usage").insert({ feature: "news", model: "claude-sonnet-5-5", purpose: "extract", cost_usd: 0.5 }));
-    const costs = await reader.costs(2);
+    const costs = await reader.costs(3);
+    expect(costs.months).toHaveLength(3);
     expect(costs.cap).toBeGreaterThan(0);
     expect(costs.capSpendThisMonth).toBeGreaterThanOrEqual(0.5);
     expect(costs.months[0].byPurpose.extract).toBeGreaterThanOrEqual(0.5);
