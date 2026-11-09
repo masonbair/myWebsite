@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { BrowserContext } from "@playwright/test";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
@@ -12,6 +13,11 @@ const OWNER_GITHUB_ID = "77211262";
 // One fixed owner for every spec: linking the GitHub identity to a fresh user per spec would unlink it from the other spec's user mid-run.
 const OWNER_EMAIL = "hub-e2e-owner@example.test";
 const OWNER_PASSWORD = "hub-e2e-owner-local-only";
+
+// A worktree may run its own stack under another project_id, which names the database container.
+function projectId(): string {
+  return readFileSync("supabase/config.toml", "utf8").match(/^project_id = "([^"]+)"/m)?.[1] ?? "masonbair";
+}
 
 type Credentials = { id: string; email: string; password: string };
 
@@ -45,7 +51,7 @@ export async function seededOwner(): Promise<Credentials> {
   const owner = await ownerUser();
   // Local Supabase has no GitHub OAuth, so the identity is written straight into auth.identities.
   execSync(
-    `docker exec -i supabase_db_masonbair psql -U postgres -v ON_ERROR_STOP=1 -c "insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at, last_sign_in_at) values ('${OWNER_GITHUB_ID}', '${owner.id}', '{\\"sub\\":\\"${OWNER_GITHUB_ID}\\"}', 'github', now(), now(), now()) on conflict (provider_id, provider) do update set user_id = excluded.user_id, updated_at = now(), last_sign_in_at = now()"`,
+    `docker exec -i supabase_db_${projectId()} psql -U postgres -v ON_ERROR_STOP=1 -c "insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at, last_sign_in_at) values ('${OWNER_GITHUB_ID}', '${owner.id}', '{\\"sub\\":\\"${OWNER_GITHUB_ID}\\"}', 'github', now(), now(), now()) on conflict (provider_id, provider) do update set user_id = excluded.user_id, updated_at = now(), last_sign_in_at = now()"`,
     { stdio: "ignore" },
   );
   const { error } = await serviceClient()

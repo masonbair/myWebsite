@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(32);
+select plan(35);
 
 create temporary table today_value as select (now() at time zone 'America/New_York')::date as d;
 grant select on today_value to service_role, authenticated;
@@ -72,6 +72,11 @@ select is((select count(*)::int from public.analytics_visitors where visitor_has
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000b","role":"authenticated"}';
 select is((select count(*)::int from public.analytics_daily), 0, 'a stranger sees no rollups');
+select is((public.analytics_report(7) -> 'week' ->> 'aiReads')::int, 0, 'a stranger''s report is empty');
+set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}';
+select ok((public.analytics_report(7) -> 'week' ->> 'aiReads')::int >= 1, 'the owner''s report counts AI reads');
+reset role;
+select ok(not has_function_privilege('anon', 'public.analytics_report(integer)', 'execute'), 'anon cannot run the report');
 
 select * from finish();
 rollback;

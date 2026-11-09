@@ -70,6 +70,7 @@ function hubServer(port: number, name: "hub" | "hub-live", workerLive: boolean) 
       HUB_WORKER_TOKEN: HUB_E2E_WORKER_TOKEN,
       MEMO_UPLOAD_TOKEN: HUB_E2E_MEMO_TOKEN,
       HUB_AGENT_TOKEN: HUB_E2E_AGENT_TOKEN,
+      ANALYTICS_SALT: "analytics-e2e-salt-local-only",
       // Set explicitly so a value in .env.local can never decide which state a test sees.
       HUB_WORKER_LIVE: workerLive ? "true" : "false",
       // Only the live server registers the service worker, so the other hub specs never run behind one.

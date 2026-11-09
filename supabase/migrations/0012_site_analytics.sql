@@ -204,11 +204,11 @@ as $$
       ) p
     ),
     'coffeeSources', (
-      select coalesce(jsonb_agg(c order by c.day desc, c.hits desc), '[]') from (
-        select day, ref_host as "refHost", from_assistant as "fromAssistant", country, sum(hits) as hits
+      select coalesce(jsonb_agg(c order by c.hits desc, c."lastDay" desc), '[]') from (
+        select ref_host as "refHost", from_assistant as "fromAssistant", country, sum(hits) as hits, max(day) as "lastDay"
         from d where path = '/coffee' and kind = 'human'
-        group by day, ref_host, from_assistant, country
-        order by day desc, sum(hits) desc limit 100
+        group by ref_host, from_assistant, country
+        order by sum(hits) desc, max(day) desc limit 25
       ) c
     ),
     'agents', (
