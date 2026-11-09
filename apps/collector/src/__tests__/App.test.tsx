@@ -88,6 +88,22 @@ it('signs in from the signed-out screen and registers the periodic task', async 
   expect(registerPeriodic).toHaveBeenCalled();
 });
 
+it('a signed-out reading does not stop the place task; only Sign out does', async () => {
+  collect.mockResolvedValue({ ...good, signedIn: false });
+  await render(<App />);
+  await screen.findByText('Sign in with GitHub');
+  expect(syncPlaceTask).not.toHaveBeenCalled();
+});
+
+it('Sign out stops the place task before signing out', async () => {
+  await show();
+  (syncPlaceTask as jest.Mock).mockClear();
+  await fireEvent.press(screen.getByText('Sign out'));
+  await waitFor(() => expect(signOut).toHaveBeenCalled());
+  expect(syncPlaceTask).toHaveBeenCalledWith('off');
+  expect((syncPlaceTask as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan((signOut as jest.Mock).mock.invocationCallOrder[0]);
+});
+
 it('Run now runs the periodic job and the place sync, then refreshes health', async () => {
   await show();
   const before = collect.mock.calls.length;

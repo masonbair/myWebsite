@@ -1,6 +1,6 @@
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, isAuthRetryableFetchError } from '@supabase/supabase-js';
 
 export const supabase = createClient(
   process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
@@ -16,8 +16,10 @@ export const supabase = createClient(
   },
 );
 
-/** True when a session exists; getSession refreshes an expired token first. */
+/** True when a session is stored; getSession refreshes an expired token first. */
 export async function signedIn(): Promise<boolean> {
-  const { data } = await supabase.auth.getSession();
-  return data.session !== null;
+  const { data, error } = await supabase.auth.getSession();
+  if (data.session !== null) return true;
+  // auth-js keeps the stored session when a refresh fails offline or on a 5xx; jobs fail their call and retry next run.
+  return isAuthRetryableFetchError(error);
 }

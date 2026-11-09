@@ -36,8 +36,9 @@ export default function App() {
   }, [isSignedIn]);
 
   useEffect(() => {
-    if (isSignedIn === null) return;
-    syncPlaceTask(isSignedIn && canTrack && locationWanted ? 'on' : 'off');
+    // Only Sign out stops the task: a signed-out reading may be a lost session the task should outlive.
+    if (!isSignedIn) return;
+    syncPlaceTask(canTrack && locationWanted ? 'on' : 'off');
   }, [isSignedIn, canTrack, locationWanted]);
 
   async function handleSignIn() {
