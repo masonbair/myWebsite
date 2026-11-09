@@ -111,29 +111,27 @@ const upsert = (key: string, columns: string) =>
 const NEWS_ISSUE_COLUMNS =
   "id,source_id,message_id,subject,from_address,received_at,published_on,raw_path,public_url,status,attempts,next_attempt_at,claimed_at,last_error,current_run_id,created_at";
 const NEWS_SHARED_COLUMNS = "id,item_id,url,title,thin,status,attempts,next_attempt_at,claimed_at,last_error,current_run_id,created_at";
-const SOURCE_COLUMNS = "id,name,sender_addresses,sender_domains,homepage,archive_pattern,public,active";
-const TOPIC_COLUMNS = "slug,name,active,created_at";
-// clean_text and fetched_text are not in the backup, so they restore as '' and null; docs/hub-setup.md says how to rebuild them.
-const NEWS_SQL: { table: string; sql: string; rows: (n: BackupNews) => unknown[] }[] = [
-  { table: "news_sources", sql: newsInsert("news_sources", SOURCE_COLUMNS, upsert("id", SOURCE_COLUMNS)), rows: (n) => n.sources },
-  { table: "news_extraction_runs", sql: newsInsert("news_extraction_runs", "id,model,prompt_version,kind,created_at"), rows: (n) => n.runs },
-  { table: "news_issues", sql: newsInsert("news_issues", NEWS_ISSUE_COLUMNS), rows: (n) => n.issues },
-  { table: "news_shared", sql: newsInsert("news_shared", NEWS_SHARED_COLUMNS), rows: (n) => n.shared },
-  { table: "news_clusters", sql: newsInsert("news_clusters", "id,first_date,created_at"), rows: (n) => n.clusters },
-  {
-    table: "news_companies",
-    sql: newsInsert("news_companies", "id,name,norm_name,ticker,exchange,ticker_verified,aliases,created_at"),
-    rows: (n) => n.companies,
-  },
-  { table: "news_topics", sql: newsInsert("news_topics", TOPIC_COLUMNS, upsert("slug", TOPIC_COLUMNS)), rows: (n) => n.topics },
-  {
-    table: "news_stories",
-    sql: newsInsert(
-      "news_stories",
-      "id,run_id,issue_id,shared_id,source_id,story_date,headline,kind,sentiment,topics,suggested_topic,company_ids,link,cluster_id,created_at",
-    ),
-    rows: (n) => n.stories,
-  },
+const NEWS_COLUMNS = {
+  news_sources: "id,name,sender_addresses,sender_domains,homepage,archive_pattern,public,active",
+  news_extraction_runs: "id,model,prompt_version,kind,created_at",
+  news_issues: NEWS_ISSUE_COLUMNS,
+  news_shared: NEWS_SHARED_COLUMNS,
+  news_clusters: "id,first_date,created_at",
+  news_companies: "id,name,norm_name,ticker,exchange,ticker_verified,aliases,created_at",
+  news_topics: "slug,name,active,created_at",
+  news_stories:
+    "id,run_id,issue_id,shared_id,source_id,story_date,headline,kind,sentiment,topics,suggested_topic,company_ids,link,cluster_id,created_at",
+} as const;
+// clean_text and fetched_text are not in the backup, so they restore as '' and null.
+const NEWS_SQL: { table: keyof typeof NEWS_COLUMNS; rows: (n: BackupNews) => unknown[]; key?: string }[] = [
+  { table: "news_sources", key: "id", rows: (n) => n.sources },
+  { table: "news_extraction_runs", rows: (n) => n.runs },
+  { table: "news_issues", rows: (n) => n.issues },
+  { table: "news_shared", rows: (n) => n.shared },
+  { table: "news_clusters", rows: (n) => n.clusters },
+  { table: "news_companies", rows: (n) => n.companies },
+  { table: "news_topics", key: "slug", rows: (n) => n.topics },
+  { table: "news_stories", rows: (n) => n.stories },
 ];
 
 const syncIdentity = (table: string) =>
@@ -232,9 +230,10 @@ async function restore(snapshot: Snapshot, target: string): Promise<Record<strin
     const news: BackupNews | undefined = snapshot.news;
     const newsCounts: Record<string, number> = {};
     if (news) {
-      for (const { table, sql, rows: pick } of NEWS_SQL) {
+      for (const { table, key, rows: pick } of NEWS_SQL) {
         const rows = pick(news);
-        if (rows.length > 0) await db.query(sql, [JSON.stringify(rows)]);
+        const columns = NEWS_COLUMNS[table];
+        if (rows.length > 0) await db.query(newsInsert(table, columns, key ? upsert(key, columns) : ""), [JSON.stringify(rows)]);
         newsCounts[table] = rows.length;
       }
       for (const table of ["news_extraction_runs", "news_companies", "news_clusters", "news_stories"]) await db.query(syncIdentity(table));

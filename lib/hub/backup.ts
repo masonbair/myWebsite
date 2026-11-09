@@ -273,15 +273,15 @@ export function createSnapshotSource(client: SupabaseClient): SnapshotSource {
       return rows.map((r) => ({ id: r.id, actor: r.actor, action: r.action, itemId: r.item_id, detail: r.detail, at: r.at }));
     },
     async news() {
-      // Parents before children, so a story never points at a row the snapshot missed.
-      const sources = await all<Row>("news_sources", "id");
-      const runs = await all<Row>("news_extraction_runs", "id");
-      const issues = await all<Row>("news_issues", "id", NEWS_ISSUE_COLUMNS);
+      // Children first: these tables are never deleted, so every parent a story points at is already there when it is read.
+      const stories = await all<Row>("news_stories", "id");
       const shared = await all<Row>("news_shared", "id", NEWS_SHARED_COLUMNS);
+      const issues = await all<Row>("news_issues", "id", NEWS_ISSUE_COLUMNS);
       const clusters = await all<Row>("news_clusters", "id");
       const companies = await all<Row>("news_companies", "id");
+      const runs = await all<Row>("news_extraction_runs", "id");
       const topics = await all<Row>("news_topics", "slug");
-      const stories = await all<Row>("news_stories", "id");
+      const sources = await all<Row>("news_sources", "id");
       return { sources, runs, issues, shared, clusters, companies, topics, stories };
     },
   };

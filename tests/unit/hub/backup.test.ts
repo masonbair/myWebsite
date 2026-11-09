@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +11,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   BACKUP_PREFIX,
   KEEP_BACKUPS,
+  NEWS_ISSUE_COLUMNS,
+  NEWS_SHARED_COLUMNS,
   backupPath,
   createSnapshotSource,
   runBackup,
@@ -31,6 +34,17 @@ async function restore(args: string[]): Promise<{ code: number; stdout: string; 
     const failed = e as { code: number; stdout: string; stderr: string };
     return { code: failed.code, stdout: failed.stdout, stderr: failed.stderr };
   }
+}
+
+const RESTORE_SOURCE = readFileSync(RESTORE, "utf8");
+
+/** The per-table column lists written in scripts/hub-restore.ts, with its two shared constants resolved. */
+function restoreColumns(): Record<string, string[]> {
+  const block = RESTORE_SOURCE.slice(RESTORE_SOURCE.indexOf("const NEWS_COLUMNS"), RESTORE_SOURCE.indexOf("} as const"));
+  const named: Record<string, string> = { NEWS_ISSUE_COLUMNS, NEWS_SHARED_COLUMNS };
+  const out: Record<string, string[]> = {};
+  for (const m of block.matchAll(/(news_\w+):\s*(?:"([^"]+)"|(NEWS_\w+))/g)) out[m[1]] = (m[2] ?? named[m[3]]).split(",");
+  return out;
 }
 
 const emptyNews = { sources: [], runs: [], issues: [], shared: [], clusters: [], companies: [], topics: [], stories: [] };
@@ -134,6 +148,17 @@ describe("news snapshot", () => {
     expect(selects.news_issues).not.toContain("clean_text");
     expect(selects.news_shared).not.toContain("fetched_text");
     expect(selects.news_issues).toContain("raw_path");
+  });
+});
+
+describe("restore column lists", () => {
+  it("uses the same issue and shared column lists as the snapshot, and lists all eight news tables", () => {
+    const cols = restoreColumns();
+    expect(RESTORE_SOURCE).toContain(NEWS_ISSUE_COLUMNS);
+    expect(RESTORE_SOURCE).toContain(NEWS_SHARED_COLUMNS);
+    expect(cols.news_issues).toEqual(NEWS_ISSUE_COLUMNS.split(","));
+    expect(cols.news_shared).toEqual(NEWS_SHARED_COLUMNS.split(","));
+    expect(Object.keys(cols)).toHaveLength(8);
   });
 });
 
@@ -340,14 +365,29 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
       expect(issue.raw_path).toContain("news/raw/");
       const trends = (await db.query("select count(*)::int as n from public.news_trends_daily where key = 'backup-topic'")).rows[0].n;
       expect(trends).toBeGreaterThanOrEqual(2);
-      const maxId = Math.max(...shot.news.stories.map((s) => Number(s.id)));
-      const next = (
-        await db.query(
-          `insert into public.news_clusters (first_date) values ('2026-11-06') returning id::int`,
-        )
-      ).rows[0];
-      expect(next.id).toBeGreaterThan(Math.max(...shot.news.clusters.map((c) => Number(c.id))));
-      expect(maxId).toBeGreaterThan(0);
+      const maxOf = (rows: Record<string, unknown>[]) => Math.max(0, ...rows.map((r) => Number(r.id)));
+      const sequences = [
+        ["news_extraction_runs", shot.news.runs],
+        ["news_companies", shot.news.companies],
+        ["news_clusters", shot.news.clusters],
+        ["news_stories", shot.news.stories],
+      ] as const;
+      for (const [table, rows] of sequences) {
+        const next = (await db.query(`select nextval(pg_get_serial_sequence('public.${table}', 'id'))::int as id`)).rows[0].id;
+        expect(next, table).toBeGreaterThan(maxOf([...rows]));
+      }
+    });
+  }, 60_000);
+
+  it("restores every column of the news tables except the two long texts", async () => {
+    await withDb(scratchUrl, async (db) => {
+      const left = new Set(["clean_text", "fetched_text"]);
+      for (const [table, listed] of Object.entries(restoreColumns())) {
+        const actual = (
+          await db.query("select column_name from information_schema.columns where table_schema = 'public' and table_name = $1", [table])
+        ).rows.map((r) => r.column_name as string);
+        expect([...listed].sort(), table).toEqual(actual.filter((c) => !left.has(c)).sort());
+      }
     });
   }, 60_000);
 

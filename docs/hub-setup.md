@@ -69,7 +69,7 @@ node scripts/hub-restore.ts hub-backups-2026-11-05.json --target postgresql://po
 - It runs in one transaction with `session_replication_role = replica`, so the hub guard triggers (which refuse done items, `claude` labels and Mason's comments from anyone but the signed-in owner) are skipped for the restore only.
 - It restores items (with archive reason, client key and completed time), comments, `hub_state`, `memo_files`, and the `now_place`, `now_place_privacy` and `now_bake` rows (ids kept, identity sequences moved past them).
 - It also restores `items_history` (earlier titles and descriptions) and `audit_log`, ids kept. Backups made before 2026-11-05 hold neither.
-- It also restores the newsletter tables: sources, extraction runs, issues, shared articles, clusters, companies, topics and stories, ids kept and identity sequences moved. Issue `clean_text` and shared `fetched_text` are not in the backup, so they come back empty. Raw emails stay in Blob; the `reclean` command of `scripts/news-backfill.ts` rebuilds issue text from them. Trend tables are rebuilt from the restored stories. `news_sec_tickers` is not backed up (it downloads again). Built-in sources and topics already in the target are updated, not duplicated.
+- It also restores the newsletter tables: sources, extraction runs, issues, shared articles, clusters, companies, topics and stories, ids kept and identity sequences moved. Issue `clean_text` and shared `fetched_text` are not in the backup, so they come back empty. The text can be rebuilt later from the raw emails kept in Blob. Trend tables are rebuilt from the restored stories. `news_sec_tickers` is not backed up (it downloads again). Built-in sources and topics already in the target are updated, not duplicated.
 - It does not restore `hub_owner`, auth users, or the `updated_at` time of `hub_state` rows. Mason is recorded as the owner again on his first sign-in.
 - Restoring into a new Supabase project: turn "Allow new users to sign up" on just long enough for Mason's first sign-in, then off again (see Auth setup, step 4).
 
@@ -106,15 +106,15 @@ Forwarded newsletters arrive by email, get read by Claude, and feed `/trends` an
 1. Gmail filter and export. Make a filter for the six newsletter senders with "Apply label: Newsletters" and "Also apply to matching conversations". Then in Google Takeout export Mail, only the label Newsletters, and send the `.mbox` path to Claude.
 2. Anthropic key. Done on 2026-11-09: workspace `masonbair-news` (monthly limit $30; raise to $75 for the import month) and its key set as `ANTHROPIC_API_KEY_NEWS` in Vercel Production. Also put it in the worktree's `.env.local`.
 3. Resend (free plan). Sign up. Add the domain `in.masonbair.com` with receiving turned on. Resend shows an MX record: at IONOS (where masonbair.com DNS lives) add it with host `in`. Leave the main domain's `mx00.ionos.com` and `mx01.ionos.com` records alone. Wait until Resend says verified. The inbound address is `news@in.masonbair.com`.
-4. Resend webhook. Add a webhook for the event `email.received`. While testing, use `<preview URL>/api/news/inbound?x-vercel-protection-bypass=<bypass secret>`. At launch, change it to `https://masonbair.com/api/news/inbound`. Then make a full-access API key (reading received mail needs full access).
-5. Vercel env (Preview and Production):
+4. Protection bypass. In Vercel, turn on "Protection Bypass for Automation" for the project and copy the secret. Keep it private. It goes only in the test webhook URL in step 5.
+5. Resend webhook. Add a webhook for the event `email.received`. While testing, use `<preview URL>/api/news/inbound?x-vercel-protection-bypass=<bypass secret>`. At launch, change it to `https://masonbair.com/api/news/inbound`. Then make a full-access API key (reading received mail needs full access).
+6. Vercel env (Preview and Production):
    - `RESEND_API_KEY`: the full-access key.
    - `RESEND_INBOUND_SECRET`: the webhook signing secret from Resend.
    - `NEWS_FORWARD_FROM`: your Gmail address.
    - `NEWS_MONTHLY_BUDGET_USD`: optional, default 25.
-6. Preview testing. In Vercel, turn on "Protection Bypass for Automation" for the project and copy the secret. Keep it private. It goes only in the webhook URL in step 4.
 7. Gmail forwarding. Settings > Forwarding > Add a forwarding address: `news@in.masonbair.com`. Gmail sends a confirmation mail. Open `/hub/news`, find it under "Held back", and click the confirmation link. Then edit the step 1 filter to also forward to that address.
 8. Database. After review run `supabase db push` for `0009_news.sql`. Later, after review of the topics work, run it again for `0010_news_topics_cron.sql`. Claude never pushes these.
 9. Backfill. When the import estimate appears, read it and type `yes`.
 
-How it is checked: a mail is processed only when Gmail forwarding names `NEWS_FORWARD_FROM` as the sender and a DKIM signature (the mail's proof of origin) that matches the From domain verifies. Any other mail waits in `/hub/news` under "Held back" and is never read by Claude.
+How it is checked: a mail is processed only when Gmail forwarding names `NEWS_FORWARD_FROM` as the sender and a DKIM signature (the mail's proof of origin) that matches the From domain verifies. Any other mail waits in `/hub/news` under "Held back" and is never picked up for reading: the job that claims issues takes only pending, failed and stuck ones, never held ones.
