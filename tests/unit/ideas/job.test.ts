@@ -2,6 +2,7 @@ import { APIUserAbortError } from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import { budgetFromEnv, capState, runIdeasJob, type IdeasJobDeps } from "@/lib/ideas/job";
+import { costOf } from "@/lib/ai/claude";
 import { ClaimLost, createIdeasJobStore } from "@/lib/ideas/store";
 import type { Message } from "@/lib/hub/notify";
 import { createFakeIdeasStore } from "./fake-ideas-store";
@@ -27,6 +28,7 @@ function harness(replies: FakeReply[] = [], overrides: Partial<IdeasJobDeps> & {
     },
     deadlineMs: 270_000,
     spend: async () => baseSpend + fake.rows.usage.reduce((sum, u) => sum + u.cost, 0),
+    timeZone: async () => "UTC",
     ...rest,
   };
   return { ...fake, anthropic, sent, deps, setClock: (d: Date) => (clock = d.getTime()) };
@@ -109,6 +111,22 @@ describe("runIdeasJob reviews", () => {
     await runIdeasJob({ ...h.deps, anthropic: failing as unknown as IdeasJobDeps["anthropic"] });
     expect(h.rows.settings.get(idea.id)).toMatchObject({ reviewStatus: "failed", reviewAttempts: 2, lastError: "api_400" });
     vi.mocked(console.error).mockRestore();
+  });
+
+  it("records a cut-off call's partial usage and counts an attempt even for an error that would pass", async () => {
+    const h = harness();
+    const idea = h.seed();
+    const partial = { model: "claude-opus-5-5", usage: usage(5000, 1), content: [{ type: "thinking", thinking: "x".repeat(300) }, { type: "text", text: "y".repeat(100) }] };
+    const broken = {
+      beta: { messages: { stream: () => ({ currentMessage: partial, finalMessage: async () => Promise.reject(Object.assign(new Error("overloaded"), { status: 529 })) }) } },
+    };
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await runIdeasJob({ ...h.deps, anthropic: broken as unknown as IdeasJobDeps["anthropic"] });
+    vi.mocked(console.error).mockRestore();
+    expect(result.failed).toContain(idea.id);
+    expect(h.rows.settings.get(idea.id)).toMatchObject({ reviewAttempts: 2, reviewStatus: "failed", lastError: "api_529" });
+    expect(h.rows.usage).toHaveLength(2);
+    expect(h.rows.usage[0].cost).toBeCloseTo(costOf("claude-opus-5-5", { input_tokens: 5000, output_tokens: 100 }));
   });
 
   it("counts our own deadline abort and records its partial usage, failing a slow idea on the second run", async () => {
@@ -286,6 +304,27 @@ describe("runIdeasJob cost cap", () => {
     expect(result).toMatchObject({ reviewed: [], failed: [], paused: true });
     expect(h.rows.settings.get(idea.id)).toMatchObject({ reviewStatus: "paused", reviewAttempts: 0 });
     expect(h.sent).toHaveLength(1);
+  });
+
+  it("still runs the calendar step and the failure message when the spend read fails after the cap", async () => {
+    const search: FakeReply = { ...textReply("Bread Timer https://breadtimer.example"), usage: usage(10_000, 2_000) };
+    const h = harness([search, ok()], { webSearchOff: false });
+    let reads = 0;
+    const resurface = vi.fn(async () => 2);
+    h.seed();
+    const result = await runIdeasJob({
+      ...h.deps,
+      resurface,
+      spend: async () => {
+        reads += 1;
+        if (reads > 3) throw new Error("database down");
+        return 19.95 + h.rows.usage.reduce((sum, u) => sum + u.cost, 0);
+      },
+    });
+    expect(result).toMatchObject({ paused: true, resurfaced: 2 });
+    expect(resurface).toHaveBeenCalledOnce();
+    expect(h.calls).toContain("failureCounts");
+    expect(h.sent.map((m) => m.message)).toEqual([expect.stringMatching(/^Ideas reached \$20\.00 this month/)]);
   });
 
   it("checks the cap before every review, so spend inside a run stops the next one", async () => {

@@ -1,6 +1,6 @@
 import "server-only";
 import { anthropicClient, monthSpend } from "@/lib/ai/claude";
-import { readLatestPlaceZone, reminderTimeZone } from "@/lib/hub/events";
+import { masonTimeZone } from "@/lib/hub/events";
 import { notify, type Message } from "@/lib/hub/notify";
 import { serviceClient } from "@/lib/supabase/server";
 import { googleFromVault } from "./google";
@@ -10,7 +10,6 @@ import { createResurfaceStore } from "./resurface-store";
 import { createIdeasJobStore } from "./store";
 
 const IDEAS_DEADLINE_MS = 270_000;
-const DEFAULT_TIME_ZONE = "America/Denver";
 
 /** The ideas event's run over the service client; detection and review skip themselves without the Claude key. */
 export function ideasRunner() {
@@ -31,12 +30,12 @@ export function ideasRunner() {
       ntfy,
       deadlineMs: IDEAS_DEADLINE_MS,
       spend: async () => (await monthSpend(serviceClient(), "ideas", new Date())).thisMonth,
+      timeZone: () => masonTimeZone(serviceClient()),
       resurface: () =>
         runResurface({
           store: createResurfaceStore(serviceClient()),
           google: () => googleFromVault(serviceClient(), fetch),
-          timeZone: async () =>
-            reminderTimeZone(await readLatestPlaceZone(serviceClient()), process.env.HUB_TIME_ZONE || DEFAULT_TIME_ZONE, new Date()),
+          timeZone: () => masonTimeZone(serviceClient()),
           now: () => new Date(),
           deadline,
           ntfy,

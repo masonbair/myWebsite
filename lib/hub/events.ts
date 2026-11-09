@@ -103,6 +103,26 @@ export async function readLatestPlaceZone(client: SupabaseClient): Promise<Place
   return data ? { timeZone: data.time_zone, updatedAt: data.updated_at } : null;
 }
 
+const DEFAULT_TIME_ZONE = "America/Denver";
+
+/** Mason's zone now: the latest place ping's, else HUB_TIME_ZONE, else America/Denver; a failed read falls back too. */
+export async function masonTimeZone(client: SupabaseClient, now = new Date()): Promise<string> {
+  const fallback = process.env.HUB_TIME_ZONE || DEFAULT_TIME_ZONE;
+  try {
+    return reminderTimeZone(await readLatestPlaceZone(client), fallback, now);
+  } catch (e) {
+    console.error(`place zone not read: ${errorName(e)}`);
+    return fallback;
+  }
+}
+
+/** An error's code or class name, which never holds item text or secrets. */
+export function errorName(e: unknown): string {
+  const code = (e as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && code) return code;
+  return e instanceof Error ? e.name : "error";
+}
+
 /** Starts the routine through its API trigger, with the same headers todo-hub's relay sends. */
 export async function fireRoutine(itemId: string, routine: RoutineConfig, fetchFn: typeof fetch): Promise<void> {
   const res = await fetchFn(routine.url, {
@@ -217,7 +237,7 @@ export async function handleEventRequest(request: Request, event: string, deps: 
     }
     return json({ error: "not found" }, 404);
   } catch (e) {
-    console.error("hub event", event, e);
+    console.error(`hub event ${event} failed: ${errorName(e)}`);
     return json({ error: "server error" }, 500);
   }
 }

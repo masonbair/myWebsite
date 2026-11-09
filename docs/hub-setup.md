@@ -111,6 +111,10 @@ The Ideas Lab (`/hub/ideas`) has Claude review each idea Mason saves, finds idea
 
 The migration adds the Ideas Lab tables, their guards, the review claim, the Google token helpers (Vault secret `ideas_google_refresh_token`) and the `hub-ideas` cron job (every 15 minutes, `POST /api/hub/events/ideas`).
 
+Timeout to check on the first preview run: `pg_net` gives up on its request after 30 seconds, but one ideas run lasts up to 270 seconds. Vercel should keep the function running after the caller hangs up. Check this once: start a run with pending work, then confirm `ai_usage` rows land more than 30 seconds after the run started (`select at from ai_usage order by at desc limit 5;`). If nothing lands after the 30-second mark, Vercel stopped the run; move the job into `after()` in the route so it runs once the response is sent.
+
+Dates: idea footers, "Mentioned again" dates and the start of an idea's return schedule use Mason's local time (the zone of his latest place ping, else `HUB_TIME_ZONE`). The one exception is the database's enroll trigger for ideas he types in, which still uses the database's `current_date` (UTC).
+
 Local testing: `scripts/ideas-local-stack.sh` starts a private stack (project `ideas-lab`, every port +100) from a copy of `supabase/` under `$TMPDIR/ideas-lab-supabase`, then `supabase db reset --workdir <that dir> && supabase test db --workdir <that dir>`.
 
 ### 2. Anthropic key

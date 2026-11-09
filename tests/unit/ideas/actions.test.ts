@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { localDate } from "@/lib/ideas/resurface";
 import { createFakeStore, type FakeStore } from "../hub/fake-store";
 
 type Row = Record<string, unknown>;
@@ -76,10 +77,13 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/auth/require-owner", () => ({ requireOwner: () => requireOwner() }));
 vi.mock("@/lib/hub/mason-store", () => ({ masonStore: async () => store }));
 vi.mock("@/lib/supabase/server", () => ({ sessionClient: async () => fakeSessionClient(), serviceClient: () => fakeServiceClient() }));
+// UTC+14, so its date is a day ahead of UTC for most of the day.
+const ZONE = "Pacific/Kiritimati";
+vi.mock("@/lib/hub/events", () => ({ masonTimeZone: async () => ZONE }));
 
 const { backToInbox, promoteIdea, requestReview, retryDetection, setNoWebSearch, stopReminders } = await import("@/app/hub/ideas-actions");
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDate(new Date(), ZONE);
 
 async function newIdea(extra: Row | null = { enrolled: true }) {
   const item = await store.addItem({ title: "an idea", list: "ideas", labels: ["idea"], source: "capture" });
@@ -135,7 +139,7 @@ describe("ideas actions", () => {
     expect(settings.get(idea.id)?.review_status).toBeUndefined();
   });
 
-  it("queues a review again and restarts the schedule from today", async () => {
+  it("queues a review again and restarts the schedule from Mason's local today", async () => {
     const idea = await newIdea({ enrolled: true, review_status: "done", schedule_from: "2026-01-01" });
     expect(await requestReview(idea.id, "  think about pricing  ")).toEqual({ error: null });
     expect(settings.get(idea.id)).toMatchObject({

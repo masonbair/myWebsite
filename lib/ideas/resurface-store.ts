@@ -25,33 +25,99 @@ const toRow = (r: RowRecord): ResurfaceRow => ({
   status: r.status,
 });
 
+const ROW_COLUMNS = "id, item_id, step, due_date, event_date, google_event_id, status";
+const PAGE = 1000;
+// Ids travel in the URL, so ask in batches that stay well under URL length limits.
+const ID_BATCH = 100;
+const REVIEW_READS_AT_ONCE = 10;
+
+type Page<T> = PromiseLike<{ data: T[] | null; error: unknown }>;
+
+/** Every row a ranged query matches; the hosted max_rows may cut a page short, so only an empty page ends it. */
+async function allRows<T>(page: (from: number, to: number) => Page<T>): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; ) {
+    const { data, error } = await page(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data?.length) return out;
+    out.push(...data);
+    from += data.length;
+  }
+}
+
+async function inBatches<T>(ids: string[], read: (batch: string[]) => Promise<T[]>): Promise<T[]> {
+  const out: T[] = [];
+  for (let start = 0; start < ids.length; start += ID_BATCH) out.push(...(await read(ids.slice(start, start + ID_BATCH))));
+  return out;
+}
+
+type ItemRecord = { id: string; title: string; state: ResurfaceIdea["state"]; list: string };
+type SettingsRecord = { item_id: string; enrolled: boolean; schedule_from: string | null; reminders_stopped_at: string | null };
+
 /** The resurface step's store over the service client. */
 export function createResurfaceStore(client: SupabaseClient): ResurfaceStore {
   const hub = createHubStore(client, IDEAS_ACTOR);
 
+  const settingsOf = (ids: string[], enrolledOnly: boolean) =>
+    inBatches(ids, (batch) =>
+      allRows<SettingsRecord>((from, to) => {
+        let query = client.from("idea_settings").select("item_id, enrolled, schedule_from, reminders_stopped_at").in("item_id", batch);
+        if (enrolledOnly) query = query.eq("enrolled", true);
+        return query.order("item_id").range(from, to);
+      }),
+    );
+
+  async function latestReview(id: string): Promise<IdeaReview | null> {
+    const { data, error } = await client
+      .from("idea_reviews")
+      .select("review")
+      .eq("item_id", id)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return (data as { review: IdeaReview } | null)?.review ?? null;
+  }
+
   return {
-    async ideas() {
-      // Rows are only ever planned for enrolled ideas, so this also covers every idea with an open row.
-      const { data: settings, error } = await client
-        .from("idea_settings")
-        .select("item_id, enrolled, schedule_from, reminders_stopped_at")
-        .eq("enrolled", true);
-      if (error) throw error;
-      const ids = (settings ?? []).map((s) => s.item_id as string);
-      if (!ids.length) return [];
-      const [{ data: items, error: itemError }, { data: reviews, error: reviewError }] = await Promise.all([
-        client.from("items").select("id, title, state, list").in("id", ids),
-        client.from("idea_reviews").select("item_id, version, review").in("item_id", ids).order("version", { ascending: false }),
+    async load(today) {
+      // Active candidates are open ideas; anything else matters only while it still has a planned or upcoming row to close.
+      const [openItems, openRows] = await Promise.all([
+        allRows<ItemRecord>((from, to) =>
+          client.from("items").select("id, title, state, list").eq("list", "ideas").eq("state", "open").order("id").range(from, to),
+        ),
+        allRows<RowRecord>((from, to) =>
+          client.from("idea_resurface").select(ROW_COLUMNS).or(`status.eq.planned,event_date.gte.${today}`).order("id").range(from, to),
+        ),
       ]);
-      if (itemError) throw itemError;
-      if (reviewError) throw reviewError;
-      const latest = new Map<string, IdeaReview>();
-      for (const r of reviews ?? []) if (!latest.has(r.item_id)) latest.set(r.item_id, r.review as IdeaReview);
-      const itemById = new Map((items ?? []).map((i) => [i.id as string, i]));
-      return (settings ?? []).flatMap((s): ResurfaceIdea[] => {
+      const itemById = new Map(openItems.map((i) => [i.id, i]));
+      const enrolled = await settingsOf([...itemById.keys()], true);
+      const activeIds = enrolled.map((s) => s.item_id);
+      const active = new Set(activeIds);
+      const closingIds = [...new Set(openRows.map((r) => r.item_id))].filter((id) => !active.has(id));
+      const [closingSettings, closingItems, activeRows] = await Promise.all([
+        settingsOf(closingIds, false),
+        inBatches(closingIds, (batch) =>
+          allRows<ItemRecord>((from, to) => client.from("items").select("id, title, state, list").in("id", batch).order("id").range(from, to)),
+        ),
+        // An active idea's past rows say which step comes next, so all of its rows are read.
+        inBatches(activeIds, (batch) =>
+          allRows<RowRecord>((from, to) => client.from("idea_resurface").select(ROW_COLUMNS).in("item_id", batch).order("id").range(from, to)),
+        ),
+      ]);
+      for (const item of closingItems) itemById.set(item.id, item);
+
+      const reviews = new Map<string, IdeaReview | null>();
+      for (let start = 0; start < activeIds.length; start += REVIEW_READS_AT_ONCE) {
+        const batch = activeIds.slice(start, start + REVIEW_READS_AT_ONCE);
+        const found = await Promise.all(batch.map(latestReview));
+        batch.forEach((id, n) => reviews.set(id, found[n]));
+      }
+
+      const ideas = [...enrolled, ...closingSettings].flatMap((s): ResurfaceIdea[] => {
         const item = itemById.get(s.item_id);
         if (!item) return [];
-        const review = latest.get(s.item_id);
+        const review = reviews.get(s.item_id) ?? null;
         return [
           {
             id: item.id,
@@ -67,22 +133,15 @@ export function createResurfaceStore(client: SupabaseClient): ResurfaceStore {
           },
         ];
       });
-    },
-
-    async rows() {
-      const { data, error } = await client
-        .from("idea_resurface")
-        .select("id, item_id, step, due_date, event_date, google_event_id, status")
-        .order("id");
-      if (error) throw error;
-      return (data as RowRecord[]).map(toRow);
+      const rows = new Map([...openRows, ...activeRows].map((r) => [r.id, r]));
+      return { ideas, rows: [...rows.values()].sort((a, b) => a.id - b.id).map(toRow) };
     },
 
     async planRow(itemId, step, dueDate) {
       const { data, error } = await client
         .from("idea_resurface")
         .upsert({ item_id: itemId, step, due_date: dueDate, status: "planned" }, { onConflict: "item_id,step,due_date", ignoreDuplicates: true })
-        .select("id, item_id, step, due_date, event_date, google_event_id, status");
+        .select(ROW_COLUMNS);
       if (error) throw error;
       const row = (data as RowRecord[] | null)?.[0];
       return row ? toRow(row) : null;

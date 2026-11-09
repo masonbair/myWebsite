@@ -15,14 +15,28 @@ export function formatDay(date: string): string | null {
   return day.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 }
 
-/** A stored instant as "2026-11-09 21:25 UTC", or null when it is not a time; UTC because the place it was made is not kept. */
-export function formatInstant(iso: string): string | null {
+/** A stored instant as Mason's wall clock in `timeZone`, like "2026-11-09 14:25 MST", or null when it is not a time. */
+export function formatInstantIn(iso: string, timeZone: string): string | null {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return null;
-  return `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZoneName: "short",
+    })
+      .formatToParts(at)
+      .map((p) => [p.type, p.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} ${parts.timeZoneName}`;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID =/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isItemId(value: unknown): value is string {
   return typeof value === "string" && UUID.test(value);

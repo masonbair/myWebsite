@@ -194,20 +194,29 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
   it("moves a capture to ideas as typed, enrolled and marked moved from the inbox", async () => {
     const store = createIdeasJobStore(client());
     const capture = await newCapture("integration move");
-    await store.moveCaptureToIdeas(capture.id);
+    expect(await store.moveCaptureToIdeas(capture.id, "2026-11-08")).toBe(true);
     expect(await hub().getItem(capture.id)).toMatchObject({ title: "integration move", description: "kept as typed", list: "ideas", labels: ["idea"] });
     expect(await settingsRow(capture.id)).toMatchObject({
       enrolled: true,
       review_status: "waiting",
       moved_from_inbox: true,
-      schedule_from: capture.createdAt.slice(0, 10),
+      schedule_from: "2026-11-08",
     });
+  });
+
+  it("never moves a capture Mason filed elsewhere or archived", async () => {
+    const store = createIdeasJobStore(client());
+    const todo = await newCapture("integration todo");
+    await hub().updateItem(todo.id, { list: "todo" });
+    expect(await store.moveCaptureToIdeas(todo.id, "2026-11-08")).toBe(false);
+    expect(await hub().getItem(todo.id)).toMatchObject({ list: "todo" });
+    expect(await settingsRow(todo.id)).toBeNull();
   });
 
   it("adds a new idea once per client key, with no detection row of its own", async () => {
     const store = createIdeasJobStore(client());
     const capture = await newCapture();
-    const origin = { key: capture.id, footer: `Source: ${capture.url}, recorded ${capture.createdAt}` };
+    const origin = { key: capture.id, footer: `Source: ${capture.url}, recorded ${capture.createdAt}`, scheduleFrom: "2026-11-09" };
     const first = await store.addIdeaFrom(origin, 0, "Sourdough timer", "a timer for sourdough");
     expect(await store.addIdeaFrom(origin, 0, "Sourdough timer", "a timer for sourdough")).toBe(first);
     const idea = await hub().getItem(first);
@@ -228,7 +237,7 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
     await drain();
     const store = createIdeasJobStore(client());
     const capture = await newCapture();
-    const origin = { key: capture.id, footer: `Source: ${capture.url}, recorded ${capture.createdAt}` };
+    const origin = { key: capture.id, footer: `Source: ${capture.url}, recorded ${capture.createdAt}`, scheduleFrom: "2026-11-09" };
     const idea = await store.addIdeaFrom(origin, 0, "Bakery map", "a map of bakeries");
     expect(await store.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture", saved: null });
     const saved = [{ title: "Bakery map", quote: "a map of bakeries", whole_item: false, sure: false, outcome: { kind: "new" as const, id: idea } }];
@@ -300,7 +309,7 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
     // The mention's source is older, so a plain oldest-first pick would get the wrong quote.
     const later = await newCapture();
     const ideaSource = await newCapture();
-    const idea = await store.addIdeaFrom({ key: ideaSource.id, footer: `Source: ${ideaSource.url}, recorded ${ideaSource.createdAt}` }, 0, "Q", "first words");
+    const idea = await store.addIdeaFrom({ key: ideaSource.id, footer: `Source: ${ideaSource.url}, recorded ${ideaSource.createdAt}`, scheduleFrom: "2026-11-09" }, 0, "Q", "first words");
     const entry = { title: "Q", whole_item: false, sure: false };
     await client().from("idea_sources").update({ quotes: [{ ...entry, quote: "said again", outcome: { kind: "mention", id: idea } }], idea_item_ids: [idea] }).eq("source_item_id", later.id);
     await client().from("idea_sources").update({ quotes: [{ ...entry, quote: "first words", outcome: { kind: "new", id: idea } }], idea_item_ids: [idea] }).eq("source_item_id", ideaSource.id);
@@ -398,7 +407,7 @@ describe.skipIf(!enabled)("HiNote recordings against local Supabase", () => {
   it("gives the review the quote a recording filed an idea from", async () => {
     const file = await newRecording();
     const store = createIdeasJobStore(client(), 0);
-    const idea = await store.addIdeaFrom({ key: recordingRef(file), footer: `From HiNote recording ${file}, recorded 2026-11-08 14:00 UTC` }, 0, "Q", "spoken words");
+    const idea = await store.addIdeaFrom({ key: recordingRef(file), footer: `From HiNote recording ${file}, recorded 2026-11-08 07:00 MST`, scheduleFrom: "2026-11-09" }, 0, "Q", "spoken words");
     const { data: keyed } = await client().from("items").select("id, description").eq("client_key", `idea:rec:${file}#0`);
     expect(keyed).toEqual([{ id: idea, description: `> spoken words\n\nFrom HiNote recording ${file}, recorded 2026-11-08 14:00 UTC` }]);
     await client()

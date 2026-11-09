@@ -95,7 +95,26 @@ export const textOf = (message: BetaMessage) =>
 
 type StreamParams = Parameters<Anthropic["beta"]["messages"]["stream"]>[0];
 
-/** One paid call; on our own abort the partial usage is still recorded so the cap sees it. */
+/** A paid call that failed after its stream started: it was billed, so it counts as an attempt even when its error would pass. */
+export class StartedThenFailed extends Error {
+  constructor(readonly original: unknown) {
+    super("paid call failed after its stream started");
+    this.name = "StartedThenFailed";
+  }
+}
+
+/** The usage of a cut-off message; the stream reports output tokens only at the end, so they are guessed at 4 characters each. */
+export function partialUsage(partial: BetaMessage): ClaudeUsage {
+  const usage = partial.usage ?? { input_tokens: 0, output_tokens: 0 };
+  if ((usage.output_tokens ?? 0) > 1) return usage;
+  const chars = (partial.content ?? []).reduce(
+    (n, block) => n + (block.type === "text" ? block.text.length : block.type === "thinking" ? block.thinking.length : 0),
+    0,
+  );
+  return { ...usage, output_tokens: Math.max(usage.output_tokens ?? 0, Math.ceil(chars / 4)) };
+}
+
+/** One paid call; when it fails after its stream started, the partial usage is still recorded so the cap sees it. */
 export async function paidCall<Purpose extends string>(
   input: PaidCallContext<Purpose>,
   purpose: Purpose,
@@ -109,8 +128,9 @@ export async function paidCall<Purpose extends string>(
     message = await stream.finalMessage();
   } catch (e) {
     const partial = stream.currentMessage;
-    if (input.signal?.aborted && partial) await input.record({ purpose, model: servedBy(partial, asked), usage: partial.usage });
-    throw e;
+    if (!partial) throw e;
+    await input.record({ purpose, model: servedBy(partial, asked), usage: partialUsage(partial) });
+    throw new StartedThenFailed(e);
   }
   await input.record({ purpose, model: servedBy(message, asked), usage: message.usage });
   return message;

@@ -4,7 +4,7 @@ import { anthropicClient, costOf, monthSpend, recordUsage } from "@/lib/ai/claud
 
 afterEach(() => vi.unstubAllEnvs());
 
-function fakeClient(rows: Record<string, unknown>[], insertError: Error | null = null) {
+function fakeClient(rows: Record<string, unknown>[], insertError: Error | null = null, maxRows = 1000) {
   const inserted: Record<string, unknown>[] = [];
   const client = {
     from: () => ({
@@ -20,7 +20,7 @@ function fakeClient(rows: Record<string, unknown>[], insertError: Error | null =
           gte: (_c: string, v: string) => ((since = v), chain),
           order: () => chain,
           range: async (from: number, to: number) => ({
-            data: rows.filter((r) => r.feature === feature && String(r.at) >= since).slice(from, to + 1),
+            data: rows.filter((r) => r.feature === feature && String(r.at) >= since).slice(from, Math.min(to + 1, from + maxRows)),
             error: null,
           }),
         };
@@ -150,5 +150,13 @@ describe("monthSpend", () => {
     const out = await monthSpend(client, "ideas", new Date("2026-11-09T10:00:00Z"));
     expect(out.calls).toBe(1250);
     expect(out.thisMonth).toBe(1250);
+  });
+
+  it("keeps paging when the server caps a page below 1000 rows", async () => {
+    const rows = Array.from({ length: 1250 }, (_, i) => ({ feature: "ideas", model: "claude-opus-5-5", cost_usd: i, at: "2026-11-02T00:00:00Z" }));
+    const { client } = fakeClient(rows, null, 500);
+    const out = await monthSpend(client, "ideas", new Date("2026-11-09T10:00:00Z"));
+    expect(out.calls).toBe(1250);
+    expect(out.thisMonth).toBe((1249 * 1250) / 2);
   });
 });

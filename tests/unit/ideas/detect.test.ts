@@ -32,6 +32,7 @@ function harness(replies: FakeReply[] = [], overrides: Partial<IdeasJobDeps> & {
     ntfy: async () => {},
     deadlineMs: 0,
     spend: async () => baseSpend + fake.rows.usage.reduce((sum, u) => sum + u.cost, 0),
+    timeZone: async () => "UTC",
     ...rest,
   };
   return { ...fake, anthropic, deps, advance: (ms: number) => (clock += ms) };
@@ -93,7 +94,7 @@ describe("detection on captures", () => {
     expect(h.rows.items.get(capture.id)).toEqual(capture);
     const [copy] = [...h.rows.items.values()].filter((i) => i.id !== capture.id);
     expect(copy).toMatchObject({ title: "Sourdough timer", list: "ideas", labels: ["idea"], source: "ideas-lab" });
-    expect(copy.description).toBe(`> a timer for sourdough\n\nSource: ${capture.url}, recorded ${capture.createdAt}\nkey:idea:${capture.id}#0`);
+    expect(copy.description).toBe(`> a timer for sourdough\n\nSource: ${capture.url}, recorded 2026-11-01 00:00 UTC\nkey:idea:${capture.id}#0`);
     expect(h.rows.settings.get(copy.id)?.reviewStatus).toBe("waiting");
     expect(h.rows.sources.get(capture.id)?.status).toBe("done");
     expect(outcomes(h, capture.id)).toEqual([{ kind: "new", id: copy.id }]);
@@ -148,10 +149,50 @@ describe("detection on captures", () => {
     const h = harness();
     const filed = h.seedSource({ list: "ideas", labels: ["idea"] });
     const closed = h.seedSource({ state: "done" });
+    const todo = h.seedSource({ list: "todo" });
     await runIdeasJob(h.deps);
     expect(h.anthropic.sent).toEqual([]);
     expect(h.rows.sources.get(filed.id)).toMatchObject({ status: "done", ideas: [] });
     expect(h.rows.sources.get(closed.id)).toMatchObject({ status: "done", ideas: [] });
+    expect(h.rows.sources.get(todo.id)).toMatchObject({ status: "done", ideas: [] });
+    expect(h.rows.items.get(todo.id)).toEqual(todo);
+  });
+
+  const wholeIdea = { title: "Sourdough timer", quote: "a timer for sourdough", whole_item: true, sure: true, outcome: null };
+
+  it("copies instead of moving when Mason filed the capture under todo before a retry filed it", async () => {
+    const h = harness();
+    const capture = h.seedSource({ list: "todo" });
+    Object.assign(h.rows.sources.get(capture.id)!, { ideas: [wholeIdea], model: HAIKU, attempts: 1 });
+    await runIdeasJob(h.deps);
+    expect(h.anthropic.sent).toEqual([]);
+    expect(h.rows.items.get(capture.id)).toEqual(capture);
+    expect(h.rows.moved.size).toBe(0);
+    const [copy] = [...h.rows.items.values()].filter((i) => i.source === "ideas-lab");
+    expect(copy).toMatchObject({ title: "Sourdough timer", list: "ideas" });
+    expect(outcomes(h, capture.id)).toEqual([{ kind: "new", id: copy.id }]);
+  });
+
+  it("copies instead of moving a capture Mason archived meanwhile", async () => {
+    const h = harness();
+    const capture = h.seedSource({ state: "archived" });
+    Object.assign(h.rows.sources.get(capture.id)!, { ideas: [wholeIdea], model: HAIKU, attempts: 1 });
+    await runIdeasJob(h.deps);
+    expect(h.rows.items.get(capture.id)).toEqual(capture);
+    expect(outcomes(h, capture.id)).toEqual([{ kind: "new", id: expect.not.stringMatching(capture.id) }]);
+  });
+
+  it("copies when Mason moves the capture to todo while detection is running", async () => {
+    const h = harness();
+    const capture = h.seedSource();
+    const claude = byPurpose(() => {
+      h.rows.items.set(capture.id, { ...h.rows.items.get(capture.id)!, list: "todo" });
+      return found({ whole_item: true, sure: true });
+    }, []);
+    await runIdeasJob({ ...h.deps, anthropic: claude.client });
+    expect(h.rows.items.get(capture.id)?.list).toBe("todo");
+    expect(h.rows.moved.size).toBe(0);
+    expect(outcomes(h, capture.id)).toEqual([{ kind: "new", id: expect.any(String) }]);
   });
 
   it("resumes a source from its saved detection after a passing error, filing each idea once", async () => {
@@ -266,6 +307,37 @@ describe("detection on captures", () => {
   });
 });
 
+describe("detection in Mason's local time", () => {
+  it("writes the footer, mention date and schedule start in his zone", async () => {
+    // 03:00 UTC on Nov 10 is still Nov 9 in New York.
+    const h = harness([], { timeZone: async () => "America/New_York", now: () => new Date("2026-11-10T03:00:00Z") });
+    const existing = h.seed({ title: "Bakery map" }, { reviewStatus: "done" });
+    const capture = h.seedSource({ createdAt: "2026-11-10T02:25:00Z" });
+    const claude = byPurpose(() => found({ title: "Sourdough timer" }, { title: "Bakery map", quote: "bakery map again" }), [same(null), same(existing.id)]);
+    await runIdeasJob({ ...h.deps, anthropic: claude.client });
+    const [copy] = [...h.rows.items.values()].filter((i) => i.source === "ideas-lab");
+    expect(copy.description).toContain(`Source: ${capture.url}, recorded 2026-11-09 21:25 EST\n`);
+    expect(h.rows.comments.map((c) => c.body)).toEqual([`Mentioned again in ${capture.url} on 2026-11-09\n\n> bakery map again`]);
+    expect(h.rows.scheduleFrom.get(copy.id)).toBe("2026-11-09");
+  });
+
+  it("starts a moved capture's schedule on its local day", async () => {
+    const h = harness([found({ whole_item: true, sure: true })], { timeZone: async () => "America/Denver" });
+    const capture = h.seedSource({ createdAt: "2026-11-09T03:00:00Z" });
+    await runIdeasJob(h.deps);
+    expect(h.rows.moved.has(capture.id)).toBe(true);
+    expect(h.rows.scheduleFrom.get(capture.id)).toBe("2026-11-08");
+  });
+
+  it("names a recording's time in his zone", async () => {
+    const h = harness([found()], { timeZone: async () => "America/Denver" });
+    h.seedRecording("2026Nov08-070000-Rec01", "a timer", "2026-11-08T14:00:00+00:00");
+    await runIdeasJob(h.deps);
+    const [created] = [...h.rows.items.values()].filter((i) => i.source === "ideas-lab");
+    expect(created.description).toContain("recorded 2026-11-08 07:00 MST\n");
+  });
+});
+
 describe("detection on memos", () => {
   function seedMemo(h: ReturnType<typeof harness>, transcript: string) {
     const m = memoItem({ file: "2026Nov08-090000-Rec01.hda", recorded: "2026-11-08T09:00:00", transcript });
@@ -301,7 +373,7 @@ describe("detection on memos", () => {
     expect(h.rows.items.get(memo.id)).toEqual(before);
     const ideas = [...h.rows.items.values()].filter((i) => i.source === "ideas-lab");
     expect(ideas.map((i) => i.title)).toEqual(["Sourdough timer", "Bakery map"]);
-    expect(ideas[1].description).toContain(`> a map of bakeries\n\nSource: ${memo.url}, recorded 2026-11-08T09:00:00`);
+    expect(ideas[1].description).toContain(`> a map of bakeries\n\nSource: ${memo.url}, recorded 2026-11-08 09:00\n`);
     expect(h.rows.sources.get(memo.id)?.status).toBe("done");
     expect(outcomes(h, memo.id)).toEqual(ideas.map((i) => ({ kind: "new", id: i.id })));
     const content = (h.anthropic.sent[0].messages as { content: string }[])[0].content;

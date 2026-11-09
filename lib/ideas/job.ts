@@ -1,12 +1,13 @@
 import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
 import { APIConnectionError } from "@anthropic-ai/sdk";
-import { formatInstant } from "@/lib/hub/format";
+import { formatInstantIn } from "@/lib/hub/format";
 import { parseMemo } from "@/lib/hub/memo-split";
 import type { Message } from "@/lib/hub/notify";
 import type { ClaudeUsage, ModelId } from "@/lib/ai/claude";
 import { detectIdeas, sameIdea } from "./detect";
-import { reviewIdea } from "./review";
+import { localDate } from "./resurface";
+import { reviewIdea, StartedThenFailed } from "./review";
 import { ClaimLost, sourceRef, type ClaimedSource, type IdeaOrigin, type IdeasJobStore } from "./store";
 import { CapReached, DetectFailed, recordingRef, ReviewFailed, type DetectKind, type SourceKind } from "./types";
 
@@ -22,6 +23,8 @@ export type IdeasJobDeps = {
   spend: () => Promise<number>;
   /** Brings ideas back on the calendar; returns how many returns it sent, closed or skipped. */
   resurface?: () => Promise<number>;
+  /** Mason's current time zone, for idea footers, mention dates and schedule starts. */
+  timeZone: () => Promise<string>;
 };
 
 export type IdeasRunResult = { detected: number; reviewed: string[]; failed: string[]; paused: boolean; resurfaced: number };
@@ -67,7 +70,7 @@ class SpendUnreadable extends Error {
 
 /** Errors that say nothing about the idea; the claim goes back to waiting uncounted. Our own deadline abort counts. */
 function isPassing(e: unknown, signal: AbortSignal): boolean {
-  if (signal.aborted) return false;
+  if (signal.aborted || e instanceof StartedThenFailed) return false;
   if (e instanceof SpendUnreadable || e instanceof APIConnectionError) return true;
   const status = statusOf(e);
   return status !== null && (PASSING_STATUSES.has(status) || status >= 500);
@@ -75,6 +78,7 @@ function isPassing(e: unknown, signal: AbortSignal): boolean {
 
 function failCode(e: unknown, signal: AbortSignal): string {
   if (signal.aborted) return "deadline";
+  if (e instanceof StartedThenFailed) return failCode(e.original, signal);
   if (e instanceof ReviewFailed || e instanceof DetectFailed) return e.code;
   if (e instanceof SpendUnreadable) return "spend";
   if (e instanceof APIConnectionError) return "connection";
@@ -94,12 +98,13 @@ async function notifyOnce(deps: IdeasJobDeps, key: string, msg: Message): Promis
   await deps.store.setFlag(key, deps.now().toISOString());
 }
 
-async function pauseForCap(deps: IdeasJobDeps, spend: number): Promise<void> {
+async function pauseForCap(deps: IdeasJobDeps, spend: number | null): Promise<void> {
   await deps.store.pauseWaiting();
   const month = deps.now().toISOString().slice(0, 7);
+  const spent = spend === null ? "Ideas reached" : `Ideas spent $${spend.toFixed(2)} of`;
   await notifyOnce(deps, `ideas-cap-notified:${month}`, {
     title: "Idea reviews paused: monthly cap reached",
-    message: `Ideas spent $${spend.toFixed(2)} of $${deps.budgetUsd.toFixed(2)} this month. Reviews wait in order and start again next month or when the cap is raised.`,
+    message: `${spent} $${deps.budgetUsd.toFixed(2)} this month. Reviews wait in order and start again next month or when the cap is raised.`,
     clickUrl: IDEAS_URL,
   });
 }
@@ -142,7 +147,8 @@ async function reviewOne(
   } catch (e) {
     if (e instanceof CapReached) {
       await store.releaseClaim(id, "paused");
-      await pauseForCap(deps, await deps.spend());
+      // A failed spend read here must not end the run before the calendar step and the failure message.
+      await pauseForCap(deps, await deps.spend().catch(() => null));
       result.paused = true;
       return "stop";
     }
@@ -195,14 +201,14 @@ type SourceView = {
 };
 
 /** Reads a claimed source, or null when it needs no reading: Mason filed the capture himself, or the Mac already sent the memo's recording. */
-async function viewOf(store: IdeasJobStore, source: ClaimedSource): Promise<SourceView | null> {
+async function viewOf(store: IdeasJobStore, source: ClaimedSource, local: LocalTime): Promise<SourceView | null> {
   if (source.kind === "recording") {
     const name = `HiNote recording ${source.file}`;
     const recorded = new Date(source.recorded).toISOString();
     return {
       text: source.transcript,
       prompt: "memo",
-      origin: { key: recordingRef(source.file), footer: `From ${name}, recorded ${formatInstant(recorded)}` },
+      origin: { key: recordingRef(source.file), footer: `From ${name}, recorded ${local.stamp(recorded)}`, scheduleFrom: local.today },
       mentionedIn: name,
       recorded,
       itemId: null,
@@ -211,8 +217,8 @@ async function viewOf(store: IdeasJobStore, source: ClaimedSource): Promise<Sour
   const id = source.itemId;
   const item = await store.getIdea(id);
   if (!item) throw new Error("missing");
-  // Mason filed or closed the capture himself first; a memo is read even once its split archived it.
-  const filedByMason = item.state !== "open" || item.list === "ideas" || item.labels.includes("idea");
+  // Mason filed or closed the capture himself first (any list but the inbox); a memo is read even once its split archived it.
+  const filedByMason = item.state !== "open" || item.list !== "inbox" || item.labels.includes("idea");
   if (source.kind === "capture" && !source.saved && filedByMason) return null;
   const memo = source.kind === "memo" ? parseMemo(item, await store.listComments(id)) : null;
   // Dedupe by file name at cutover: the read-only HiNote intake already read this recording's ideas.
@@ -221,10 +227,25 @@ async function viewOf(store: IdeasJobStore, source: ClaimedSource): Promise<Sour
   return {
     text: memo ? memo.transcript : [item.title, item.description].filter((t) => t.trim()).join("\n\n"),
     prompt: source.kind,
-    origin: { key: id, footer: `Source: ${item.url}, recorded ${recorded}` },
+    origin: { key: id, footer: `Source: ${item.url}, recorded ${local.stamp(recorded)}`, scheduleFrom: local.today },
     mentionedIn: item.url,
     recorded,
     itemId: id,
+  };
+}
+
+/** Mason's local clock for one run: `today` and `day` as YYYY-MM-DD, `stamp` like "2026-11-09 14:25 MST". */
+type LocalTime = { today: string; day: (at: string) => string; stamp: (at: string) => string };
+
+// A memo's recorded time is the recorder's own wall clock with no offset, so it is already local and stays as it is.
+const WALL_CLOCK = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:[\d.]+)?$/;
+
+function localTime(zone: string, now: Date): LocalTime {
+  const instant = (at: string) => !WALL_CLOCK.test(at) && !Number.isNaN(Date.parse(at));
+  return {
+    today: localDate(now, zone),
+    day: (at) => (instant(at) ? localDate(new Date(at), zone) : at.slice(0, 10)),
+    stamp: (at) => (instant(at) ? (formatInstantIn(at, zone) ?? at) : WALL_CLOCK.test(at) ? at.slice(0, 16).replace("T", " ") : at),
   };
 }
 
@@ -234,11 +255,12 @@ async function detectOne(
   anthropic: Anthropic,
   source: ClaimedSource,
   signal: AbortSignal,
+  local: LocalTime,
 ): Promise<{ outcome: Outcome; found: number }> {
   const { store } = deps;
   const ref = sourceRef(source);
   try {
-    const view = await viewOf(store, source);
+    const view = await viewOf(store, source, local);
     if (!view) {
       await store.finishSource(ref, [], null);
       return { outcome: "next", found: 0 };
@@ -266,11 +288,11 @@ async function detectOne(
     for (const [n, idea] of ideas.entries()) {
       if (idea.outcome) continue;
       const { matchId } = open.length ? await sameIdea({ ...ctx, candidate: `${idea.title}\n${idea.quote}`, open }) : { matchId: null };
+      const recordedOn = local.day(view.recorded);
       if (matchId) {
-        await store.mentionAgain(matchId, view.mentionedIn, view.recorded.slice(0, 10), idea.quote);
+        await store.mentionAgain(matchId, view.mentionedIn, recordedOn, idea.quote);
         idea.outcome = { kind: "mention", id: matchId };
-      } else if (moveWhole) {
-        await store.moveCaptureToIdeas(moveWhole);
+      } else if (moveWhole && (await store.moveCaptureToIdeas(moveWhole, recordedOn))) {
         idea.outcome = { kind: "moved", id: moveWhole };
       } else {
         idea.outcome = { kind: "new", id: await store.addIdeaFrom(view.origin, n, idea.title, idea.quote) };
@@ -308,11 +330,13 @@ async function detectStep(deps: IdeasJobDeps, startedAt: number): Promise<number
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(0, startedAt + DETECT_ABORT_MS - deps.now().getTime()));
   let found = 0;
+  let local: LocalTime | null = null;
   try {
     while (deps.now().getTime() < startedAt + DETECT_BUDGET_MS) {
       const source = await deps.store.claimSource(kinds);
       if (!source) break;
-      const done = await detectOne(deps, anthropic, source, controller.signal);
+      local ??= localTime(await deps.timeZone(), deps.now());
+      const done = await detectOne(deps, anthropic, source, controller.signal, local);
       found += done.found;
       if (done.outcome === "stop") break;
     }

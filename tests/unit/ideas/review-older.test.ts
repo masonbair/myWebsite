@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { planOlderReviews, queueOlderReviews, type OlderDeps } from "@/scripts/ideas-review-older";
+import { planOlderReviews, queueOlderReviews, supabaseDeps, type OlderDeps } from "@/scripts/ideas-review-older";
+import { fakePostgrest } from "./fake-postgrest";
 
 function fakeDeps(over: Partial<OlderDeps> = {}): OlderDeps & { queued: string[][] } {
   const queued: string[][] = [];
@@ -37,5 +38,11 @@ describe("ideas-review-older", () => {
     const queue = vi.spyOn(deps, "queue");
     expect(await queueOlderReviews(deps, " yes\n")).toBe(3);
     expect(queue).toHaveBeenCalledWith(["a", "c", "d"]);
+  });
+
+  it("reads every open idea past the server's 1000-row page", async () => {
+    const items = Array.from({ length: 2500 }, (_, n) => ({ id: `id-${String(n).padStart(5, "0")}`, list: n % 10 === 0 ? "todo" : "ideas", state: "open" }));
+    const fake = fakePostgrest({ items }, { maxRows: 1000 });
+    expect(await supabaseDeps(fake.client).openIdeaIds()).toHaveLength(2250);
   });
 });

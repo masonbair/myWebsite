@@ -27,6 +27,8 @@ export type FakeIdeasRows = {
   comments: Comment[];
   mentions: Map<string, number>;
   moved: Set<string>;
+  /** schedule_from per enrolled item, as the job set it. */
+  scheduleFrom: Map<string, string>;
 };
 
 let counter = 0;
@@ -63,6 +65,7 @@ export function createFakeIdeasStore() {
     comments: [],
     mentions: new Map(),
     moved: new Set(),
+    scheduleFrom: new Map(),
   };
   const calls: string[] = [];
 
@@ -164,11 +167,18 @@ export function createFakeIdeasStore() {
       source.attempts -= 1;
       source.claimed = false;
     },
-    async moveCaptureToIdeas(id) {
-      const item = rows.items.get(id)!;
+    async moveCaptureToIdeas(id, scheduleFrom) {
+      const item = rows.items.get(id);
+      if (!item || item.state !== "open") return false;
+      if (item.list === "ideas") {
+        seedSettings(id, scheduleFrom);
+        return true;
+      }
+      if (item.list !== "inbox") return false;
       rows.items.set(id, { ...item, list: "ideas", labels: [...item.labels, "idea"] });
       rows.moved.add(id);
-      seedSettings(id);
+      seedSettings(id, scheduleFrom);
+      return true;
     },
     async addIdeaFrom(origin, n, title, quote) {
       const key = `idea:${origin.key}#${n}`;
@@ -180,7 +190,7 @@ export function createFakeIdeasStore() {
         description: `> ${quote}\n\n${origin.footer}\nkey:${key}`,
       });
       rows.items.set(item.id, item);
-      seedSettings(item.id);
+      seedSettings(item.id, origin.scheduleFrom);
       return item.id;
     },
     async mentionAgain(ideaId, source, date, quote) {
@@ -191,8 +201,9 @@ export function createFakeIdeasStore() {
     },
   };
 
-  function seedSettings(id: string) {
+  function seedSettings(id: string, scheduleFrom: string) {
     if (rows.settings.has(id)) return;
+    rows.scheduleFrom.set(id, scheduleFrom);
     rows.settings.set(id, {
       itemId: id,
       enrolled: true,

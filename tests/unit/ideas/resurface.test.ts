@@ -31,8 +31,7 @@ function fakeStore(ideas: ResurfaceIdea[], rows: ResurfaceRow[] = []) {
   const google = { connected: true, calendarId: "cal-ideas" as string | null };
   let nextId = rows.length + 1;
   const store: ResurfaceStore = {
-    ideas: async () => ideas,
-    rows: async () => rows.map((r) => ({ ...r })),
+    load: async () => ({ ideas, rows: rows.map((r) => ({ ...r })) }),
     async planRow(itemId, step, dueDate) {
       if (rows.some((r) => r.itemId === itemId && r.step === step && r.dueDate === dueDate)) return null;
       const row: ResurfaceRow = { id: nextId++, itemId, step, dueDate, eventDate: null, googleEventId: null, status: "planned" };

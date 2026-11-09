@@ -27,9 +27,11 @@ export type ResurfaceIdea = {
 
 /** What the resurface step reads and writes; rows are never deleted. */
 export type ResurfaceStore = {
-  /** Enrolled ideas with their latest review. */
-  ideas(): Promise<ResurfaceIdea[]>;
-  rows(): Promise<ResurfaceRow[]>;
+  /**
+   * What one run needs: enrolled open ideas with their latest review and all their rows, plus any other idea that still has
+   * a planned row or one with an event on or after `today` (YYYY-MM-DD), with those rows.
+   */
+  load(today: string): Promise<{ ideas: ResurfaceIdea[]; rows: ResurfaceRow[] }>;
   /** Adds a planned row and returns it; null when a row with the same item, step and due date already exists. */
   planRow(itemId: string, step: Step, dueDate: string): Promise<ResurfaceRow | null>;
   updateRow(id: number, columns: Partial<Pick<ResurfaceRow, "status" | "eventDate" | "googleEventId">>): Promise<void>;
@@ -83,8 +85,9 @@ const isActive = (idea: ResurfaceIdea) =>
 /** Brings ideas back on the Ideas calendar; returns how many rows it sent, closed or skipped. */
 export async function runResurface(deps: ResurfaceDeps): Promise<number> {
   const { store } = deps;
-  const [ideas, rows, timeZone, access] = await Promise.all([store.ideas(), store.rows(), deps.timeZone(), deps.google()]);
+  const [timeZone, access] = await Promise.all([deps.timeZone(), deps.google()]);
   const today = localDate(deps.now(), timeZone);
+  const { ideas, rows } = await store.load(today);
   const tomorrow = addDays(today, 1);
   // null means Google is unavailable (disconnected, revoked, calendar gone): due rows are skipped.
   let calendar = access && access !== "disconnected" ? bindCalendar(access) : null;

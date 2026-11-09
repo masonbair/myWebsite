@@ -31,13 +31,21 @@ export async function queueOlderReviews(deps: OlderDeps, answer: string): Promis
 }
 
 const BATCH = 100;
+const PAGE = 1000;
 
-function supabaseDeps(client: SupabaseClient): OlderDeps {
+/** The script's reads and writes over a service client. */
+export function supabaseDeps(client: SupabaseClient): OlderDeps {
   return {
     async openIdeaIds() {
-      const { data, error } = await client.from("items").select("id").eq("list", "ideas").eq("state", "open").limit(5000);
-      if (error) throw error;
-      return (data as { id: string }[]).map((row) => row.id);
+      const ids: string[] = [];
+      // The server caps each response (1000 rows by default), so only an empty page means the end.
+      for (let from = 0; ; ) {
+        const { data, error } = await client.from("items").select("id").eq("list", "ideas").eq("state", "open").order("id").range(from, from + PAGE - 1);
+        if (error) throw error;
+        if (!data?.length) return ids;
+        ids.push(...(data as { id: string }[]).map((row) => row.id));
+        from += data.length;
+      }
     },
     async enrolledIds(ids) {
       const enrolled = new Set<string>();

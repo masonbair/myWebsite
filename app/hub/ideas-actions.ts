@@ -7,8 +7,10 @@ import { isItemId } from "@/lib/hub/format";
 import { masonStore } from "@/lib/hub/mason-store";
 import type { HubStore, Item } from "@/lib/hub/types";
 import { MEMO_FILE } from "@/lib/hub/memo";
+import { masonTimeZone } from "@/lib/hub/events";
 import { disconnectFromGoogle, GoogleError, SETTINGS_PATH } from "@/lib/ideas/google";
 import { IDEA_LABEL, isIdea } from "@/lib/ideas/read";
+import { localDate } from "@/lib/ideas/resurface";
 import { MAX_REVIEW_NOTE, recordingFile } from "@/lib/ideas/types";
 import { serviceClient, sessionClient } from "@/lib/supabase/server";
 
@@ -61,10 +63,11 @@ export async function requestReview(id: string, note: string): Promise<{ error: 
   const text = note.trim();
   if (text.length > MAX_REVIEW_NOTE) throw new Error(`a review note can be at most ${MAX_REVIEW_NOTE} characters`);
   assertOpen(item);
+  const now = new Date();
   try {
     await writeSettings(item.id, {
       enrolled: true,
-      schedule_from: new Date().toISOString().slice(0, 10),
+      schedule_from: localDate(now, await masonTimeZone(serviceClient(), now)),
       review_status: "waiting",
       review_requested_at: new Date().toISOString(),
       review_note: text || null,

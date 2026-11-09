@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reviewIdea, type ReviewCall } from "@/lib/ideas/review";
+import { partialUsage, reviewIdea, type ReviewCall } from "@/lib/ideas/review";
 import { ReviewFailed } from "@/lib/ideas/types";
 import { OTHER, fakeAnthropic, textReply, usage, validReview, type FakeReply } from "./fake-anthropic";
 
@@ -154,5 +154,20 @@ describe("reviewIdea with web search", () => {
     const { promise, sent } = await run([textReply("", "refusal")], { webSearch: true });
     await expect(promise).rejects.toEqual(new ReviewFailed("refusal"));
     expect(sent).toHaveLength(1);
+  });
+});
+
+describe("partialUsage", () => {
+  const message = (output: number, content: Record<string, unknown>[]) =>
+    ({ usage: usage(2000, output), content }) as unknown as Parameters<typeof partialUsage>[0];
+
+  it("guesses output tokens from the text and thinking so far when the stream has not counted them", () => {
+    const content = [{ type: "thinking", thinking: "abcde" }, { type: "text", text: "fghij" }, { type: "tool_use", input: {} }];
+    expect(partialUsage(message(1, content))).toMatchObject({ input_tokens: 2000, output_tokens: 3 });
+    expect(partialUsage(message(0, []))).toMatchObject({ output_tokens: 0 });
+  });
+
+  it("keeps a real output count", () => {
+    expect(partialUsage(message(250, [{ type: "text", text: "x".repeat(4000) }])).output_tokens).toBe(250);
   });
 });

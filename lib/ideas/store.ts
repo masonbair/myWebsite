@@ -16,8 +16,8 @@ const OPEN_IDEAS_LIMIT = 200;
 // idea_sources has no working status, so a claim is a fresh updated_at; longer than a whole run, shorter than the 15-minute cron gap.
 const SOURCE_LEASE_MS = 10 * 60 * 1000;
 
-/** Where a new idea came from: `key` goes in its client key `idea:<key>#<n>`, `footer` under its quote. */
-export type IdeaOrigin = { key: string; footer: string };
+/** Where a new idea came from: `key` goes in its client key `idea:<key>#<n>`, `footer` under its quote, `scheduleFrom` (Mason's local date) starts its returns. */
+export type IdeaOrigin = { key: string; footer: string; scheduleFrom: string };
 
 /** Everything the ideas job may do; there is deliberately no complete, archive, delete or claude-label call. */
 export type IdeasJobStore = {
@@ -38,8 +38,8 @@ export type IdeasJobStore = {
   getFlag(key: string): Promise<unknown | null>;
   setFlag(key: string, value: unknown): Promise<void>;
   listComments(id: string): Promise<Comment[]>;
-  /** Files an inbox capture under ideas as it is, and queues its review. */
-  moveCaptureToIdeas(id: string): Promise<void>;
+  /** Files an open inbox capture under ideas as it is and queues its review; true when it is (now) an open idea, false when it is anywhere else. */
+  moveCaptureToIdeas(id: string, scheduleFrom: string): Promise<boolean>;
   /** Makes (once per source and index) a new idea item holding the quote, and queues its review; returns its id. */
   addIdeaFrom(origin: IdeaOrigin, n: number, title: string, quote: string): Promise<string>;
   /** Notes on an open idea that Mason said it again in `source` (a link or a recording's name); never edits the idea's text. */
@@ -224,17 +224,25 @@ export function createIdeasJobStore(client: SupabaseClient, sourceLeaseMs = SOUR
 
     listComments: (id) => hub.listComments(id),
 
-    async moveCaptureToIdeas(id) {
+    async moveCaptureToIdeas(id, scheduleFrom) {
+      // Read fresh: Mason may have filed, finished or archived it since detection read it.
       const item = await hub.getItem(id);
-      if (!item) throw new Error(`no item ${id}`);
+      if (!item || item.state !== "open") return false;
+      // Already under ideas (a retry after a run died mid-move, or Mason filed it): nothing to move and nothing to copy.
+      if (item.list === "ideas") {
+        await queueReview(id, scheduleFrom);
+        return true;
+      }
+      if (item.list !== "inbox") return false;
       await hub.updateItem(id, {
         list: "ideas",
         labels: item.labels.includes("idea") ? item.labels : [...item.labels, "idea"],
       });
-      await queueReview(id, item.createdAt.slice(0, 10));
+      await queueReview(id, scheduleFrom);
       // The insert above skips a row that already exists, so the flag is set on its own.
       const { error } = await client.from("idea_settings").update({ moved_from_inbox: true }).eq("item_id", id);
       if (error) throw error;
+      return true;
     },
 
     async addIdeaFrom(origin, n, title, quote) {
@@ -246,7 +254,7 @@ export function createIdeasJobStore(client: SupabaseClient, sourceLeaseMs = SOUR
         source: "ideas-lab",
         clientKey: `idea:${origin.key}#${n}`,
       });
-      await queueReview(item.id, new Date().toISOString().slice(0, 10));
+      await queueReview(item.id, origin.scheduleFrom);
       return item.id;
     },
 
