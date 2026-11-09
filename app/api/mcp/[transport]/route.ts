@@ -17,6 +17,8 @@ async function handle(request: NextRequest, ctx: { params: Promise<{ transport: 
     token: process.env.HUB_AGENT_TOKEN,
     storeFor: (client) => createHubStore(serviceClient(), { kind: "agent", client }),
     readNow: () => loadNow(),
+    ideasClient: serviceClient(),
+    now: () => new Date(),
   });
 }
 

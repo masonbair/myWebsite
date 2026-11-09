@@ -24,6 +24,8 @@ describe.skipIf(!enabled)("mcp tools against local Supabase", () => {
         token,
         storeFor: (client) => createHubStore(db(), { kind: "agent", client }),
         readNow: async () => parseNow(null),
+        ideasClient: db(),
+        now: () => new Date(),
       })) as typeof fetch;
     const transport = new StreamableHTTPClientTransport(new URL("https://hub.test/api/mcp/mcp"), {
       fetch: fetchFn,

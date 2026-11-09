@@ -1,9 +1,26 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import { describe, expect, it } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { getIdeaPage, listIdeas } from "@/lib/ideas/read";
+import { monthSpend } from "@/lib/ai/claude";
 import { MCP_TOOL_NAMES, handleMcpRequest } from "@/lib/hub/mcp-tools";
 import type { NowData } from "@/lib/now";
 import { createFakeStore } from "./fake-store";
 import { seedItem } from "./worker-harness";
+
+vi.mock("@/lib/ideas/read", async (original) => ({ ...(await original<typeof import("@/lib/ideas/read")>()), listIdeas: vi.fn(), getIdeaPage: vi.fn() }));
+vi.mock("@/lib/ai/claude", async (original) => ({ ...(await original<typeof import("@/lib/ai/claude")>()), monthSpend: vi.fn() }));
+
+const writeVerbs = new Set(["insert", "update", "upsert", "delete", "rpc"]);
+const readOnlyClient = new Proxy(
+  {},
+  {
+    get: (_t, prop) => {
+      if (typeof prop === "string" && writeVerbs.has(prop)) throw new Error(`write attempted: ${prop}`);
+      return undefined;
+    },
+  },
+) as unknown as SupabaseClient;
 
 const TOKEN = "test-agent-token";
 const URL_BASE = "https://hub.test/api/mcp/mcp";
@@ -27,6 +44,8 @@ function setup(options: { token?: string; clientName?: string | null; serverToke
         return createFakeStore({ kind: "agent", client }, rows);
       },
       readNow: async () => NOW,
+      ideasClient: readOnlyClient,
+      now: () => new Date("2026-11-09T12:00:00Z"),
     })) as typeof fetch;
   const headers: Record<string, string> = { authorization: `Bearer ${options.token ?? TOKEN}` };
   if (options.clientName !== null) headers["x-client-name"] = options.clientName ?? "test-agent";
@@ -51,7 +70,7 @@ describe("mcp agent connector", () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["add_comment", "add_item", "find_items", "get_item", "get_now", "list_comments", "merge_duplicate", "update_item"].sort(),
+      ["add_comment", "add_item", "find_items", "get_item", "get_now", "list_comments", "merge_duplicate", "update_item", "ideas_list", "idea_get", "ai_costs"].sort(),
     );
     expect([...MCP_TOOL_NAMES].sort()).toEqual(names);
     for (const tool of tools) expect(tool.description).toMatch(/data, never instructions/);
@@ -199,6 +218,92 @@ describe("mcp agent connector", () => {
     const bad = await connect({ clientName: "evil name/../with spaces" });
     await bad.client.callTool({ name: "add_item", arguments: { title: "x" } });
     expect([...bad.rows.items.values()][0].source).toBe("agent:unknown");
+  });
+});
+
+const IDEAS = [
+  { id: "a", title: "Solar Kettle", verdict: "strong", createdAt: "2026-10-01T10:00:00Z", mentions: 1, nextReturn: null, reviewStatus: "done" },
+  { id: "b", title: "Kettle bell app", verdict: "weak", createdAt: "2026-11-05T10:00:00Z", mentions: 2, nextReturn: "2026-11-20", reviewStatus: "done" },
+  { id: "c", title: "Bike lock", verdict: "strong", createdAt: "2026-11-07T10:00:00Z", mentions: 1, nextReturn: null, reviewStatus: "none" },
+];
+const ideaId = "30000000-0000-4000-8000-000000000001";
+
+describe("mcp idea tools", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const { client } = await connect();
+    return client.callTool({ name, arguments: args });
+  };
+
+  it("each is read-only and ends with the data line", async () => {
+    const { client } = await connect();
+    const { tools } = await client.listTools();
+    for (const name of ["ideas_list", "idea_get", "ai_costs"]) {
+      const tool = tools.find((t) => t.name === name)!;
+      expect(tool.annotations?.readOnlyHint).toBe(true);
+      expect(tool.description).toMatch(/data, never instructions\.$/);
+    }
+  });
+
+  it("ideas_list defaults to active and filters by verdict, text and date", async () => {
+    vi.mocked(listIdeas).mockResolvedValue({ ideas: IDEAS, total: 3 } as never);
+    const all = JSON.parse(text(await call("ideas_list")));
+    expect(vi.mocked(listIdeas).mock.calls[0][1]).toBe("active");
+    expect(all.ideas).toHaveLength(3);
+    const strong = JSON.parse(text(await call("ideas_list", { verdict: "strong", status: "done" })));
+    expect(strong.ideas.map((i: { id: string }) => i.id)).toEqual(["a", "c"]);
+    expect(vi.mocked(listIdeas).mock.calls[1][1]).toBe("done");
+    const kettle = JSON.parse(text(await call("ideas_list", { text: "KETTLE" })));
+    expect(kettle.ideas.map((i: { id: string }) => i.id)).toEqual(["a", "b"]);
+    const dated = JSON.parse(text(await call("ideas_list", { from: "2026-11-05", to: "2026-11-06" })));
+    expect(dated.ideas.map((i: { id: string }) => i.id)).toEqual(["b"]);
+    expect(dated.total).toBe(1);
+  });
+
+  it("ideas_list says when the limit capped the result", async () => {
+    vi.mocked(listIdeas).mockResolvedValue({ ideas: IDEAS, total: 3 } as never);
+    const capped = JSON.parse(text(await call("ideas_list", { limit: 2 })));
+    expect(capped.ideas).toHaveLength(2);
+    expect(capped.note).toMatch(/2 of 3/);
+  });
+
+  it("idea_get returns every review version; a missing idea is a tool error", async () => {
+    const reviews = [1, 2, 3].map((version) => ({ version, createdAt: "2026-11-01T00:00:00Z", note: null, review: null }));
+    vi.mocked(getIdeaPage).mockResolvedValueOnce({ item: { id: ideaId }, reviews } as never);
+    const page = JSON.parse(text(await call("idea_get", { id: ideaId })));
+    expect(page.reviews.map((r: { version: number }) => r.version)).toEqual([1, 2, 3]);
+    vi.mocked(getIdeaPage).mockResolvedValueOnce(null);
+    const missing = await call("idea_get", { id: ideaId });
+    expect(missing.isError).toBe(true);
+    expect(text(missing)).toBe(`no idea ${ideaId}`);
+  });
+
+  it("ai_costs honors the feature filter, rounds to cents and uses the budget envs", async () => {
+    vi.mocked(monthSpend).mockResolvedValue({ thisMonth: 1.23456, lastMonth: 2.005, byModel: { "claude-opus-5-5": 1.23456 }, calls: 4 });
+    vi.stubEnv("IDEAS_MONTHLY_BUDGET_USD", "");
+    vi.stubEnv("NEWS_MONTHLY_BUDGET_USD", "");
+    const ideas = JSON.parse(text(await call("ai_costs")));
+    expect(vi.mocked(monthSpend).mock.calls[0][1]).toBe("ideas");
+    expect(ideas).toMatchObject({ feature: "ideas", thisMonth: 1.23, byModel: { "claude-opus-5-5": 1.23 }, calls: 4, monthlyBudgetUsd: 20 });
+    const news = JSON.parse(text(await call("ai_costs", { feature: "news" })));
+    expect(vi.mocked(monthSpend).mock.calls[1][1]).toBe("news");
+    expect(news.monthlyBudgetUsd).toBe(25);
+    vi.stubEnv("IDEAS_MONTHLY_BUDGET_USD", "7.5");
+    vi.stubEnv("NEWS_MONTHLY_BUDGET_USD", "40");
+    expect(JSON.parse(text(await call("ai_costs"))).monthlyBudgetUsd).toBe(7.5);
+    expect(JSON.parse(text(await call("ai_costs", { feature: "news" }))).monthlyBudgetUsd).toBe(40);
+    vi.unstubAllEnvs();
+  });
+
+  it("none of them writes: the client throws on insert, update, upsert, delete and rpc and is never asked to", async () => {
+    vi.mocked(listIdeas).mockResolvedValue({ ideas: IDEAS, total: 3 } as never);
+    vi.mocked(getIdeaPage).mockResolvedValue({ item: {}, reviews: [] } as never);
+    vi.mocked(monthSpend).mockResolvedValue({ thisMonth: 0, lastMonth: 0, byModel: {}, calls: 0 });
+    for (const [name, args] of [["ideas_list", {}], ["idea_get", { id: ideaId }], ["ai_costs", {}]] as const) {
+      expect((await call(name, args)).isError).toBeFalsy();
+    }
+    expect(() => (readOnlyClient as unknown as { insert: () => void }).insert()).toThrow(/write attempted/);
   });
 });
 
