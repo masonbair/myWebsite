@@ -26,7 +26,7 @@ export type EventDeps = {
   fetchFn: typeof fetch;
   /** Null when no blob store is connected. */
   backup: (() => Promise<BackupResult>) | null;
-  /** One Ideas Lab run; null when the ideas Claude key is unset. */
+  /** One Ideas Lab run; null only in tests that leave it out. */
   ideas?: (() => Promise<IdeasRunResult>) | null;
 };
 

@@ -72,6 +72,11 @@ export function bindCalendar(access: GoogleAccess): BoundCalendar {
 class OutOfTime extends Error {}
 class CalendarStopped extends Error {}
 
+/** Our own Google event id for a row (base32hex, Google's allowed alphabet), so a retried insert cannot make a second event. */
+export const eventIdFor = (rowId: number) => `idear${rowId.toString(32)}`;
+
+const hasStatus = (e: unknown, ...statuses: number[]) => e instanceof GoogleError && statuses.includes(e.status);
+
 const isActive = (idea: ResurfaceIdea) =>
   idea.enrolled && idea.state === "open" && idea.list === "ideas" && !idea.remindersStopped && idea.scheduleFrom !== null;
 
@@ -81,21 +86,25 @@ export async function runResurface(deps: ResurfaceDeps): Promise<number> {
   const [ideas, rows, timeZone, access] = await Promise.all([store.ideas(), store.rows(), deps.timeZone(), deps.google()]);
   const today = localDate(deps.now(), timeZone);
   const tomorrow = addDays(today, 1);
+  // null means Google is unavailable (disconnected, revoked, calendar gone): due rows are skipped.
   let calendar = access && access !== "disconnected" ? bindCalendar(access) : null;
+  // A passing failure (5xx, network): calendar work waits for the next run and every row stays as it is.
+  let stopped = false;
   let handled = 0;
 
   // Every Google call goes through here: it keeps 10 seconds before the deadline and turns a dead connection into one message.
-  async function google<T>(call: (c: BoundCalendar) => Promise<T>): Promise<T> {
-    if (!calendar) throw new CalendarStopped();
+  async function google<T>(kind: "insert" | "patch", call: (c: BoundCalendar) => Promise<T>): Promise<T> {
+    if (!calendar || stopped) throw new CalendarStopped();
     if (deps.now().getTime() > deps.deadline - GOOGLE_ROOM_MS) throw new OutOfTime();
     try {
       return await call(calendar);
     } catch (e) {
       const revoked = e instanceof GoogleRevoked;
-      const gone = e instanceof GoogleError && e.status === 404;
+      // Only an insert 404 means the calendar itself is gone; a patch 404 is just that event.
+      const gone = kind === "insert" && hasStatus(e, 404);
       if (!revoked && !gone) {
-        console.error(`ideas resurface google call failed: ${e instanceof GoogleError ? `${e.status} ${e.code ?? ""}` : "error"}`);
-        calendar = null;
+        console.error(`ideas resurface google ${kind} failed: ${e instanceof GoogleError ? `${e.status} ${e.code ?? ""}` : "error"}`);
+        stopped = true;
         throw new CalendarStopped();
       }
       calendar = null;
@@ -112,7 +121,8 @@ export async function runResurface(deps: ResurfaceDeps): Promise<number> {
   const byItem = new Map<string, ResurfaceRow[]>();
   for (const row of rows) byItem.set(row.itemId, [...(byItem.get(row.itemId) ?? []), row]);
   const taken = new Map<string, number>();
-  for (const row of rows) if (row.status === "sent" && row.eventDate) taken.set(row.eventDate, (taken.get(row.eventDate) ?? 0) + 1);
+  // A closed row's event is still on the calendar, so it still fills its day.
+  for (const row of rows) if ((row.status === "sent" || row.status === "closed") && row.eventDate) taken.set(row.eventDate, (taken.get(row.eventDate) ?? 0) + 1);
 
   async function close(row: ResurfaceRow, idea: ResurfaceIdea): Promise<void> {
     if (row.status === "planned") {
@@ -124,7 +134,13 @@ export async function runResurface(deps: ResurfaceDeps): Promise<number> {
     if (row.status !== "sent" || !row.eventDate || row.eventDate < today) return;
     if (row.googleEventId) {
       const closed = eventBody({ ...idea, date: row.eventDate, timeZone, closed: true });
-      await google((c) => c.patch(row.googleEventId as string, { summary: closed.summary, reminders: closed.reminders }));
+      const eventId = row.googleEventId;
+      // Mason deleted that one event: nothing is left to close on the calendar.
+      await google("patch", (c) =>
+        c.patch(eventId, { summary: closed.summary, reminders: closed.reminders }).catch((e: unknown) => {
+          if (!hasStatus(e, 404, 410)) throw e;
+        }),
+      );
     }
     await store.updateRow(row.id, { status: "closed" });
     row.status = "closed";
@@ -156,7 +172,7 @@ export async function runResurface(deps: ResurfaceDeps): Promise<number> {
     }
     if (row.status !== "planned") return;
     const day = pickEventDay(row.dueDate < tomorrow ? tomorrow : row.dueDate, taken, MAX_PER_DAY);
-    if (day !== tomorrow) return;
+    if (day !== tomorrow || stopped) return;
     if (!calendar) {
       await store.updateRow(row.id, { status: "skipped" });
       handled += 1;
@@ -164,7 +180,17 @@ export async function runResurface(deps: ResurfaceDeps): Promise<number> {
     }
     const target = row;
     try {
-      const eventId = await google((c) => c.insert(eventBody({ ...idea, date: day, timeZone, closed: false })));
+      const id = eventIdFor(target.id);
+      // A 409 means an earlier or parallel run already made this exact event.
+      const eventId = await google("insert", (c) =>
+        c.insert({ ...eventBody({ ...idea, date: day, timeZone, closed: false }), id }).then(
+          () => id,
+          (e: unknown) => {
+            if (hasStatus(e, 409)) return id;
+            throw e;
+          },
+        ),
+      );
       await store.updateRow(target.id, { status: "sent", eventDate: day, googleEventId: eventId });
       taken.set(day, (taken.get(day) ?? 0) + 1);
       handled += 1;

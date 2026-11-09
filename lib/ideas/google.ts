@@ -21,6 +21,8 @@ export type GoogleConfig = { clientId: string; clientSecret: string };
 
 export type EventTime = { dateTime: string; timeZone: string } | { date: string };
 export type CalendarEvent = {
+  /** Set by the caller so a retried insert answers 409 instead of making a second event. */
+  id?: string;
   summary: string;
   description?: string;
   start: EventTime;

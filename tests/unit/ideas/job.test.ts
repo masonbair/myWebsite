@@ -361,3 +361,15 @@ describe("budgetFromEnv", () => {
     expect(budgetFromEnv("0")).toBe(0);
   });
 });
+
+describe("runIdeasJob resurfacing", () => {
+  it("still resurfaces without a Claude key", async () => {
+    const h = harness([], { anthropic: null, resurface: async () => 2 });
+    expect((await runIdeasJob(h.deps)).resurfaced).toBe(2);
+  });
+
+  it("keeps going to the failure message when resurfacing throws", async () => {
+    const h = harness([], { anthropic: null, resurface: async () => Promise.reject(new Error("db down")) });
+    expect((await runIdeasJob(h.deps)).resurfaced).toBe(0);
+  });
+});

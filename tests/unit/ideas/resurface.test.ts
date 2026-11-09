@@ -4,7 +4,7 @@ vi.mock("server-only", () => ({}));
 
 import { GoogleError, GoogleRevoked, type CalendarEvent, type GoogleAccess } from "@/lib/ideas/google";
 import { eventBody, pickEventDay, planSteps } from "@/lib/ideas/resurface";
-import { bindCalendar, runResurface, type ResurfaceDeps, type ResurfaceIdea, type ResurfaceRow, type ResurfaceStore } from "@/lib/ideas/resurface-step";
+import { bindCalendar, eventIdFor, runResurface, type ResurfaceDeps, type ResurfaceIdea, type ResurfaceRow, type ResurfaceStore } from "@/lib/ideas/resurface-step";
 
 const ZONE = "America/Denver";
 // 2026-11-09 12:00 in Denver.
@@ -159,7 +159,8 @@ describe("runResurface", () => {
     const f = fakeStore([idea("a")]);
     const g = fakeGoogle();
     await runResurface(deps(f.store, g.access).d);
-    expect(f.rows).toMatchObject([{ itemId: "a", step: 1, dueDate: "2026-11-10", status: "sent", eventDate: "2026-11-10", googleEventId: "ev-1" }]);
+    expect(f.rows).toMatchObject([{ itemId: "a", step: 1, dueDate: "2026-11-10", status: "sent", eventDate: "2026-11-10", googleEventId: "idear1" }]);
+    expect(g.calls[0].body).toMatchObject({ id: "idear1" });
     expect(g.calls).toHaveLength(1);
   });
 
@@ -282,4 +283,99 @@ describe("runResurface", () => {
     expect(g.calls).toHaveLength(0);
     expect(f.rows).toMatchObject([{ status: "planned" }]);
   });
+
+  it("gives each event its own id from the row, in Google's alphabet", () => {
+    expect(eventIdFor(1)).toBe("idear1");
+    expect(eventIdFor(1000)).toBe("idearv8");
+    expect(eventIdFor(123456789)).toMatch(/^[a-v0-9]{5,1024}$/);
+  });
+
+  it("after a crash between insert and save, the next run's 409 marks the row sent with one event", async () => {
+    const f = fakeStore([idea("a")]);
+    const cal = calendarWithIds();
+    const update = f.store.updateRow;
+    let crash = true;
+    f.store.updateRow = async (id, cols) => {
+      if (crash && cols.status === "sent") {
+        crash = false;
+        throw new Error("db down");
+      }
+      return update(id, cols);
+    };
+    await expect(runResurface(deps(f.store, cal.access).d)).rejects.toThrow("db down");
+    expect(f.rows[0].status).toBe("planned");
+    await runResurface(deps(f.store, cal.access).d);
+    expect(f.rows[0]).toMatchObject({ status: "sent", googleEventId: "idear1", eventDate: "2026-11-10" });
+    expect(cal.events.size).toBe(1);
+  });
+
+  it("two runs on the same planned row make one event and both end sent", async () => {
+    const f = fakeStore([idea("a")], [{ id: 1, itemId: "a", step: 1, dueDate: "2026-11-10", eventDate: null, googleEventId: null, status: "planned" }]);
+    const cal = calendarWithIds();
+    await Promise.all([runResurface(deps(f.store, cal.access).d), runResurface(deps(f.store, cal.access).d)]);
+    expect(cal.inserts).toBe(2);
+    expect(cal.events.size).toBe(1);
+    expect(f.rows).toMatchObject([{ status: "sent", googleEventId: "idear1" }]);
+  });
+
+  it("a passing Google error stops calendar work but skips nothing and keeps the connection", async () => {
+    const f = fakeStore([idea("a"), idea("b")]);
+    const g = fakeGoogle(() => new GoogleError("event insert", 503, null));
+    const { d, ntfy } = deps(f.store, g.access);
+    await runResurface(d);
+    expect(g.calls).toHaveLength(1);
+    expect(f.rows.map((r) => r.status)).toEqual(["planned", "planned"]);
+    expect(f.google).toEqual({ connected: true, calendarId: "cal-ideas" });
+    expect(ntfy).not.toHaveBeenCalled();
+  });
+
+  it("a network error leaves a closing event's row sent for the next run", async () => {
+    const f = fakeStore([idea("a", { state: "done" }), idea("b")], [sentRow(1, "a", "2026-11-12")]);
+    const g = fakeGoogle(() => new TypeError("fetch failed"));
+    await runResurface(deps(f.store, g.access).d);
+    expect(f.rows.find((r) => r.id === 1)!.status).toBe("sent");
+    expect(f.rows.find((r) => r.itemId === "b")!.status).toBe("planned");
+    expect(g.calls).toHaveLength(1);
+  });
+
+  it("a patch 404 or 410 closes that row and keeps going, without touching the connection", async () => {
+    const f = fakeStore([idea("a", { state: "done" }), idea("b", { state: "done" }), idea("c")], [sentRow(1, "a", "2026-11-12"), sentRow(2, "b", "2026-11-13")]);
+    let n = 0;
+    const g = fakeGoogle((kind) => (kind === "patch" ? new GoogleError("event patch", ++n === 1 ? 404 : 410, null) : null));
+    const { d, ntfy } = deps(f.store, g.access);
+    await runResurface(d);
+    expect(f.rows.slice(0, 2).map((r) => r.status)).toEqual(["closed", "closed"]);
+    expect(f.rows.find((r) => r.itemId === "c")!.status).toBe("sent");
+    expect(f.google).toEqual({ connected: true, calendarId: "cal-ideas" });
+    expect(ntfy).not.toHaveBeenCalled();
+  });
+
+  it("counts closed rows with an event date toward the day cap", async () => {
+    const closed = (id: number): ResurfaceRow => sentRow(id, `old${id}`, "2026-11-10", { status: "closed" });
+    const f = fakeStore([idea("a")], [closed(1), closed(2), sentRow(3, "old3", "2026-11-10")]);
+    const g = fakeGoogle();
+    await runResurface(deps(f.store, g.access).d);
+    expect(g.calls).toHaveLength(0);
+    expect(f.rows.at(-1)).toMatchObject({ itemId: "a", status: "planned" });
+  });
 });
+
+// Behaves like Google with caller-set ids: a second insert of the same id answers 409.
+function calendarWithIds() {
+  const events = new Map<string, Partial<CalendarEvent>>();
+  const cal = { events, inserts: 0, access: null as unknown as GoogleAccess };
+  cal.access = {
+    calendarId: "cal-ideas",
+    calendar: {
+      async insertEvent(_calendarId, ev) {
+        cal.inserts += 1;
+        await Promise.resolve();
+        if (events.has(ev.id!)) throw new GoogleError("event insert", 409, "duplicate");
+        events.set(ev.id!, ev);
+        return ev.id!;
+      },
+      async patchEvent() {},
+    },
+  };
+  return cal;
+}
