@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { toneWord } from "@/lib/news/movers";
 import { databaseStore, readPublicTrends, readSubject, type TrendStore } from "@/lib/news/public";
 
 const raw = (extra: Record<string, unknown> = {}) => ({
@@ -57,7 +58,7 @@ describe("readPublicTrends", () => {
           ticker: null,
           stories: 2,
           mentions: 3,
-          toneAvg: 0.4,
+          toneAvg: 0.2,
           sources: ["morning-brew"],
         },
       ],
@@ -75,6 +76,20 @@ describe("readPublicTrends", () => {
     ];
     const result = await readPublicTrends({ store: store({ trends: async () => rows }) });
     expect(result?.rows.map((r) => `${r.kind}:${r.key}`)).toEqual(["company:42"]);
+  });
+
+  it("keeps the full -2..2 story tone scale and halves it to -1..1", async () => {
+    const tones = ["2", "1.5", "-1.5", "-2.00"];
+    const rows = tones.map((t, i) => raw({ day: `2026-11-0${i + 1}`, tone_avg: t }));
+    const result = await readPublicTrends({ store: store({ trends: async () => rows }) });
+    expect(result?.rows.map((r) => r.toneAvg)).toEqual([1, 0.75, -0.75, -1]);
+    const words = result!.rows.map((r) => toneWord(r.toneAvg));
+    expect(words).toEqual(["mostly positive", "leaning positive", "leaning negative", "mostly negative"]);
+  });
+
+  it("drops a tone outside -2..2", async () => {
+    const rows = [raw({ tone_avg: "2.01" }), raw({ tone_avg: -2.5 }), raw({ tone_avg: "x" })];
+    expect((await readPublicTrends({ store: store({ trends: async () => rows }) }))?.rows).toEqual([]);
   });
 
   it("reads a named fixture outside production", async () => {

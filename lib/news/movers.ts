@@ -1,4 +1,4 @@
-import { addDays, MOVER_DAYS, YEAR_DAYS, type TrendKind, type TrendRow } from "@/lib/news/trend-data";
+import { addDays, MOVER_DAYS, YEAR_DAYS, type PublicTrends, type TrendKind, type TrendRow } from "@/lib/news/trend-data";
 
 export type Direction = "rising" | "falling";
 export type Mover = { kind: TrendKind; key: string; label: string; direction: Direction; last7: number; base: number; change: number };
@@ -44,7 +44,7 @@ export function risingTopics(list: Mover[], n: number): Mover[] {
   return list.filter((m) => m.kind === "topic" && m.direction === "rising").slice(0, n);
 }
 
-/** Average tone (-1 to 1) as a plain word; a cut point belongs to the calmer side. */
+/** Average tone, normalized to -1..1 by the reader, as a plain word; a cut point belongs to the calmer side. */
 export function toneWord(avg: number): ToneWord {
   if (avg < -0.75) return "mostly negative";
   if (avg < -0.25) return "leaning negative";
@@ -110,4 +110,18 @@ export function moveText(m: Pick<Mover, "direction" | "base">): string {
   if (m.base === 0) return "new this month";
   const rate = m.base < 1 ? "under 1" : Number.isInteger(m.base) ? String(m.base) : m.base.toFixed(1);
   return `${m.direction === "rising" ? "up" : "down"} from ${rate} a week`;
+}
+
+export type TrendsOverview = { byId: Map<string, Mover>; rising: Mover[]; topics: SubjectSummary[]; companies: SubjectSummary[] };
+
+/** What the trends page lists; all empty, with no date math, when there is no data. */
+export function trendsOverview(trends: PublicTrends | null): TrendsOverview {
+  if (!trends) return { byId: new Map(), rising: [], topics: [], companies: [] };
+  const moving = movers(trends.rows, trends.today);
+  return {
+    byId: new Map(moving.map((m) => [id(m), m])),
+    rising: risingTopics(moving, 5),
+    topics: topSubjects(trends.rows, trends.today, "topic"),
+    companies: topSubjects(trends.rows, trends.today, "company"),
+  };
 }

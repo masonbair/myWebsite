@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { moveText, movers, risingTopics, shortDate, topSubjects, toneWord, weeklySeries } from "@/lib/news/movers";
+import { moveText, movers, risingTopics, shortDate, topSubjects, toneWord, trendsOverview, weeklySeries } from "@/lib/news/movers";
 import type { TrendRow } from "@/lib/news/trend-data";
 
 const TODAY = "2026-11-09";
@@ -120,5 +120,19 @@ describe("risingTopics", () => {
     expect(all[0].key).toBe("101");
     expect(risingTopics(all, 5).map((m) => m.key)).toEqual(["rates", "ai-chips"]);
     expect(risingTopics(all, 1).map((m) => m.key)).toEqual(["rates"]);
+  });
+});
+
+describe("trendsOverview", () => {
+  it("is empty with no data, and does no date math", () => {
+    expect(trendsOverview(null)).toEqual({ byId: new Map(), rising: [], topics: [], companies: [] });
+  });
+
+  it("lists topics, companies and rising topics when there is data", () => {
+    const out = trendsOverview({ today: TODAY, rows: [row(0, 6), row(1, 2, { kind: "company", key: "42", label: "Nvidia" })] });
+    expect(out.topics.map((t) => t.key)).toEqual(["ai-chips"]);
+    expect(out.companies.map((c) => c.key)).toEqual(["42"]);
+    expect(out.rising.map((m) => m.key)).toEqual(["ai-chips"]);
+    expect(out.byId.has("topic:ai-chips")).toBe(true);
   });
 });

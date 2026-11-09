@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { parseEmail, type ParsedEmail } from "@/lib/news/email";
+import type { ParsedEmail } from "@/lib/news/email";
 import { ingestEmail, publicIssueUrl, type IngestDeps } from "@/lib/news/ingest";
 import type { NewIssue, NewsSource } from "@/lib/news/types";
 

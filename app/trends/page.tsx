@@ -11,7 +11,7 @@ import {
 } from "@/components/trends/TrendList";
 import { siteUrl } from "@/content/site";
 import { PERSON_ID } from "@/lib/jsonld";
-import { movers, moveText, risingTopics, topSubjects } from "@/lib/news/movers";
+import { moveText, trendsOverview } from "@/lib/news/movers";
 import { readPublicTrends } from "@/lib/news/public";
 
 export const revalidate = 3600;
@@ -36,14 +36,7 @@ export const metadata: Metadata = {
 const LIST_SIZE = 12;
 
 export default async function TrendsPage() {
-  const trends = await readPublicTrends();
-  const rows = trends?.rows ?? [];
-  const today = trends?.today ?? "";
-  const moving = trends ? movers(rows, today) : [];
-  const byId = new Map(moving.map((m) => [`${m.kind}:${m.key}`, m]));
-  const rising = risingTopics(moving, 5);
-  const allTopics = topSubjects(rows, today, "topic");
-  const allCompanies = topSubjects(rows, today, "company");
+  const { byId, rising, topics: allTopics, companies: allCompanies } = trendsOverview(await readPublicTrends());
   const topics = allTopics.slice(0, LIST_SIZE);
   const companies = allCompanies.slice(0, LIST_SIZE);
   const counts = [

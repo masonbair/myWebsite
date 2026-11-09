@@ -32,7 +32,7 @@ function parseRow(raw: unknown): TrendRow | null {
   const tone = typeof tone_avg === "string" || typeof tone_avg === "number" ? Number(tone_avg) : NaN;
   if (typeof day !== "string" || !DAY.test(day) || !isTrendKind(kind) || typeof key !== "string" || !isTrendKey(kind, key)) return null;
   if (typeof label !== "string" || label.trim() === "" || count(stories) === null || count(mentions) === null) return null;
-  if (!Number.isFinite(tone) || tone < -1 || tone > 1 || !Array.isArray(sources)) return null;
+  if (!Number.isFinite(tone) || tone < -2 || tone > 2 || !Array.isArray(sources)) return null;
   return {
     day,
     kind,
@@ -41,7 +41,8 @@ function parseRow(raw: unknown): TrendRow | null {
     ticker: typeof ticker === "string" && ticker !== "" ? ticker : null,
     stories: stories as number,
     mentions: mentions as number,
-    toneAvg: tone,
+    // Stories are scored -2..2; the page, tone words and chart all work on -1..1.
+    toneAvg: tone / 2,
     sources: sources.filter((s): s is string => typeof s === "string"),
   };
 }
