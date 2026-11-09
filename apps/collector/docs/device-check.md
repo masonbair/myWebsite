@@ -57,4 +57,8 @@ Each run stored a heartbeat with keys and ok flags only. The newest has every ke
 
 ## Background run (screen off, app in background)
 
-Started at 19:38Z with the app sent to the background. Result: see the section below.
+Started at 19:38Z with the app sent to the background. Checked at 21:38Z with read-only SQL. No device commands were run in between.
+
+- Heartbeats: 8 between 19:43Z and 21:29Z, about one every 15 minutes, matching the 15-minute background job.
+- The newest heartbeat has every key ok.
+- New place rows: 0. This is expected: the tablet did not move, and an unchanged place is only re-sent after 6 hours.
