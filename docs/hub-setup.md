@@ -104,20 +104,25 @@ claude mcp add --transport http hub-local http://localhost:3000/api/mcp/mcp --he
 Forwarded newsletters arrive by email, get read by Claude, and feed `/trends` and `/hub/news`. Do these steps in order.
 
 1. Gmail filter and export. Make a filter for the six newsletter senders with "Apply label: Newsletters" and "Also apply to matching conversations". Then in Google Takeout export Mail, only the label Newsletters, and send the `.mbox` path to Claude.
-2. Anthropic key. Done on 2026-11-09: workspace `masonbair-news` (monthly limit $30; raise to $75 for the import month) and its key set as `ANTHROPIC_API_KEY_NEWS` in Vercel Production. Also put it in the worktree's `.env.local`.
-3. Resend (free plan). Sign up. Add the domain `in.masonbair.com` with receiving turned on. Resend shows an MX record: at IONOS (where masonbair.com DNS lives) add it with host `in`. Leave the main domain's `mx00.ionos.com` and `mx01.ionos.com` records alone. Wait until Resend says verified. The inbound address is `news@in.masonbair.com`.
-4. Protection bypass. In Vercel, turn on "Protection Bypass for Automation" for the project and copy the secret. Keep it private. It goes only in the test webhook URL in step 5.
-5. Resend webhook. Add a webhook for the event `email.received`. While testing, use `<preview URL>/api/news/inbound?x-vercel-protection-bypass=<bypass secret>`. At launch, change it to `https://masonbair.com/api/news/inbound`. Then make a full-access API key (reading received mail needs full access).
-6. Vercel env (Preview and Production):
-   - `RESEND_API_KEY`: the full-access key.
-   - `RESEND_INBOUND_SECRET`: the webhook signing secret from Resend.
-   - `NEWS_FORWARD_FROM`: your Gmail address.
-   - `NEWS_MONTHLY_BUDGET_USD`: optional, default 25.
+2. Anthropic key. Done on 2026-11-09: workspace `masonbair-news` (monthly limit $30; raise to $75 for the import month) and its key set as `ANTHROPIC_API_KEY_NEWS` in Vercel Production. Add the same `ANTHROPIC_API_KEY_NEWS` to Preview too, and put it in the worktree's `.env.local`.
+3. Sender rows. Claude fills each newsletter's `sender_addresses` or `sender_domains` in the seed of `0009_news.sql` (Task 0) before it is pushed. Mail that matches no newsletter is held back, not read.
+4. Push 0009. Mason runs `supabase db push` for `0009_news.sql`. Claude never pushes. Phone-collector's `0007` may land after `0008` and `0009`; once a later-numbered migration is on the live database, a plain `supabase db push` refuses the older file, so push it with `supabase db push --include-all`.
+5. Deploy. Merge and let Vercel deploy. Nothing reads mail yet.
+6. Resend and its webhook.
+   - Sign up (free plan). Add the domain `in.masonbair.com` with receiving turned on. Resend shows an MX record: at IONOS (where masonbair.com DNS lives) add it with host `in`. Leave the main domain's `mx00.ionos.com` and `mx01.ionos.com` records alone. Wait until Resend says verified. The inbound address is `news@in.masonbair.com`.
+   - Protection bypass. In Vercel, turn on "Protection Bypass for Automation" for the project and copy the secret. Keep it private. It goes only in the test webhook URL below.
+   - Add a webhook for the event `email.received`. While testing, use `<preview URL>/api/news/inbound?x-vercel-protection-bypass=<bypass secret>`. At launch, change it to `https://masonbair.com/api/news/inbound`. Then make a full-access API key (reading received mail needs full access).
+   - Vercel env, in both Preview and Production: `RESEND_API_KEY` (the full-access key), `RESEND_INBOUND_SECRET` (the webhook signing secret from Resend), `NEWS_FORWARD_FROM` (your Gmail address), and optionally `NEWS_MONTHLY_BUDGET_USD` (default 25). Redeploy so the functions see them.
+   - Testing on a preview writes to the live database and the live Blob store, because there is only one. So the preview also needs `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `BLOB_STORE_ID` set for Preview. Without them the inbound route fails.
 7. Gmail forwarding. Settings > Forwarding > Add a forwarding address: `news@in.masonbair.com`. Gmail sends a confirmation mail. Open `/hub/news`, find it under "Held back", and click the confirmation link. Then edit the step 1 filter to also forward to that address.
-8. Database. After review run `supabase db push` for `0009_news.sql`. Later, after review of the topics work, run it again for `0010_news_topics_cron.sql`. Claude never pushes these.
+8. Push 0010. After review of the topics work, Mason runs `supabase db push` for `0010_news_topics_cron.sql`. This starts the news job (every 30 minutes). Push it before any job run and before any backfill `collect`: both write `ai_usage.news_issue_id`, which only 0010 adds.
 9. Backfill. When the import estimate appears, read it and type `yes`.
 
 How it is checked: a mail is processed only when Gmail forwarding names `NEWS_FORWARD_FROM` as the sender and a DKIM signature (the mail's proof of origin) that matches the From domain verifies. Any other mail waits in `/hub/news` under "Held back" and is never picked up for reading: the job that claims issues takes only pending, failed and stuck ones, never held ones.
+
+Held-back mail that is really a newsletter (a new sender address, say) can be sent on from its page under "Held back": pick the newsletter and press Release. It is read on the next run.
+
+Turning a newsletter private or switching a topic off changes what the public trend tables may show, but rows already counted stay until their dates are rebuilt. Rebuild every date once in the Supabase SQL editor: `select public.news_refresh_trends('2000-01-01', current_date);`
 
 ### Import past newsletters and re-run extraction
 
