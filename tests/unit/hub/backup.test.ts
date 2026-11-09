@@ -33,6 +33,8 @@ async function restore(args: string[]): Promise<{ code: number; stdout: string; 
   }
 }
 
+const emptyNews = { sources: [], runs: [], issues: [], shared: [], clusters: [], companies: [], topics: [], stories: [] };
+
 const emptySource: SnapshotSource = {
   items: async () => [],
   comments: async () => [],
@@ -43,6 +45,7 @@ const emptySource: SnapshotSource = {
   nowBake: async () => [],
   itemsHistory: async () => [],
   auditLog: async () => [],
+  news: async () => emptyNews,
 };
 
 function fakeBlobs(initial: string[]) {
@@ -99,8 +102,38 @@ describe("snapshot", () => {
       nowBake: [bake],
       itemsHistory: [version],
       auditLog: [audit],
+      news: emptyNews,
       takenAt: "2026-11-05T03:00:00.000Z",
     });
+  });
+});
+
+describe("news snapshot", () => {
+  it("reads every news table and asks for no clean_text or fetched_text", async () => {
+    const selects: Record<string, string> = {};
+    const client = {
+      from(table: string) {
+        const q = {
+          select(columns: string) {
+            selects[table] = columns;
+            return q;
+          },
+          order: () => q,
+          limit: () => q,
+          gt: () => q,
+          then: (resolve: (v: { data: unknown[]; error: null }) => void) => resolve({ data: [], error: null }),
+        };
+        return q;
+      },
+    };
+    const news = await createSnapshotSource(client as never).news();
+    expect(Object.keys(news).sort()).toEqual(Object.keys(emptyNews).sort());
+    expect(Object.keys(selects).sort()).toEqual(
+      ["news_clusters", "news_companies", "news_extraction_runs", "news_issues", "news_shared", "news_sources", "news_stories", "news_topics"],
+    );
+    expect(selects.news_issues).not.toContain("clean_text");
+    expect(selects.news_shared).not.toContain("fetched_text");
+    expect(selects.news_issues).toContain("raw_path");
   });
 });
 
@@ -158,7 +191,7 @@ describe("hub-restore guards", () => {
 const enabled = Boolean(process.env.HUB_TEST_DB_URL);
 const apiUrl = process.env.HUB_TEST_SUPABASE_URL ?? "";
 const serviceKey = process.env.HUB_TEST_SERVICE_KEY ?? "";
-const LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322";
+const LOCAL_DB = `postgresql://postgres:postgres@127.0.0.1:${process.env.HUB_TEST_PG_PORT ?? "54322"}`;
 if (enabled && !/^(127\.0\.0\.1|localhost)$/.test(new URL(apiUrl || "http://invalid").hostname)) {
   throw new Error("HUB_TEST_SUPABASE_URL must be a local Supabase (127.0.0.1 or localhost)");
 }
@@ -200,13 +233,41 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
     const privacy = await client.from("now_place_privacy").insert({ city: "Backupville", region: "Ohio", country: "United States", private: true });
     if (place.error || bake.error || privacy.error) throw place.error ?? bake.error ?? privacy.error;
 
+    const tag = randomUUID();
+    const run = await client.from("news_extraction_runs").insert({ model: "test", prompt_version: "t1", kind: "daily" }).select("id").single();
+    if (run.error) throw run.error;
+    const issue = await client
+      .from("news_issues")
+      .insert({ source_id: "rundown-ai", message_id: `backup-${tag}`, subject: "synthetic", raw_path: `news/raw/${tag}.eml`, clean_text: "SECRET BODY", status: "done" })
+      .select("id")
+      .single();
+    const cluster = await client.from("news_clusters").insert({ first_date: "2026-11-04" }).select("id").single();
+    const topic = await client.from("news_topics").upsert({ slug: "backup-topic", name: "Backup topic" });
+    if (issue.error || cluster.error || topic.error) throw issue.error ?? cluster.error ?? topic.error;
+    const stories = await client.from("news_stories").insert(
+      [4, 5].map((day) => ({
+        run_id: run.data.id,
+        issue_id: issue.data.id,
+        source_id: "rundown-ai",
+        story_date: `2026-11-0${day}`,
+        headline: `backup story ${day}`,
+        kind: "news",
+        sentiment: 1,
+        topics: ["backup-topic"],
+        cluster_id: cluster.data.id,
+      })),
+    );
+    if (stories.error) throw stories.error;
+    const current = await client.from("news_issues").update({ current_run_id: run.data.id }).eq("id", issue.data.id);
+    if (current.error) throw current.error;
+
     shot = await snapshot(createSnapshotSource(client));
     file = join(await mkdtemp(join(tmpdir(), "hub-backup-")), "snapshot.json");
     await writeFile(file, JSON.stringify(shot));
 
     await withDb(`${LOCAL_DB}/postgres`, (db) => db.query(`create database ${scratch}`));
     const migrations = await Promise.all(
-      ["0002_hub.sql", "0003_hub_memo.sql", "0005_now.sql", "0006_hub_history.sql"].map((name) => readFile(join(__dirname, "../../../supabase/migrations", name), "utf8")),
+      ["0002_hub.sql", "0003_hub_memo.sql", "0005_now.sql", "0006_hub_history.sql", "0009_news.sql"].map((name) => readFile(join(__dirname, "../../../supabase/migrations", name), "utf8")),
     );
     await withDb(scratchUrl, async (db) => {
       await db.query(AUTH_STUB);
@@ -259,6 +320,34 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
 
       const merged = shot.items.find((i) => i.title === "backup duplicate" && i.state === "archived")!;
       expect(items.find((r) => r.id === merged.id)).toMatchObject({ merged_into: merged.mergedInto, archived_reason: "merged" });
+    });
+  }, 60_000);
+
+  it("restores the news tables without cleaned text, moves their sequences and rebuilds trends", async () => {
+    expect(shot.news.stories.length).toBeGreaterThanOrEqual(2);
+    expect(JSON.stringify(shot.news)).not.toContain("SECRET BODY");
+    expect(shot.news.issues.every((i) => !("clean_text" in i))).toBe(true);
+    expect(shot.news.shared.every((i) => !("fetched_text" in i))).toBe(true);
+    await withDb(scratchUrl, async (db) => {
+      const count = async (table: string) => (await db.query(`select count(*)::int as n from public.${table}`)).rows[0].n as number;
+      expect(await count("news_stories")).toBe(shot.news.stories.length);
+      expect(await count("news_issues")).toBe(shot.news.issues.length);
+      expect(await count("news_clusters")).toBe(shot.news.clusters.length);
+      expect(await count("news_extraction_runs")).toBe(shot.news.runs.length);
+      expect(await count("news_sources")).toBe(shot.news.sources.length);
+      const issue = (await db.query("select clean_text, raw_path from public.news_issues where subject = 'synthetic' limit 1")).rows[0];
+      expect(issue).toMatchObject({ clean_text: "" });
+      expect(issue.raw_path).toContain("news/raw/");
+      const trends = (await db.query("select count(*)::int as n from public.news_trends_daily where key = 'backup-topic'")).rows[0].n;
+      expect(trends).toBeGreaterThanOrEqual(2);
+      const maxId = Math.max(...shot.news.stories.map((s) => Number(s.id)));
+      const next = (
+        await db.query(
+          `insert into public.news_clusters (first_date) values ('2026-11-06') returning id::int`,
+        )
+      ).rows[0];
+      expect(next.id).toBeGreaterThan(Math.max(...shot.news.clusters.map((c) => Number(c.id))));
+      expect(maxId).toBeGreaterThan(0);
     });
   }, 60_000);
 

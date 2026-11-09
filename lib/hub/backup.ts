@@ -35,6 +35,25 @@ export type BackupNowPlacePrivacy = {
 export type BackupNowBake = { id: number; name: string; photo: string | null; bakedAt: string };
 export type BackupAuditEntry = { id: number; actor: string; action: string; itemId: string | null; detail: unknown; at: string };
 
+type Row = Record<string, unknown>;
+
+/** News tables as raw rows; the long texts (`clean_text`, `fetched_text`) are left out because Blob raw files rebuild them. */
+export type BackupNews = {
+  sources: Row[];
+  runs: Row[];
+  issues: Row[];
+  shared: Row[];
+  clusters: Row[];
+  companies: Row[];
+  topics: Row[];
+  stories: Row[];
+};
+
+export const NEWS_ISSUE_COLUMNS =
+  "id,source_id,message_id,subject,from_address,received_at,published_on,raw_path,public_url,status,attempts,next_attempt_at,claimed_at,last_error,current_run_id,created_at";
+export const NEWS_SHARED_COLUMNS =
+  "id,item_id,url,title,thin,status,attempts,next_attempt_at,claimed_at,last_error,current_run_id,created_at";
+
 export type Snapshot = {
   items: BackupItem[];
   comments: Comment[];
@@ -45,6 +64,7 @@ export type Snapshot = {
   nowBake: BackupNowBake[];
   itemsHistory: ItemVersion[];
   auditLog: BackupAuditEntry[];
+  news: BackupNews;
   takenAt: string;
 };
 
@@ -58,6 +78,7 @@ export interface SnapshotSource {
   nowBake(): Promise<BackupNowBake[]>;
   itemsHistory(): Promise<ItemVersion[]>;
   auditLog(): Promise<BackupAuditEntry[]>;
+  news(): Promise<BackupNews>;
 }
 
 /** The blob calls a backup needs, so tests can swap in memory. */
@@ -83,6 +104,7 @@ export async function snapshot(source: SnapshotSource, now: Date = new Date()): 
   const comments = await source.comments();
   const itemsHistory = await source.itemsHistory();
   const auditLog = await source.auditLog();
+  const news = await source.news();
   const items = await source.items();
   return {
     items,
@@ -94,6 +116,7 @@ export async function snapshot(source: SnapshotSource, now: Date = new Date()): 
     nowBake,
     itemsHistory,
     auditLog,
+    news,
     takenAt: now.toISOString(),
   };
 }
@@ -162,15 +185,15 @@ function toBackupItem(row: ItemRow): BackupItem {
 
 /** Reads whole tables through the service client, paging by key so rows written meanwhile never shift a page. */
 export function createSnapshotSource(client: SupabaseClient): SnapshotSource {
-  async function all<T extends Record<string, unknown>>(table: string, key: string): Promise<T[]> {
+  async function all<T extends Record<string, unknown>>(table: string, key: string, columns = "*"): Promise<T[]> {
     const rows: T[] = [];
     for (;;) {
-      let query = client.from(table).select("*").order(key, { ascending: true }).limit(PAGE);
+      let query = client.from(table).select(columns).order(key, { ascending: true }).limit(PAGE);
       const last = rows.at(-1);
       if (last) query = query.gt(key, last[key] as string);
       const { data, error } = await query;
       if (error) throw error;
-      rows.push(...(data as T[]));
+      rows.push(...(data as unknown as T[]));
       if (data.length < PAGE) return rows;
     }
   }
@@ -248,6 +271,18 @@ export function createSnapshotSource(client: SupabaseClient): SnapshotSource {
         "id",
       );
       return rows.map((r) => ({ id: r.id, actor: r.actor, action: r.action, itemId: r.item_id, detail: r.detail, at: r.at }));
+    },
+    async news() {
+      // Parents before children, so a story never points at a row the snapshot missed.
+      const sources = await all<Row>("news_sources", "id");
+      const runs = await all<Row>("news_extraction_runs", "id");
+      const issues = await all<Row>("news_issues", "id", NEWS_ISSUE_COLUMNS);
+      const shared = await all<Row>("news_shared", "id", NEWS_SHARED_COLUMNS);
+      const clusters = await all<Row>("news_clusters", "id");
+      const companies = await all<Row>("news_companies", "id");
+      const topics = await all<Row>("news_topics", "slug");
+      const stories = await all<Row>("news_stories", "id");
+      return { sources, runs, issues, shared, clusters, companies, topics, stories };
     },
   };
 }

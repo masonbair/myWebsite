@@ -1,7 +1,7 @@
 // Usage and what a restore leaves out: docs/hub-setup.md, "Restore a backup".
 import { readFile } from "node:fs/promises";
 import pg from "pg";
-import type { Snapshot } from "../lib/hub/backup";
+import type { BackupNews, Snapshot } from "../lib/hub/backup";
 
 const LIVE_FLAG = "--i-know-this-is-live";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
@@ -41,7 +41,8 @@ function assertSnapshot(value: unknown): asserts value is Snapshot {
     (s.nowPlacePrivacy === undefined || Array.isArray(s.nowPlacePrivacy)) &&
     (s.nowBake === undefined || Array.isArray(s.nowBake)) &&
     (s.itemsHistory === undefined || Array.isArray(s.itemsHistory)) &&
-    (s.auditLog === undefined || Array.isArray(s.auditLog));
+    (s.auditLog === undefined || Array.isArray(s.auditLog)) &&
+    (s.news === undefined || (typeof s.news === "object" && s.news !== null));
   if (!ok) throw new RestoreError("the file is not a hub snapshot");
 }
 
@@ -95,6 +96,45 @@ const AUDIT_LOG_SQL = `
   insert into public.audit_log (id, actor, action, item_id, detail, at) overriding system value
   select id, actor, action, item_id, detail, at
   from jsonb_to_recordset($1::jsonb) as r(id bigint, actor text, action text, item_id uuid, detail jsonb, at timestamptz)`;
+
+const newsInsert = (table: string, columns: string, conflict = "") =>
+  `insert into public.${table} (${columns}) select ${columns} from jsonb_populate_recordset(null::public.${table}, $1::jsonb)${conflict}`;
+
+const upsert = (key: string, columns: string) =>
+  ` on conflict (${key}) do update set ${columns
+    .split(",")
+    .filter((c) => c !== key)
+    .map((c) => `${c} = excluded.${c}`)
+    .join(", ")}`;
+
+// Same lists as NEWS_ISSUE_COLUMNS and NEWS_SHARED_COLUMNS in lib/hub/backup.ts; node cannot load that file's value imports.
+const NEWS_ISSUE_COLUMNS =
+  "id,source_id,message_id,subject,from_address,received_at,published_on,raw_path,public_url,status,attempts,next_attempt_at,claimed_at,last_error,current_run_id,created_at";
+const NEWS_SHARED_COLUMNS = "id,item_id,url,title,thin,status,attempts,next_attempt_at,claimed_at,last_error,current_run_id,created_at";
+const SOURCE_COLUMNS = "id,name,sender_addresses,sender_domains,homepage,archive_pattern,public,active";
+const TOPIC_COLUMNS = "slug,name,active,created_at";
+// clean_text and fetched_text are not in the backup, so they restore as '' and null; docs/hub-setup.md says how to rebuild them.
+const NEWS_SQL: { table: string; sql: string; rows: (n: BackupNews) => unknown[] }[] = [
+  { table: "news_sources", sql: newsInsert("news_sources", SOURCE_COLUMNS, upsert("id", SOURCE_COLUMNS)), rows: (n) => n.sources },
+  { table: "news_extraction_runs", sql: newsInsert("news_extraction_runs", "id,model,prompt_version,kind,created_at"), rows: (n) => n.runs },
+  { table: "news_issues", sql: newsInsert("news_issues", NEWS_ISSUE_COLUMNS), rows: (n) => n.issues },
+  { table: "news_shared", sql: newsInsert("news_shared", NEWS_SHARED_COLUMNS), rows: (n) => n.shared },
+  { table: "news_clusters", sql: newsInsert("news_clusters", "id,first_date,created_at"), rows: (n) => n.clusters },
+  {
+    table: "news_companies",
+    sql: newsInsert("news_companies", "id,name,norm_name,ticker,exchange,ticker_verified,aliases,created_at"),
+    rows: (n) => n.companies,
+  },
+  { table: "news_topics", sql: newsInsert("news_topics", TOPIC_COLUMNS, upsert("slug", TOPIC_COLUMNS)), rows: (n) => n.topics },
+  {
+    table: "news_stories",
+    sql: newsInsert(
+      "news_stories",
+      "id,run_id,issue_id,shared_id,source_id,story_date,headline,kind,sentiment,topics,suggested_topic,company_ids,link,cluster_id,created_at",
+    ),
+    rows: (n) => n.stories,
+  },
+];
 
 const syncIdentity = (table: string) =>
   `select setval(pg_get_serial_sequence('public.${table}', 'id'), coalesce((select max(id) from public.${table}), 0) + 1, false)`;
@@ -189,8 +229,23 @@ async function restore(snapshot: Snapshot, target: string): Promise<Record<strin
     await db.query(AUDIT_LOG_SQL, [JSON.stringify(auditLog)]);
     await db.query(syncIdentity("items_history"));
     await db.query(syncIdentity("audit_log"));
+    const news: BackupNews | undefined = snapshot.news;
+    const newsCounts: Record<string, number> = {};
+    if (news) {
+      for (const { table, sql, rows: pick } of NEWS_SQL) {
+        const rows = pick(news);
+        if (rows.length > 0) await db.query(sql, [JSON.stringify(rows)]);
+        newsCounts[table] = rows.length;
+      }
+      for (const table of ["news_extraction_runs", "news_companies", "news_clusters", "news_stories"]) await db.query(syncIdentity(table));
+      // Trend tables are derived, so they are rebuilt from the restored stories instead of backed up.
+      await db.query(
+        `select public.news_refresh_trends(min(story_date), max(story_date)) from public.news_stories having count(*) > 0`,
+      );
+    }
     await db.query("commit");
     return {
+      ...newsCounts,
       items: items.length,
       comments: comments.length,
       hubState: Object.keys(snapshot.hubState).length,
