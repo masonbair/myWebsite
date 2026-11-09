@@ -3,6 +3,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import { handleMcpRequest } from "@/lib/hub/mcp-tools";
+import type { NewsReader } from "@/lib/news/reader";
 import { createHubStore } from "@/lib/hub/store";
 import { parseNow } from "@/lib/now";
 
@@ -24,6 +25,7 @@ describe.skipIf(!enabled)("mcp tools against local Supabase", () => {
         token,
         storeFor: (client) => createHubStore(db(), { kind: "agent", client }),
         readNow: async () => parseNow(null),
+news: {} as NewsReader,
       })) as typeof fetch;
     const transport = new StreamableHTTPClientTransport(new URL("https://hub.test/api/mcp/mcp"), {
       fetch: fetchFn,

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { capUsd } from "./budget";
+import { capUsd, newsCapSpend } from "./budget";
 import type { IssueStatus } from "./types";
 
 export type IssueRow = { id: string; subject: string; receivedAt: string; status: IssueStatus; lastError: string | null };
@@ -28,10 +28,11 @@ type IssueDbRow = { id: string; subject: string; received_at: string; status: Is
 const PER_SOURCE = 10;
 const UNMATCHED = "unmatched";
 
-async function rows<T>(query: PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
+// Without generated database types, embedded relations are inferred as arrays, so the row type is stated by the caller.
+async function rows<T>(query: PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return data ?? [];
+  return (data as T[] | null) ?? [];
 }
 
 /** Everything the owner's news page shows, read with the owner's session so row security applies. */
@@ -86,5 +87,331 @@ export async function readNewsOverview(client: SupabaseClient, now: Date, deps: 
     cap: capUsd(process.env),
     paused: pausedMonth === now.toISOString().slice(0, 7),
     suggestedTopics: [...counts].map(([topic, count]) => ({ topic, count })).sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic)).slice(0, 20),
+  };
+}
+
+export type SearchQuery = {
+  text?: string;
+  topic?: string;
+  company?: string;
+  ticker?: string;
+  source?: string;
+  from?: string;
+  to?: string;
+  limit: number;
+};
+export type CompanyRef = { name: string; ticker: string | null };
+export type StoryHit = {
+  id: number;
+  headline: string;
+  topics: string[];
+  companies: CompanyRef[];
+  tone: number;
+  date: string;
+  source: string;
+  sourceName: string;
+  link: string | null;
+  issueId: string | null;
+};
+export type TrendPoint = { bucket: string; stories: number; mentions: number; tone: number | null };
+export type TrendQuery = { kind: "topic" | "company"; key: string; from: string; to: string; by: "day" | "week" | "month" };
+export type Mover = {
+  kind: "topic" | "company";
+  key: string;
+  label: string;
+  recentStories: number;
+  previousStories: number;
+  coverage: "more" | "less";
+};
+export type IssueDetail = {
+  id: string;
+  source: string | null;
+  sourceName: string | null;
+  subject: string;
+  receivedAt: string;
+  publishedOn: string | null;
+  status: IssueStatus;
+  text: string;
+  textTruncated: boolean;
+  stories: (Omit<StoryHit, "source" | "sourceName" | "issueId"> & { kind: string })[];
+};
+export type CostMonth = { month: string; total: number; byPurpose: Record<string, number>; byModel: Record<string, number> };
+export type CostSummary = { cap: number; capSpendThisMonth: number; months: CostMonth[] };
+
+export type NewsReader = {
+  search(q: SearchQuery): Promise<StoryHit[]>;
+  trend(q: TrendQuery): Promise<TrendPoint[]>;
+  movers(q: { days: number; limit: number }): Promise<Mover[]>;
+  getIssue(id: string): Promise<IssueDetail | null>;
+  costs(months: number): Promise<CostSummary>;
+};
+
+type StoryDbRow = {
+  id: number;
+  run_id: number;
+  source_id: string;
+  story_date: string;
+  headline: string;
+  topics: string[];
+  company_ids: number[];
+  sentiment: number;
+  link: string | null;
+  cluster_id: number | null;
+  issue_id: string | null;
+  news_issues: { current_run_id: number | null } | null;
+  news_shared: { current_run_id: number | null; url: string } | null;
+};
+
+const STORY_COLUMNS =
+  "id, run_id, source_id, story_date, headline, topics, company_ids, sentiment, link, cluster_id, issue_id, news_issues(current_run_id), news_shared(current_run_id, url)";
+const PAGE = 500;
+const MAX_PAGES = 20;
+const COMPANY_MATCH_LIMIT = 50;
+const MAX_ISSUE_TEXT = 60_000;
+const DAY_MS = 86_400_000;
+
+const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+const likeEscape = (s: string) => s.replace(/[\\%_]/g, "\\$&");
+const storyKey = (r: Pick<StoryDbRow, "id" | "cluster_id">) => (r.cluster_id === null ? `s${r.id}` : `c${r.cluster_id}`);
+const isCurrent = (r: StoryDbRow) => r.run_id === (r.news_issues?.current_run_id ?? r.news_shared?.current_run_id ?? null);
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+function bucketOf(day: string, by: TrendQuery["by"]): string {
+  if (by === "day") return day;
+  if (by === "month") return `${day.slice(0, 7)}-01`;
+  const ms = Date.parse(day);
+  const sinceMonday = (new Date(ms).getUTCDay() + 6) % 7;
+  return isoDay(ms - sinceMonday * DAY_MS);
+}
+
+/** Read-only news queries for the hub connector, run with the service client and bounded by date range and page count. */
+export function createNewsReader(client: SupabaseClient, now: () => Date = () => new Date()): NewsReader {
+  type Filter = (q: any) => any; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  async function currentStories(filter: Filter, order: "asc" | "desc", wanted: number): Promise<StoryDbRow[]> {
+    const out: StoryDbRow[] = [];
+    for (let page = 0; page < MAX_PAGES && out.length < wanted; page++) {
+      const base = client.from("news_stories").select(STORY_COLUMNS).eq("kind", "news");
+      const batch = await rows<StoryDbRow>(
+        filter(base)
+          .order("story_date", { ascending: order === "asc" })
+          .order("id", { ascending: order === "asc" })
+          .range(page * PAGE, page * PAGE + PAGE - 1),
+      );
+      out.push(...batch.filter(isCurrent));
+      if (batch.length < PAGE) break;
+    }
+    return out;
+  }
+
+  async function companyIds(match: { name?: string; ticker?: string }): Promise<number[]> {
+    let q = client.from("news_companies").select("id").limit(COMPANY_MATCH_LIMIT);
+    if (match.name) q = q.ilike("name", `%${likeEscape(match.name)}%`);
+    if (match.ticker) q = q.ilike("ticker", likeEscape(match.ticker));
+    return (await rows<{ id: number }>(q)).map((r) => r.id);
+  }
+
+  async function companyMap(ids: number[]): Promise<Map<number, CompanyRef & { verified: boolean }>> {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return new Map();
+    const found = await rows<{ id: number; name: string; ticker: string | null; ticker_verified: boolean }>(
+      client.from("news_companies").select("id, name, ticker, ticker_verified").in("id", unique),
+    );
+    return new Map(found.map((c) => [c.id, { name: c.name, ticker: c.ticker_verified ? c.ticker : null, verified: c.ticker_verified }]));
+  }
+
+  const refs = (ids: number[], map: Map<number, CompanyRef>): CompanyRef[] =>
+    ids.flatMap((id) => {
+      const c = map.get(id);
+      return c ? [{ name: c.name, ticker: c.ticker }] : [];
+    });
+
+  async function sourceNames(): Promise<Map<string, string>> {
+    return new Map((await rows<{ id: string; name: string }>(client.from("news_sources").select("id, name"))).map((s) => [s.id, s.name]));
+  }
+
+  return {
+    async search(q) {
+      let companies: number[] | null = null;
+      if (q.company || q.ticker) {
+        companies = await companyIds({ name: q.company, ticker: q.ticker });
+        if (companies.length === 0) return [];
+      }
+      const filter: Filter = (query) => {
+        if (q.text) query = query.ilike("headline", `%${likeEscape(q.text)}%`);
+        if (q.topic) query = query.contains("topics", [q.topic]);
+        if (companies) query = query.overlaps("company_ids", companies);
+        if (q.source) query = query.eq("source_id", q.source);
+        if (q.from) query = query.gte("story_date", q.from);
+        if (q.to) query = query.lte("story_date", q.to);
+        return query;
+      };
+      const found = (await currentStories(filter, "desc", q.limit)).slice(0, q.limit);
+      const [map, names] = await Promise.all([companyMap(found.flatMap((r) => r.company_ids)), sourceNames()]);
+      return found.map((r) => ({
+        id: r.id,
+        headline: r.headline,
+        topics: r.topics,
+        companies: refs(r.company_ids, map),
+        tone: r.sentiment,
+        date: r.story_date,
+        source: r.source_id,
+        sourceName: names.get(r.source_id) ?? r.source_id,
+        link: r.link ?? r.news_shared?.url ?? null,
+        issueId: r.issue_id,
+      }));
+    },
+
+    async trend(q) {
+      let filter: Filter;
+      if (q.kind === "topic") {
+        filter = (query) => query.contains("topics", [q.key]).gte("story_date", q.from).lte("story_date", q.to);
+      } else {
+        const byTicker = await companyIds({ ticker: q.key });
+        const ids = byTicker.length > 0 ? byTicker : await companyIds({ name: q.key });
+        if (ids.length === 0) return [];
+        filter = (query) => query.overlaps("company_ids", ids).gte("story_date", q.from).lte("story_date", q.to);
+      }
+      const found = await currentStories(filter, "asc", Infinity);
+      const buckets = new Map<string, { clusters: Set<string>; mentions: number; tone: number }>();
+      for (const r of found) {
+        const key = bucketOf(r.story_date, q.by);
+        const b = buckets.get(key) ?? { clusters: new Set<string>(), mentions: 0, tone: 0 };
+        b.clusters.add(storyKey(r));
+        b.mentions += 1;
+        b.tone += r.sentiment;
+        buckets.set(key, b);
+      }
+      return [...buckets]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([bucket, b]) => ({ bucket, stories: b.clusters.size, mentions: b.mentions, tone: b.mentions ? round2(b.tone / b.mentions) : null }));
+    },
+
+    async movers({ days, limit }) {
+      const today = Date.parse(now().toISOString().slice(0, 10));
+      const recentStart = isoDay(today - (days - 1) * DAY_MS);
+      const previousStart = isoDay(today - (2 * days - 1) * DAY_MS);
+      const found = await currentStories((query) => query.gte("story_date", previousStart).lte("story_date", isoDay(today)), "asc", Infinity);
+      const tally = new Map<string, { kind: Mover["kind"]; key: string; recent: Set<string>; previous: Set<string> }>();
+      const add = (kind: Mover["kind"], key: string, r: StoryDbRow) => {
+        const id = `${kind}:${key}`;
+        const t = tally.get(id) ?? { kind, key, recent: new Set<string>(), previous: new Set<string>() };
+        (r.story_date >= recentStart ? t.recent : t.previous).add(storyKey(r));
+        tally.set(id, t);
+      };
+      for (const r of found) {
+        for (const topic of r.topics) add("topic", topic, r);
+        for (const id of r.company_ids) add("company", String(id), r);
+      }
+      const ranked = [...tally.values()]
+        .map((t) => ({ ...t, change: t.recent.size - t.previous.size }))
+        .filter((t) => t.change !== 0)
+        .sort((a, b) => Math.abs(b.change) - Math.abs(a.change) || a.key.localeCompare(b.key))
+        .slice(0, limit);
+
+      const topicKeys = ranked.filter((t) => t.kind === "topic").map((t) => t.key);
+      const topicNames = new Map<string, string>();
+      if (topicKeys.length > 0) {
+        for (const t of await rows<{ slug: string; name: string }>(client.from("news_topics").select("slug, name").in("slug", topicKeys))) {
+          topicNames.set(t.slug, t.name);
+        }
+      }
+      const companies = await companyMap(ranked.filter((t) => t.kind === "company").map((t) => Number(t.key)));
+      return ranked.map((t) => ({
+        kind: t.kind,
+        key: t.key,
+        label: t.kind === "topic" ? (topicNames.get(t.key) ?? t.key) : (companies.get(Number(t.key))?.name ?? t.key),
+        recentStories: t.recent.size,
+        previousStories: t.previous.size,
+        coverage: t.change > 0 ? "more" : "less",
+      }));
+    },
+
+    async getIssue(id) {
+      const [issue] = await rows<{
+        id: string;
+        source_id: string | null;
+        subject: string;
+        received_at: string;
+        published_on: string | null;
+        status: IssueStatus;
+        clean_text: string;
+        current_run_id: number | null;
+        news_sources: { name: string } | null;
+      }>(
+        client
+          .from("news_issues")
+          .select("id, source_id, subject, received_at, published_on, status, clean_text, current_run_id, news_sources(name)")
+          .eq("id", id)
+          .limit(1),
+      );
+      if (!issue) return null;
+      const stories =
+        issue.current_run_id === null
+          ? []
+          : await rows<StoryDbRow & { kind: string }>(
+              client
+                .from("news_stories")
+                .select(`${STORY_COLUMNS}, kind`)
+                .eq("issue_id", id)
+                .eq("run_id", issue.current_run_id)
+                .order("id")
+                .limit(200),
+            );
+      const map = await companyMap(stories.flatMap((r) => r.company_ids));
+      return {
+        id: issue.id,
+        source: issue.source_id,
+        sourceName: issue.news_sources?.name ?? null,
+        subject: issue.subject,
+        receivedAt: issue.received_at,
+        publishedOn: issue.published_on,
+        status: issue.status,
+        text: issue.clean_text.slice(0, MAX_ISSUE_TEXT),
+        textTruncated: issue.clean_text.length > MAX_ISSUE_TEXT,
+        stories: stories.map((r) => ({
+          id: r.id,
+          kind: r.kind,
+          headline: r.headline,
+          topics: r.topics,
+          companies: refs(r.company_ids, map),
+          tone: r.sentiment,
+          date: r.story_date,
+          link: r.link,
+        })),
+      };
+    },
+
+    async costs(months) {
+      const at = now();
+      const start = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() - (months - 1), 1)).toISOString();
+      const byMonth = new Map<string, CostMonth>();
+      for (let from = 0; ; from += 1000) {
+        const batch = await rows<{ model: string; purpose: string; cost_usd: number | string; at: string }>(
+          client
+            .from("ai_usage")
+            .select("model, purpose, cost_usd, at")
+            .eq("feature", "news")
+            .gte("at", start)
+            .order("id")
+            .range(from, from + 999),
+        );
+        for (const r of batch) {
+          const month = r.at.slice(0, 7);
+          const m = byMonth.get(month) ?? { month, total: 0, byPurpose: {}, byModel: {} };
+          const cost = Number(r.cost_usd);
+          m.total += cost;
+          m.byPurpose[r.purpose] = (m.byPurpose[r.purpose] ?? 0) + cost;
+          m.byModel[r.model] = (m.byModel[r.model] ?? 0) + cost;
+          byMonth.set(month, m);
+        }
+        if (batch.length < 1000) break;
+      }
+      return {
+        cap: capUsd(process.env),
+        capSpendThisMonth: await newsCapSpend(client, at),
+        months: [...byMonth.values()].sort((a, b) => b.month.localeCompare(a.month)),
+      };
+    },
   };
 }

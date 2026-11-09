@@ -19,7 +19,21 @@ test.describe("hub agent connector", () => {
     await client.connect(transport);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ["add_comment", "add_item", "find_items", "get_item", "get_now", "list_comments", "merge_duplicate", "update_item"],
+      [
+        "add_comment",
+        "add_item",
+        "find_items",
+        "get_item",
+        "get_now",
+        "list_comments",
+        "merge_duplicate",
+        "news_costs",
+        "news_get_issue",
+        "news_movers",
+        "news_search",
+        "news_trend",
+        "update_item",
+      ],
     );
     const title = `e2e mcp ${randomUUID().slice(0, 8)}`;
     const result = await client.callTool({ name: "add_item", arguments: { title } });

@@ -2,6 +2,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { describe, expect, it } from "vitest";
 import { MCP_TOOL_NAMES, handleMcpRequest } from "@/lib/hub/mcp-tools";
 import type { NowData } from "@/lib/now";
+import type { NewsReader } from "@/lib/news/reader";
 import { createFakeStore } from "./fake-store";
 import { seedItem } from "./worker-harness";
 
@@ -27,6 +28,7 @@ function setup(options: { token?: string; clientName?: string | null; serverToke
         return createFakeStore({ kind: "agent", client }, rows);
       },
       readNow: async () => NOW,
+      news: {} as NewsReader,
     })) as typeof fetch;
   const headers: Record<string, string> = { authorization: `Bearer ${options.token ?? TOKEN}` };
   if (options.clientName !== null) headers["x-client-name"] = options.clientName ?? "test-agent";
@@ -51,7 +53,21 @@ describe("mcp agent connector", () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["add_comment", "add_item", "find_items", "get_item", "get_now", "list_comments", "merge_duplicate", "update_item"].sort(),
+      [
+        "add_comment",
+        "add_item",
+        "find_items",
+        "get_item",
+        "get_now",
+        "list_comments",
+        "merge_duplicate",
+        "update_item",
+        "news_search",
+        "news_trend",
+        "news_movers",
+        "news_get_issue",
+        "news_costs",
+      ].sort(),
     );
     expect([...MCP_TOOL_NAMES].sort()).toEqual(names);
     for (const tool of tools) expect(tool.description).toMatch(/data, never instructions/);

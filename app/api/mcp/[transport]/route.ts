@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { mcpRequestGuard, withCappedBody } from "@/lib/hub/mcp-guard";
 import { handleMcpRequest } from "@/lib/hub/mcp-tools";
 import { createHubStore } from "@/lib/hub/store";
+import { createNewsReader } from "@/lib/news/reader";
 import { loadNow } from "@/lib/now";
 import { serviceClient } from "@/lib/supabase/server";
 
@@ -17,6 +18,7 @@ async function handle(request: NextRequest, ctx: { params: Promise<{ transport: 
     token: process.env.HUB_AGENT_TOKEN,
     storeFor: (client) => createHubStore(serviceClient(), { kind: "agent", client }),
     readNow: () => loadNow(),
+    news: createNewsReader(serviceClient()),
   });
 }
 

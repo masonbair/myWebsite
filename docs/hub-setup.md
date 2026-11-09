@@ -74,7 +74,9 @@ node scripts/hub-restore.ts hub-backups-2026-11-05.json --target postgresql://po
 
 ## Agent connector (MCP)
 
-Claude Code (and other agents) reach the hub through `https://masonbair.com/api/mcp/mcp`. It only offers find, read, add, update, comment, merge-duplicate and the public now board; nothing can complete, delete, email, buy, book, deploy or merge.
+Claude Code (and other agents) reach the hub through `https://masonbair.com/api/mcp/mcp`. It only offers find, read, add, update, comment, merge-duplicate, the public now board and five read-only newsletter tools; nothing can complete, delete, email, buy, book, deploy or merge.
+
+- News tools: `news_search` (stories by text, topic, company, ticker, source, dates; shared-article stories included; headline, topics, companies, tone, date, source, private link), `news_trend` (stories and mentions per day, week or month for a topic or company), `news_movers` (coverage up or down over the last N days against the N before), `news_get_issue` (one issue's text and stories) and `news_costs` (spend by month against the cap). They read only the current extraction run, describe coverage and never advise, and are read-only.
 
 - `HUB_AGENT_TOKEN` (already set in Vercel) is the bearer token. If it is unset the connector answers 503; a missing or wrong token gets 401.
 - Requests carrying an `Origin` header (browsers) get 403, and bodies over 1 MB get 413, including chunked bodies that send no length.
