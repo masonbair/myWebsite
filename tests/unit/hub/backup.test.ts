@@ -239,6 +239,8 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
     );
     await withDb(scratchUrl, async (db) => {
       await db.query(AUTH_STUB);
+      // Public buckets made before 0007 runs, so the test below proves 0007 turns them private.
+      await db.query("insert into storage.buckets (id, name, public) values ('photos', 'photos', true), ('daylio', 'daylio', true)");
       for (const sql of migrations) await db.query(sql);
     });
   }, 60_000);
@@ -303,6 +305,16 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
       expect(items.find((r) => r.id === merged.id)).toMatchObject({ merged_into: merged.mergedInto, archived_reason: "merged" });
     });
   }, 60_000);
+
+  it("0007 makes photos and daylio buckets that already existed as public private, with its limits", async () => {
+    await withDb(scratchUrl, async (db) => {
+      const buckets = (await db.query("select id, public, file_size_limit::int, allowed_mime_types from storage.buckets order by id")).rows;
+      expect(buckets).toEqual([
+        { id: "daylio", public: false, file_size_limit: 26214400, allowed_mime_types: null },
+        { id: "photos", public: false, file_size_limit: 26214400, allowed_mime_types: ["image/jpeg"] },
+      ]);
+    });
+  });
 
   it("refuses to restore into a database whose items table is not empty", async () => {
     const result = await restore([file, "--target", scratchUrl]);

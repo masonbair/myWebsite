@@ -200,7 +200,9 @@ grant execute on function public.collector_add_photo(text, text, timestamptz, in
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('photos', 'photos', false, 26214400, array['image/jpeg']),
        ('daylio', 'daylio', false, 26214400, null)
-on conflict (id) do nothing;
+-- An existing bucket of the same name is made private too, never kept public.
+on conflict (id) do update
+  set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 
 -- Insert only: with no update or delete policy an upload can never replace or remove an object, and a repeat upload fails as a duplicate.
 create policy collector_photos_owner_insert on storage.objects
