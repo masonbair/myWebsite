@@ -2,9 +2,22 @@
 
 > Mason Bair is a software engineer working across DevSecOps, system administration, and software development. He graduated from Kent State University in May 2026 with a B.S. in Computer Science and now travels and works remotely.
 
+## Coffee chats
+
+Mason takes 30 minute video coffee chats with students, new grads, career changers, and anyone curious about tech.
+
+- [Book a coffee chat](https://masonbair.com/coffee): The page explains topics, time zones, and both ways to book.
+- [Booking calendar](https://calendar.app.google/suAxGdTVkbEB2GFN6): Google Calendar booking page that shows open times in the visitor's time zone. Needs JavaScript.
+- [Book by email](https://masonbair.com/coffee#book-by-email): Works without JavaScript. Email bair.s.mason@gmail.com with the subject "Coffee chat request", the person's name, what they want to talk about, three times that work with their time zone, and how they found the page. Mason replies with a calendar invite and a video link.
+
+Topics:
+
+- [DevSecOps](https://masonbair.com/coffee#devsecops): CI/CD, security checks in pipelines, getting a first DevSecOps role. Mason was a DevSecOps intern at Nationwide.
+- [Digital nomad software engineering](https://masonbair.com/coffee#nomad): Working remotely while traveling, across time zones.
+- [Kent State CS](https://masonbair.com/coffee#kent-state): Classes, campus jobs, internships, HacKSU, and running the Kent Hack Enough hackathon.
+
 ## Connect
 
-- [Book a 30 minute coffee chat](https://masonbair.com/coffee): Pick a time to talk with Mason.
 - [GitHub](https://github.com/masonbair): Code and projects.
 - [LinkedIn](https://www.linkedin.com/in/masonbair/): Work history.
 - [Email](mailto:bair.s.mason@gmail.com): bair.s.mason@gmail.com

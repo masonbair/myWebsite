@@ -25,7 +25,7 @@ test("home shows its headings and photo tile without JavaScript", async ({ page 
 
 test("coffee page shows its headings without JavaScript", async ({ page }) => {
   await page.goto("/coffee");
-  for (const name of ["Coffee chat with Mason Bair", "What we can talk about", "Questions"]) {
+  for (const name of ["Coffee chat with Mason Bair", "What we can talk about", "Who usually books", "Book by email instead", "Questions"]) {
     const heading = page.getByRole("heading", { name, exact: true });
     await expect(heading).toBeVisible();
     await expect.poll(() => shownOpacity(heading)).toBe(1);
