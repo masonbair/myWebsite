@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import type { BrowserContext } from "@playwright/test";
 import { createServerClient } from "@supabase/ssr";
@@ -14,6 +15,9 @@ const OWNER_EMAIL = "hub-e2e-owner@example.test";
 const OWNER_PASSWORD = "hub-e2e-owner-local-only";
 
 type Credentials = { id: string; email: string; password: string };
+
+// Each worktree gives its local stack its own project_id, so the db container name is read, not hardcoded.
+const dbContainer = `supabase_db_${readFileSync("supabase/config.toml", "utf8").match(/^project_id = "([^"]+)"/m)![1]}`;
 
 const noPersist = { auth: { persistSession: false, autoRefreshToken: false } };
 
@@ -45,7 +49,7 @@ export async function seededOwner(): Promise<Credentials> {
   const owner = await ownerUser();
   // Local Supabase has no GitHub OAuth, so the identity is written straight into auth.identities.
   execSync(
-    `docker exec -i supabase_db_masonbair psql -U postgres -v ON_ERROR_STOP=1 -c "insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at, last_sign_in_at) values ('${OWNER_GITHUB_ID}', '${owner.id}', '{\\"sub\\":\\"${OWNER_GITHUB_ID}\\"}', 'github', now(), now(), now()) on conflict (provider_id, provider) do update set user_id = excluded.user_id, updated_at = now(), last_sign_in_at = now()"`,
+    `docker exec -i ${dbContainer} psql -U postgres -v ON_ERROR_STOP=1 -c "insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at, last_sign_in_at) values ('${OWNER_GITHUB_ID}', '${owner.id}', '{\\"sub\\":\\"${OWNER_GITHUB_ID}\\"}', 'github', now(), now(), now()) on conflict (provider_id, provider) do update set user_id = excluded.user_id, updated_at = now(), last_sign_in_at = now()"`,
     { stdio: "ignore" },
   );
   const { error } = await serviceClient()

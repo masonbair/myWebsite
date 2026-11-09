@@ -11,9 +11,8 @@ export function HelloTile() {
         {hello.heading}
       </h1>
       <p className="mt-4 max-w-[40ch] text-lg leading-relaxed text-mute md:text-xl">{hello.body}</p>
-      {/* A plain anchor keeps next/link off the home page bundle. */}
+      {/* A plain anchor keeps next/link (about 7 KB) off the home page. */}
       <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-3 md:mt-auto md:pt-8">
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
         <a href={coffeeChat.href} className={stickerButton}>
           {coffeeChat.label}
           <span className={buttonBubble}>
