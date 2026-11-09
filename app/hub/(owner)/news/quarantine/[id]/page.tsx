@@ -1,0 +1,64 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { focusRing, panel } from "@/components/hub/styles";
+import { requireOwner } from "@/lib/auth/require-owner";
+import { emailPlainText, linkSegments } from "@/lib/news/email-view";
+import { loadRawEmail } from "@/lib/news/raw-email";
+import { sessionClient } from "@/lib/supabase/server";
+import { timeAgo } from "@/lib/time";
+
+export const metadata = { title: "Held back email" };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export default async function QuarantinePage({ params }: PageProps<"/hub/news/quarantine/[id]">) {
+  await requireOwner();
+  const { id } = await params;
+  if (!UUID.test(id)) notFound();
+  const { data } = await (await sessionClient())
+    .from("news_issues")
+    .select("subject, from_address, received_at, raw_path")
+    .eq("id", id)
+    .eq("status", "quarantined")
+    .maybeSingle();
+  if (!data) notFound();
+
+  const email = await loadRawEmail(data.raw_path);
+  const text = email ? emailPlainText(email) : null;
+
+  return (
+    <main>
+      <Link href="/hub/news" className={`inline-flex min-h-10 items-center text-sm font-medium text-mute hover:text-ink ${focusRing}`}>
+        Back to News
+      </Link>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight break-words">{data.subject || "No subject"}</h1>
+      <p className="mt-2 text-sm break-all text-mute">
+        From {data.from_address || "an unknown sender"} · {timeAgo(data.received_at)}
+      </p>
+      <p className="mt-2 max-w-[60ch] text-mute">This email did not match a newsletter, so it was held back. Links open in a new tab.</p>
+
+      <section aria-labelledby="body" className={`${panel} mt-8 p-5 sm:p-6`}>
+        <h2 id="body" className="mb-3 text-sm font-semibold text-mute">
+          Email text
+        </h2>
+        {text === null ? (
+          <p className="text-sm text-mute">The raw email could not be loaded.</p>
+        ) : text === "" ? (
+          <p className="text-sm text-mute">This email has no text.</p>
+        ) : (
+          <pre className="font-sans text-sm leading-relaxed break-words whitespace-pre-wrap text-ink">
+            {linkSegments(text).map((s, i) =>
+              s.type === "link" ? (
+                <a key={i} href={s.value} target="_blank" rel="noreferrer noopener" className={`break-all text-accent-ink underline ${focusRing}`}>
+                  {s.value}
+                </a>
+              ) : (
+                s.value
+              ),
+            )}
+          </pre>
+        )}
+      </section>
+    </main>
+  );
+}
