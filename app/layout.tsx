@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { PublicOnly } from "@/components/PublicOnly";
 import now from "@/content/now.json";
 import { siteUrl } from "@/content/site";
 import "./globals.css";
 
-const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakarta" });
-const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
+const grotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-grotesk" });
+const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 
 const description =
   `I'm Mason Bair, a software engineer, baker, and traveler who has been to ${now.countriesVisited} countries and graduated from Kent State in May 2026.`;
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${jakarta.variable} ${geistMono.variable}`}>
+    <html lang="en" className={`${grotesk.variable} ${jetbrains.variable}`}>
       <body className="font-sans antialiased">
         <PublicOnly>
           <Nav />

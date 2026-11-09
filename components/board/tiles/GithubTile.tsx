@@ -1,9 +1,10 @@
 import { ArrowUpRight, GithubLogo } from "@phosphor-icons/react/dist/ssr";
 import type { GithubActivity } from "@/lib/github";
-import { Tile } from "../Tile";
+import { tag } from "@/components/ui/sticker";
+import { Prompt, Tile } from "../Tile";
 
 const PROFILE = "https://github.com/masonbair";
-const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink";
 const plural = (n: number, word: string) => `${word}${n === 1 ? "" : "s"}`;
 const countFormat = new Intl.NumberFormat("en-US");
 
@@ -23,16 +24,19 @@ function Count({ n }: { n: number }) {
 export function GithubTile({ github }: { github: GithubActivity | null }) {
   if (!github) {
     return (
-      <Tile core="flex flex-col justify-between gap-8 bg-surface p-6 md:p-7">
-        <GithubLogo weight="light" size={28} className="text-ink" aria-hidden />
+      <Tile core="flex flex-col justify-between gap-8 bg-surface p-6">
+        <div>
+          <Prompt className="text-mute">git log --me</Prompt>
+          <GithubLogo weight="light" size={28} className="mt-2 text-ink" aria-hidden />
+        </div>
         <a
           href={PROFILE}
           target="_blank"
           rel="noopener noreferrer"
-          className={`group inline-flex w-fit items-center gap-3 rounded-full bg-ink/5 py-2 pr-2 pl-5 text-base font-semibold text-ink transition-transform duration-300 ease-spring active:scale-[0.98] ${focusRing}`}
+          className={`group inline-flex w-fit items-center gap-3 rounded-full border-2 border-line bg-surface py-1.5 pr-1.5 pl-5 text-base font-semibold text-ink transition-transform duration-300 ease-spring active:scale-[0.98] ${focusRing}`}
         >
           See what I&apos;m building
-          <span className="flex size-8 items-center justify-center rounded-full bg-accent text-snow transition-transform duration-300 ease-spring group-hover:translate-x-0.5 group-hover:-translate-y-px">
+          <span className="flex size-8 items-center justify-center rounded-full bg-accent text-night transition-transform duration-300 ease-spring group-hover:translate-x-0.5 group-hover:-translate-y-px">
             <ArrowUpRight weight="light" size={16} aria-hidden />
           </span>
         </a>
@@ -42,11 +46,15 @@ export function GithubTile({ github }: { github: GithubActivity | null }) {
 
   const { total30d, commits30d, repos30d, recent } = github;
   return (
-    <Tile core="flex flex-col justify-between gap-5 bg-surface p-6 md:p-7">
+    <Tile core="flex flex-col justify-between gap-5 bg-surface p-6">
       <div>
-        <a href={PROFILE} target="_blank" rel="noopener noreferrer" className={`inline-flex rounded-full ${focusRing}`}>
-          <GithubLogo weight="light" size={28} className="text-ink" aria-label="GitHub profile" />
-        </a>
+        <Prompt className="text-mute">git log --me</Prompt>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className={`${tag} bg-surface text-ink`}>GitHub</span>
+          <a href={PROFILE} target="_blank" rel="noopener noreferrer" className={`rounded-full font-bold text-ink ${focusRing}`}>
+            masonbair
+          </a>
+        </div>
         <p className="mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <span className="font-mono text-6xl leading-none font-medium tracking-tighter text-accent-ink lg:text-5xl xl:text-6xl">
             <Count n={total30d} />

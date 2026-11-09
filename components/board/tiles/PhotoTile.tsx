@@ -60,7 +60,7 @@ export function PhotoTile({ photos }: { photos: Photo[] }) {
   }, [rotates, restLoaded, hovered, focused, paused, photos.length]);
 
   return (
-    <Tile core="aspect-[4/5] bg-ink/5 md:aspect-auto md:min-h-[22rem] lg:min-h-0">
+    <Tile tilt="right" core="aspect-[4/5] bg-ink/5 md:aspect-auto md:min-h-[22rem] lg:min-h-0">
       <div
         role="group"
         aria-label="Photo slideshow"

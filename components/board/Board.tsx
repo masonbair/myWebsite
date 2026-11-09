@@ -52,7 +52,7 @@ export function Board({ board }: { board: BoardData }) {
     <section aria-label="Right now" className="mx-auto w-full max-w-[1400px] px-4 md:px-8">
       <div
         data-board-grid
-        className="grid grid-flow-row-dense grid-cols-1 gap-3 md:grid-cols-6 lg:grid-cols-12 lg:grid-rows-[repeat(2,minmax(17.5rem,auto))]"
+        className="grid grid-flow-row-dense grid-cols-1 gap-4 md:gap-5 md:grid-cols-6 lg:grid-cols-12 lg:grid-rows-[repeat(2,minmax(17.5rem,auto))]"
       >
         {tiles.map((t, i) =>
           FIRST_SCREEN.has(t.key) ? (

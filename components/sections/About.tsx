@@ -17,7 +17,7 @@ export function About() {
           ))}
         </div>
         <div className="w-full max-w-sm lg:col-span-5 lg:max-w-none">
-          <Tile core="aspect-[3/4] bg-ink/5">
+          <Tile tilt="right" core="aspect-[3/4] bg-ink/5">
             <Image
               src={portrait.src}
               alt={portrait.alt}

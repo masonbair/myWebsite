@@ -223,3 +223,10 @@ export const siteUrl = "https://masonbair.com";
 
 // Bump when the copy on this site changes; feeds the sitemap and the home page's dateModified.
 export const siteUpdated = "2026-11-04";
+
+export const hello = {
+  tag: "Open to coffee chats",
+  heading: "Hi, I'm Mason.",
+  body: "I'm a software engineer who bakes, travels, and builds from wherever I land. Glad you're here.",
+  note: "30 min, video, no agenda needed",
+};
