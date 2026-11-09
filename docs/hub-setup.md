@@ -103,6 +103,8 @@ claude mcp add --transport http hub-local http://localhost:3000/api/mcp/mcp --he
 
 Forwarded newsletters arrive by email, get read by Claude, and feed `/trends` and `/hub/news`. Do these steps in order.
 
+Migration push order: `0008_ideas_lab.sql`, then `0009_news.sql`, then `0010_news_topics_cron.sql`. Do not skip ahead: 0010 changes the `ai_usage` table, and 0008 is the file that creates it.
+
 1. Gmail filter and export. Make a filter for the six newsletter senders with "Apply label: Newsletters" and "Also apply to matching conversations". Then in Google Takeout export Mail, only the label Newsletters, and send the `.mbox` path to Claude. Do the filter and export in each Gmail account that gets newsletters (there are two), so you end up with one `.mbox` file per account.
 2. Anthropic key. Done on 2026-11-09: workspace `masonbair-news` (monthly limit $30; raise to $75 for the import month) and its key set as `ANTHROPIC_API_KEY_NEWS` in Vercel Production. Add the same `ANTHROPIC_API_KEY_NEWS` to Preview too, and put it in the worktree's `.env.local`.
 3. Sender rows. Claude fills each newsletter's `sender_addresses` or `sender_domains` in the seed of `0009_news.sql` (Task 0) before it is pushed. Mail that matches no newsletter is held back, not read.
