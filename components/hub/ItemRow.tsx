@@ -9,12 +9,23 @@ import { SubmitButton } from "./SubmitButton";
 
 const STATUS: readonly string[] = STATUS_LABELS;
 
-export function ItemRow({ item, showList = false }: { item: Item; showList?: boolean }) {
+export function ItemRow({
+  item,
+  showList = false,
+  justSaved = false,
+}: {
+  item: Item;
+  showList?: boolean;
+  justSaved?: boolean;
+}) {
   const reason = needsYouReason(item.labels);
   const due = formatDue(item.due);
   const labels = item.labels.filter((label) => !STATUS.includes(label));
   return (
-    <li className="relative flex items-start gap-1 py-2 pr-4 pl-1.5 transition-colors duration-300 ease-spring hover:bg-ink/[0.025]">
+    <li
+      data-just-saved={justSaved || undefined}
+      className={`relative flex items-start gap-1 py-2 pr-4 pl-1.5 transition-colors duration-300 ease-spring hover:bg-ink/[0.025] ${justSaved ? "bg-accent/10" : ""}`}
+    >
       {/* Above the row-wide link overlay, so the tap lands on Done and not on the item. */}
       <form action={completeItem.bind(null, item.id)} className="relative z-10">
         <SubmitButton
@@ -33,8 +44,9 @@ export function ItemRow({ item, showList = false }: { item: Item; showList?: boo
         >
           {item.title}
         </Link>
-        {(reason || due || labels.length > 0 || showList) && (
+        {(justSaved || reason || due || labels.length > 0 || showList) && (
           <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-mute">
+            {justSaved && <span className="font-semibold text-accent-ink">Just saved</span>}
             {reason && <span className="font-semibold text-accent-ink">{reason}</span>}
             {showList && <span>{LIST_NAMES[item.list]}</span>}
             {due && <span>{due}</span>}
@@ -58,6 +70,7 @@ export function ItemSection({
   empty,
   showList,
   total = items.length,
+  justSavedId,
 }: {
   id: string;
   title: string;
@@ -66,6 +79,7 @@ export function ItemSection({
   showList?: boolean;
   /** How many items match in all, when the page could only load some of them. */
   total?: number;
+  justSavedId?: string;
 }) {
   return (
     <section aria-labelledby={id} className="mt-10 first:mt-0">
@@ -81,7 +95,7 @@ export function ItemSection({
       {items.length > 0 ? (
         <ul className="divide-y divide-ink/[0.06] overflow-hidden rounded-tile bg-surface shadow-tile ring-1 ring-ink/5">
           {items.map((item) => (
-            <ItemRow key={item.id} item={item} showList={showList} />
+            <ItemRow key={item.id} item={item} showList={showList} justSaved={item.id === justSavedId} />
           ))}
         </ul>
       ) : (

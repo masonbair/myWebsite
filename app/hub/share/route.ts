@@ -23,8 +23,8 @@ export async function POST(request: NextRequest) {
     return new NextResponse("Bad request", { status: 400 });
   }
   const shared = captureFromShare({ title: field(form, "title"), text: field(form, "text"), url: field(form, "url") });
-  if (!shared.title) return NextResponse.redirect(new URL("/hub/capture", request.url), 303);
-  await saveCapture(shared, "share");
+  if (!shared.title) return NextResponse.redirect(new URL("/hub/capture?share=empty", request.url), 303);
+  const { item } = await saveCapture(shared, "share");
   // 303 turns the POST into a GET, so a reload can never post the same share twice.
-  return NextResponse.redirect(new URL("/hub/capture?shared=1", request.url), 303);
+  return NextResponse.redirect(new URL(`/hub?saved=${item.id}`, request.url), 303);
 }

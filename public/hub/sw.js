@@ -4,7 +4,7 @@ const CAPTURE = "/hub/capture";
 // The page names some files as "static/chunks/..." inside its React payload, without the /_next/ prefix.
 const STATIC_ASSET = /static\/(?:chunks|css|media)\/[^"'\s\\]+?\.(?:js|css|woff2)/g;
 
-// Only the plain page becomes the offline copy; a share-target visit (/hub/capture?shared=1) renders differently.
+// Only the plain page becomes the offline copy; a share-target visit (/hub/capture?share=empty) renders differently.
 function isCapturePage(response) {
   if (!response.ok || response.redirected) return false;
   const url = new URL(response.url);

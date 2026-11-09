@@ -1,13 +1,17 @@
+import { Check } from "@phosphor-icons/react/dist/ssr";
 import { ItemSection } from "@/components/hub/ItemRow";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { masonStore } from "@/lib/hub/mason-store";
+import { isItemId } from "@/lib/hub/format";
 import { listForPage } from "@/lib/hub/page-items";
 import type { Item } from "@/lib/hub/types";
 
 export const metadata = { title: "Inbox" };
 
-export default async function InboxPage() {
+export default async function InboxPage({ searchParams }: PageProps<"/hub">) {
   await requireOwner();
+  const { saved } = await searchParams;
+  const justSavedId = isItemId(saved) ? saved : undefined;
   const store = await masonStore();
   const [inbox, questions, finished] = await Promise.all([
     listForPage(store, { list: "inbox", state: "open" }),
@@ -27,7 +31,23 @@ export default async function InboxPage() {
   return (
     <main>
       <h1 className="mb-8 text-3xl font-semibold tracking-tight">Inbox</h1>
-      <ItemSection id="unsorted" title="Unsorted" items={unsorted} total={unsorted.length + inboxCut} empty="Nothing to sort." />
+      {justSavedId && (
+        <p
+          role="status"
+          className="mb-6 flex items-center gap-2 rounded-tile bg-accent/10 px-4 py-3 text-sm font-semibold text-accent-ink"
+        >
+          <Check size={16} weight="bold" aria-hidden />
+          Saved to inbox
+        </p>
+      )}
+      <ItemSection
+        id="unsorted"
+        title="Unsorted"
+        items={unsorted}
+        total={unsorted.length + inboxCut}
+        empty="Nothing to sort."
+        justSavedId={justSavedId}
+      />
       <ItemSection
         id="needs-you"
         title="Needs you"

@@ -46,7 +46,7 @@ test.describe("hub service worker", () => {
       [stale, fresh],
     );
 
-    await page.goto(`${SW_BASE}/hub/capture?shared=1`);
+    await page.goto(`${SW_BASE}/hub/capture?share=empty`);
     await page.waitForLoadState("networkidle");
     expect(await page.evaluate(async () => Boolean(await caches.match("/hub/capture")))).toBe(false);
 

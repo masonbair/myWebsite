@@ -115,11 +115,43 @@ test.describe("quick capture", () => {
         maxRedirects: 0,
       });
       expect(res.status()).toBe(303);
-      expect(new URL(res.headers().location, "http://x").pathname).toBe("/hub/capture");
       const items = await itemsTitled(title);
       expect(items).toHaveLength(1);
       expect(items[0]).toMatchObject({ source: "share", list: "inbox" });
       expect(items[0].description).toContain(url);
+      const location = new URL(res.headers().location, "http://x");
+      expect(location.pathname).toBe("/hub");
+      expect(location.searchParams.get("saved")).toBe(items[0].id);
+    });
+
+    test("after a share, the inbox says it was saved and marks the new item", async ({ page }) => {
+      const title = `shared view ${randomUUID().slice(0, 8)}`;
+      await page.goto("/hub/capture");
+      await page.evaluate(async (t) => {
+        const form = new FormData();
+        form.set("title", t);
+        form.set("url", "https://example.com/article");
+        const res = await fetch("/hub/share", { method: "POST", body: form });
+        window.location.href = res.url;
+      }, title);
+      await page.waitForURL(/\/hub\?saved=/);
+      await expect(page.getByRole("status").filter({ hasText: "Saved to inbox" })).toBeVisible();
+      const row = page.locator("li[data-just-saved]");
+      await expect(row).toHaveCount(1);
+      await expect(row).toContainText(title);
+      await expect(row).toContainText("Just saved");
+    });
+
+    test("a share with no text or link saves nothing and says so", async ({ page }) => {
+      const res = await page.request.post("/hub/share", {
+        multipart: { title: " ", text: "", url: "" },
+        headers: { origin: `http://localhost:${HUB_PORT}` },
+        maxRedirects: 0,
+      });
+      expect(res.status()).toBe(303);
+      expect(res.headers().location).toContain("/hub/capture?share=empty");
+      await page.goto("/hub/capture?share=empty");
+      await expect(page.getByRole("status").filter({ hasText: "Nothing to save" })).toBeVisible();
     });
 
     test("a share with Origin null, as Android sends it, is accepted", async ({ page }) => {
@@ -192,10 +224,6 @@ test.describe("quick capture", () => {
       await expect.poll(async () => (await itemsTitled(title)).length).toBe(1);
     });
 
-    test("the share page says the shared item was saved", async ({ page }) => {
-      await page.goto("/hub/capture?shared=1");
-      await expect(page.getByText("Shared item saved")).toBeVisible();
-    });
   });
 
   test("signed out, the capture api answers 401 json, not a redirect", async ({ request }) => {

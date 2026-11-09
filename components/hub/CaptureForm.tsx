@@ -9,7 +9,7 @@ import { outboxSnapshot, retryFailedInOutbox, saveToOutbox, subscribeOutbox } fr
 import { focusRing, smallButton } from "./styles";
 import { useVoice } from "./useVoice";
 
-export function CaptureForm({ shared }: { shared: boolean }) {
+export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
   const field = useRef<HTMLTextAreaElement>(null);
   const status = useSyncExternalStore(subscribeOutbox, outboxSnapshot, () => null);
   const [savedCount, setSavedCount] = useState(0);
@@ -120,10 +120,9 @@ export function CaptureForm({ shared }: { shared: boolean }) {
             Saved
           </span>
         )}
-        {shared && savedCount === 0 && (
-          <span className="inline-flex items-center gap-1.5 font-medium text-accent-ink">
-            <Check size={14} weight="bold" aria-hidden />
-            Shared item saved
+        {emptyShare && savedCount === 0 && (
+          <span role="status" className="font-medium text-ink">
+            Nothing to save. The share had no text or link.
           </span>
         )}
         {waiting > 0 && (
