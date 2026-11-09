@@ -16,6 +16,8 @@ async function fetchOnce(dir: string, file: string) {
 }
 
 const lines = (path: string) => readFileSync(path, 'utf8').split('\n').filter((l) => l && !l.startsWith('#'));
+// GeoNames has stray spaces (e.g. "Bonaire, Saint Eustatius and Saba "), and the site matches names exactly.
+const fields = (line: string) => line.split('\t').map((f) => f.trim());
 
 async function main() {
   const dir = process.argv[2];
@@ -26,18 +28,18 @@ async function main() {
 
   const regions = new Map<string, string>();
   for (const line of lines(join(dir, 'admin1CodesASCII.txt'))) {
-    const [code, , ascii] = line.split('\t');
+    const [code, , ascii] = fields(line);
     regions.set(code, ascii);
   }
 
   const countries: Record<string, string> = {};
   for (const line of lines(join(dir, 'countryInfo.txt'))) {
-    const c = line.split('\t');
+    const c = fields(line);
     countries[c[0]] = c[4];
   }
 
   const rows = lines(join(dir, 'cities15000.txt'))
-    .map((line) => line.split('\t'))
+    .map(fields)
     // PPLX is a section of a city (a district), never what a check-in should name.
     .filter((c) => c.length > 14 && c[7].startsWith('PPL') && c[7] !== 'PPLX')
     .map((c) => ({

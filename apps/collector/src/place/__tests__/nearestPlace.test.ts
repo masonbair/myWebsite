@@ -59,3 +59,15 @@ describe('bundled table', () => {
     expect(nearestPlace({ latitude: 38.72, longitude: -9.14 })).toMatchObject({ city: 'Lisbon', countryCode: 'PT', country: 'Portugal' });
   });
 });
+
+describe('bundled names', () => {
+  const trimmed = (name: string) => name === name.trim() && name !== '';
+
+  it('have no leading or trailing whitespace, since the site matches country names exactly', () => {
+    const countries = require('../countries.json') as Record<string, string>;
+    const cities = require('../cities.json') as { regions: string[]; rows: [string, ...unknown[]][] };
+    expect(Object.values(countries).filter((n) => !trimmed(n))).toEqual([]);
+    expect(cities.regions.filter((n) => n !== n.trim())).toEqual([]);
+    expect(cities.rows.map((r) => r[0]).filter((n) => !trimmed(n))).toEqual([]);
+  });
+});
