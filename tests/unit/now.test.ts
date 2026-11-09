@@ -38,6 +38,21 @@ describe("parseNow", () => {
     });
   });
 
+  it("keeps a private place the phone sent without a city", () => {
+    const r = parseNow({ place: { city: null, region: "Ohio", country: "United States", private: true, updatedAt: "2026-11-01T00:00:00Z" } });
+    expect(r.place).toEqual({ city: null, region: "Ohio", country: "United States", private: true, updatedAt: "2026-11-01T00:00:00Z" });
+    expect(formatLocation(r.place!)).toBe("Ohio, United States");
+    expect(parseNow({ place: { city: "  ", region: "", country: "Portugal", private: true, updatedAt: "2026-11-01T00:00:00Z" } }).place).toMatchObject({
+      city: null,
+    });
+  });
+
+  it("drops a public place with no city", () => {
+    for (const city of [null, undefined, "", "  "]) {
+      expect(parseNow({ place: { city, region: "Ohio", country: "United States", private: false, updatedAt: "2026-11-01T00:00:00Z" } }).place).toBeNull();
+    }
+  });
+
   it("keeps a valid bake", () => {
     const r = parseNow({ bake: { name: "Sourdough", photo: "/misc/a.webp", bakedAt: "2026-11-01T10:00:00Z" } });
     expect(r.bake).toEqual({ name: "Sourdough", photo: "/misc/a.webp", bakedAt: "2026-11-01T10:00:00Z" });
@@ -94,5 +109,14 @@ describe("0005_now.sql", () => {
     const code = sql.replace(/--.*$/gm, "");
     expect(code).toContain("create table public.now_place");
     expect(code).not.toMatch(/lat|lon|lng|coord|geo/i);
+  });
+});
+
+describe("0007_collector.sql", () => {
+  it("adds no latitude, longitude or other coordinate columns", async () => {
+    const sql = await readFile(path.join(__dirname, "../../supabase/migrations/0007_collector.sql"), "utf8");
+    const code = sql.replace(/--.*$/gm, "");
+    expect(code).toContain("create table public.collector_photo");
+    expect(code).not.toMatch(/lat|lon|lng|coord|geo|gps|exif/i);
   });
 });

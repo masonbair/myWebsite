@@ -154,13 +154,17 @@ describe("hub-restore guards", () => {
 });
 
 // Run with: HUB_TEST_DB_URL=1 HUB_TEST_SUPABASE_URL=http://127.0.0.1:54321 HUB_TEST_SERVICE_KEY=<SERVICE_ROLE_KEY> (from `supabase status -o env`).
+// HUB_TEST_PG_URL (no database name) points the scratch database at a stack on other ports.
 // The round trip restores into a scratch database it creates and drops in the local Postgres, never the shared one.
 const enabled = Boolean(process.env.HUB_TEST_DB_URL);
 const apiUrl = process.env.HUB_TEST_SUPABASE_URL ?? "";
 const serviceKey = process.env.HUB_TEST_SERVICE_KEY ?? "";
-const LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322";
+const LOCAL_DB = process.env.HUB_TEST_PG_URL || "postgresql://postgres:postgres@127.0.0.1:54322";
 if (enabled && !/^(127\.0\.0\.1|localhost)$/.test(new URL(apiUrl || "http://invalid").hostname)) {
   throw new Error("HUB_TEST_SUPABASE_URL must be a local Supabase (127.0.0.1 or localhost)");
+}
+if (enabled && !/^(127\.0\.0\.1|localhost)$/.test(new URL(LOCAL_DB).hostname)) {
+  throw new Error("HUB_TEST_PG_URL must be a local Postgres (127.0.0.1 or localhost)");
 }
 
 // Just enough of Supabase's auth schema for the hub migrations to apply in a bare database.
@@ -168,6 +172,9 @@ const AUTH_STUB = `
   create schema auth;
   create table auth.users (id uuid primary key);
   create function auth.uid() returns uuid language sql stable as 'select null::uuid';
+  create schema storage;
+  create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
+  create table storage.objects (bucket_id text, name text);
 `;
 
 describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
@@ -195,7 +202,10 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
     await store.archive(newer.id, "merged", older.id, "merged in the backup test");
     await store.updateItem(older.id, { description: "backup rewrite" });
     await store.setHubState(`reminded:${older.id}`, "2026-11-05T09:30:00");
-    const place = await client.from("now_place").insert({ city: "Backupville", region: "Ohio", country: "United States", private: true, time_zone: "America/New_York" });
+    const place = await client.from("now_place").insert([
+      { city: "Backupville", region: "Ohio", country: "United States", private: true, time_zone: "America/New_York" },
+      { city: null, region: "Ohio", country: "United States", private: true },
+    ]);
     const bake = await client.from("now_bake").insert({ name: "backup loaf", photo: "/misc/Mason_traveling.webp" });
     const privacy = await client.from("now_place_privacy").insert({ city: "Backupville", region: "Ohio", country: "United States", private: true });
     if (place.error || bake.error || privacy.error) throw place.error ?? bake.error ?? privacy.error;
@@ -206,7 +216,7 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
 
     await withDb(`${LOCAL_DB}/postgres`, (db) => db.query(`create database ${scratch}`));
     const migrations = await Promise.all(
-      ["0002_hub.sql", "0003_hub_memo.sql", "0005_now.sql", "0006_hub_history.sql"].map((name) => readFile(join(__dirname, "../../../supabase/migrations", name), "utf8")),
+      ["0002_hub.sql", "0003_hub_memo.sql", "0005_now.sql", "0006_hub_history.sql", "0007_collector.sql"].map((name) => readFile(join(__dirname, "../../../supabase/migrations", name), "utf8")),
     );
     await withDb(scratchUrl, async (db) => {
       await db.query(AUTH_STUB);
@@ -243,6 +253,7 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
       expect(privacyRows).toEqual(shot.nowPlacePrivacy.map((p) => ({ id: Number(p.id), city: p.city, private: p.private })));
       expect(nowPlace).toEqual(shot.nowPlace.map((p) => ({ id: Number(p.id), city: p.city, private: p.private, time_zone: p.timeZone })));
       expect(shot.nowPlace.some((p) => p.timeZone === "America/New_York")).toBe(true);
+      expect(shot.nowPlace.some((p) => p.city === null && p.private)).toBe(true);
       expect(nowBake).toEqual(shot.nowBake.map((b) => ({ id: Number(b.id), name: b.name, photo: b.photo })));
       // The identity sequence moved past the restored ids, so the next bake gets a fresh one.
       const next = (await db.query("insert into public.now_bake (name) values ('after restore') returning id::int")).rows[0];

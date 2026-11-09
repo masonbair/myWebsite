@@ -17,4 +17,12 @@ describe("formatLocation", () => {
   it("falls back to country when private and region is empty", () => {
     expect(formatLocation({ ...base, city: "Kent", region: "", country: "United States", private: true })).toBe("United States");
   });
+
+  it("shows region and country for a private place with no city", () => {
+    expect(formatLocation({ ...base, city: null, region: "Ohio", country: "United States", private: true })).toBe("Ohio, United States");
+  });
+
+  it("never prints a missing city on a public place", () => {
+    expect(formatLocation({ ...base, city: null, region: "Ohio", country: "United States", private: false })).toBe("Ohio, United States");
+  });
 });

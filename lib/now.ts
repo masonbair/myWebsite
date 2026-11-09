@@ -3,7 +3,8 @@ import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { serviceClient } from "@/lib/supabase/server";
 
-export type Place = { city: string; region: string; country: string; private: boolean; updatedAt: string };
+/** city is null only for a private place: inside one, the phone sends region and country alone. */
+export type Place = { city: string | null; region: string; country: string; private: boolean; updatedAt: string };
 export type Bake = { name: string; photo: string | null; bakedAt: string };
 export type Photo = { src: string; alt: string };
 export type NowData = { place: Place | null; countriesVisited: number; bake: Bake | null; photos: Photo[] };
@@ -23,15 +24,16 @@ export const photoSrc = (v: unknown): string | null => {
 
 function parsePlace(raw: unknown): Place | null {
   if (!isObj(raw)) return null;
+  const isPrivate = raw.private === true;
   const city = str(raw.city);
   const country = str(raw.country);
   const updatedAt = isoDate(raw.updatedAt);
-  if (!city || !country || !updatedAt) return null;
+  if ((!city && !isPrivate) || !country || !updatedAt) return null;
   return {
     city,
     region: typeof raw.region === "string" ? raw.region : "",
     country,
-    private: raw.private === true,
+    private: isPrivate,
     updatedAt,
   };
 }
@@ -92,7 +94,7 @@ export type DbPlace = Place & { sentPrivate: boolean };
 /** The newest place and latest bake from the database; null fields mean the tables have none yet. */
 export type NowRows = { place: DbPlace | null; bake: Bake | null };
 
-type CurrentPlaceRow = { city: string; region: string; country: string; private: boolean; sent_private: boolean; updated_at: string };
+type CurrentPlaceRow = { city: string | null; region: string; country: string; private: boolean; sent_private: boolean; updated_at: string };
 
 /** Reads the now tables as the service role, with the place's privacy already applied; callers still keep a private city off public pages. */
 export async function readNowRows(client: SupabaseClient): Promise<NowRows> {

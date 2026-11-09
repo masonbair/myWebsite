@@ -17,7 +17,7 @@ export type BackupMemoFile = {
 
 export type BackupNowPlace = {
   id: number;
-  city: string;
+  city: string | null;
   region: string;
   country: string;
   private: boolean;
@@ -200,7 +200,7 @@ export function createSnapshotSource(client: SupabaseClient): SnapshotSource {
     async nowPlace() {
       const rows = await all<{
         id: number;
-        city: string;
+        city: string | null;
         region: string;
         country: string;
         private: boolean;
