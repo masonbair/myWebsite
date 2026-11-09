@@ -1,10 +1,11 @@
 import { ArrowRight, ArrowUpRight, Coffee, DownloadSimple } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { coffeeChat, contact, education, resumeHref, skills } from "@/content/site";
+import { buttonBubble, stickerButton } from "@/components/ui/sticker";
 import { Tile } from "../board/Tile";
 import { sectionShell } from "./Section";
 
-const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink";
 const linkClass = `inline-flex items-center gap-1 rounded-sm font-medium text-ink underline decoration-ink/25 underline-offset-4 hover:decoration-ink ${focusRing}`;
 
 export function Resume() {
@@ -12,16 +13,16 @@ export function Resume() {
     <section id="resume" aria-labelledby="resume-title" className={sectionShell}>
       <Tile core="bg-surface p-6 md:p-10 lg:p-14">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-          <h2 id="resume-title" className="text-4xl leading-none font-bold tracking-tighter text-ink md:text-5xl">
+          <h2 id="resume-title" className="text-4xl leading-none font-bold tracking-[-0.04em] text-ink md:text-5xl">
             Résumé
           </h2>
           <a
             href={resumeHref}
             download
-            className={`group inline-flex items-center gap-3 self-start rounded-full bg-accent-ink py-2 pr-2 pl-6 text-base font-semibold whitespace-nowrap text-snow transition-transform duration-300 ease-spring active:scale-[0.98] sm:self-auto dark:text-night ${focusRing}`}
+            className={`${stickerButton} self-start sm:self-auto`}
           >
             Download résumé
-            <span className="flex size-9 items-center justify-center rounded-full bg-snow/15 transition-transform duration-300 ease-spring group-hover:translate-y-0.5 dark:bg-night/10">
+            <span className={buttonBubble}>
               <DownloadSimple weight="light" size={18} aria-hidden />
             </span>
           </a>
@@ -53,15 +54,15 @@ export function Resume() {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col gap-6 border-t border-ink/10 pt-8 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mt-12 flex flex-col gap-6 border-t-2 border-dashed border-line/30 pt-8 lg:flex-row lg:items-center lg:justify-between">
           <h3 className="sr-only">Contact</h3>
           <Link
             href={coffeeChat.href}
-            className={`group inline-flex items-center gap-3 self-start rounded-full bg-accent/15 py-2 pr-2 pl-5 text-base font-semibold whitespace-nowrap text-accent-ink transition-transform duration-300 ease-spring active:scale-[0.98] lg:order-last ${focusRing}`}
+            className={`group inline-flex items-center gap-3 self-start rounded-full border-[2.5px] border-line bg-tea py-1.5 pr-1.5 pl-4 text-base font-bold whitespace-nowrap text-night shadow-sticker-sm transition-transform duration-200 ease-spring active:translate-x-0.5 active:translate-y-0.5 lg:order-last ${focusRing}`}
           >
             <Coffee weight="light" size={20} aria-hidden />
             {coffeeChat.label}
-            <span className="flex size-9 items-center justify-center rounded-full bg-accent/15 transition-transform duration-300 ease-spring group-hover:translate-x-0.5">
+            <span className="flex size-9 items-center justify-center rounded-full bg-surface text-ink transition-transform duration-300 ease-spring group-hover:translate-x-0.5">
               <ArrowRight weight="light" size={18} aria-hidden />
             </span>
           </Link>

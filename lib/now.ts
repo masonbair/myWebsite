@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isCollectorPhotoSrc, readBoardPhotos } from "@/lib/collector-photos";
 import { serviceClient } from "@/lib/supabase/server";
 
-export type Place = { city: string; region: string; country: string; private: boolean; updatedAt: string };
+/** city is null only for a private place: inside one, the phone sends region and country alone. */
+export type Place = { city: string | null; region: string; country: string; private: boolean; updatedAt: string };
 export type Bake = { name: string; photo: string | null; bakedAt: string };
 export type Photo = { src: string; alt: string };
 export type NowData = { place: Place | null; countriesVisited: number; bake: Bake | null; photos: Photo[] };
@@ -20,18 +22,24 @@ export const photoSrc = (v: unknown): string | null => {
   const s = str(v);
   return s !== null && PHOTO_SRC.test(s) && !s.includes("..") ? s : null;
 };
+// A bake photo stays /misc only: the hub's bake form checks the file exists in public/.
+const slideshowSrc = (v: unknown): string | null => {
+  const s = str(v);
+  return photoSrc(s) ?? (s !== null && isCollectorPhotoSrc(s) ? s : null);
+};
 
 function parsePlace(raw: unknown): Place | null {
   if (!isObj(raw)) return null;
+  const isPrivate = raw.private === true;
   const city = str(raw.city);
   const country = str(raw.country);
   const updatedAt = isoDate(raw.updatedAt);
-  if (!city || !country || !updatedAt) return null;
+  if ((!city && !isPrivate) || !country || !updatedAt) return null;
   return {
     city,
     region: typeof raw.region === "string" ? raw.region : "",
     country,
-    private: raw.private === true,
+    private: isPrivate,
     updatedAt,
   };
 }
@@ -49,7 +57,7 @@ function parsePhotos(raw: unknown): Photo[] {
   const out: Photo[] = [];
   for (const item of raw) {
     if (!isObj(item)) continue;
-    const src = photoSrc(item.src);
+    const src = slideshowSrc(item.src);
     const alt = str(item.alt);
     if (src && alt) out.push({ src, alt });
   }
@@ -92,7 +100,7 @@ export type DbPlace = Place & { sentPrivate: boolean };
 /** The newest place and latest bake from the database; null fields mean the tables have none yet. */
 export type NowRows = { place: DbPlace | null; bake: Bake | null };
 
-type CurrentPlaceRow = { city: string; region: string; country: string; private: boolean; sent_private: boolean; updated_at: string };
+type CurrentPlaceRow = { city: string | null; region: string; country: string; private: boolean; sent_private: boolean; updated_at: string };
 
 /** Reads the now tables as the service role, with the place's privacy already applied; callers still keep a private city off public pages. */
 export async function readNowRows(client: SupabaseClient): Promise<NowRows> {
@@ -116,25 +124,35 @@ export async function readNowRows(client: SupabaseClient): Promise<NowRows> {
   };
 }
 
+// Empty on the e2e site servers and in tests, so they never read a real database.
+const hasDatabase = () => Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+
 async function databaseRows(): Promise<NowRows | null> {
-  // Empty on the e2e site servers and in tests, so they never read a real database.
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
-  return readNowRows(serviceClient());
+  return hasDatabase() ? readNowRows(serviceClient()) : null;
 }
 
-type LoadNowDeps = { file?: () => Promise<NowData>; rows?: () => Promise<NowRows | null> };
+async function databasePhotos(): Promise<Photo[]> {
+  return hasDatabase() ? readBoardPhotos(serviceClient()) : [];
+}
 
-/** The board's now data: database rows first, then content/now.json for any field the database has none of or fails on. */
+type LoadNowDeps = { file?: () => Promise<NowData>; rows?: () => Promise<NowRows | null>; photos?: () => Promise<Photo[]> };
+
+/** The board's now data: database rows first, then content/now.json for any field the database has none of or fails on; phone photos go before the file's. */
 export async function loadNow(deps: LoadNowDeps = {}): Promise<NowData> {
-  const [file, rows] = await Promise.all([
+  const [file, rows, phonePhotos] = await Promise.all([
     (deps.file ?? readNow)(),
     Promise.resolve()
       .then(deps.rows ?? databaseRows)
       .catch(() => null),
+    Promise.resolve()
+      .then(deps.photos ?? databasePhotos)
+      .catch((): Photo[] => []),
   ]);
   const dbPlace = rows?.place;
   const place: Place | null = dbPlace
     ? { city: dbPlace.city, region: dbPlace.region, country: dbPlace.country, private: dbPlace.private, updatedAt: dbPlace.updatedAt }
     : file.place;
-  return { ...file, place, bake: rows?.bake ?? file.bake };
+  const seen = new Set(phonePhotos.map((p) => p.src));
+  const photos = [...phonePhotos, ...file.photos.filter((p) => !seen.has(p.src))];
+  return { ...file, place, bake: rows?.bake ?? file.bake, photos };
 }
