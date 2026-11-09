@@ -15,7 +15,7 @@ export function ProjectsTile({ repos }: { repos: LiveRepo[] }) {
               href={r.homepage}
               target="_blank"
               rel="noopener noreferrer"
-              className="group relative flex h-full items-center justify-between gap-4 rounded-xl border-2 border-line bg-surface p-4 shadow-sticker-sm focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-night"
+              className="group relative flex h-full items-center justify-between gap-4 rounded-xl border-2 border-line bg-surface p-4 shadow-sticker-sm focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-night"
             >
               <span
                 aria-hidden

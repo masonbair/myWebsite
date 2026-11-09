@@ -1,5 +1,5 @@
 export const focusRing =
-  "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink";
+  "outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-accent-ink";
 
 export const panel = "rounded-tile border-[2.5px] border-line bg-surface shadow-tile";
 

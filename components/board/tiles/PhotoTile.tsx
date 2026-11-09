@@ -94,7 +94,7 @@ export function PhotoTile({ photos }: { photos: Photo[] }) {
             aria-label="Pause photo slideshow"
             aria-pressed={paused}
             onClick={() => setPaused((p) => !p)}
-            className="absolute right-3 bottom-3 flex size-11 items-center justify-center rounded-full bg-night/55 text-snow outline-none transition-transform duration-300 ease-spring active:scale-[0.94] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-snow"
+            className="absolute right-3 bottom-3 flex size-11 items-center justify-center rounded-full bg-night/55 text-snow outline-none transition-transform duration-300 ease-spring active:scale-[0.94] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-snow"
           >
             {paused ? <Play weight="light" size={20} aria-hidden /> : <Pause weight="light" size={20} aria-hidden />}
           </button>

@@ -35,7 +35,7 @@ test.describe("dark", () => {
 });
 
 test("mobile menu opens and closes", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile", "menu button only shows below 768px");
+  test.skip(testInfo.project.name !== "mobile", "menu button only shows below 1024px");
   await page.goto("/");
   const resume = page.getByRole("link", { name: "Résumé", exact: true });
   await expect(resume).toBeHidden();

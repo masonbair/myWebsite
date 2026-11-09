@@ -1,9 +1,9 @@
 export const focusRing =
-  "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink";
+  "outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-accent-ink";
 
 /** Focus ring for controls on fixed-color stickers (tea, accent, rose): night ink stays above 3:1 on those fills in both themes. */
 export const focusRingOnColor =
-  "outline-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-night";
+  "outline-none focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-night";
 
 /** Pill with an accent offset shadow that lifts on hover and presses in on click; add border, fill and a focus ring. */
 export const stickerButtonShape = `group inline-flex items-center gap-3 rounded-full border-[2.5px] py-1.5 pr-1.5 pl-5 text-base font-bold whitespace-nowrap shadow-cta transition-[translate,box-shadow] duration-200 ease-spring hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[6px_6px_0_var(--color-accent)] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[1px_1px_0_var(--color-accent)] motion-reduce:transition-none`;
