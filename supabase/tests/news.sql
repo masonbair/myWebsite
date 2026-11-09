@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(128);
+select plan(129);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a9', 'news-owner@example.com'),
@@ -22,9 +22,14 @@ select is(
     "the-hustle": ["news@thehustle.co"], "tech-brew": ["techbrew@morningbrew.com"]}'::jsonb,
   'four sources have exactly their sender addresses');
 select is(
-  (select array_agg(id order by id) from public.news_sources
-   where sender_addresses = '{}' and id not in ('shared')),
-  array['morning-brew', 'rundown-ai'], 'morning-brew and rundown-ai have no address yet');
+  (select jsonb_object_agg(id, sender_addresses) from public.news_sources
+   where id in ('morning-brew', 'rundown-ai')),
+  '{"morning-brew": ["crew@morningbrew.com"], "rundown-ai": ["news@daily.therundown.ai"]}'::jsonb,
+  'morning-brew and rundown-ai have exactly their sender addresses');
+select is(
+  (select count(*)::int from public.news_sources
+   where id in ('morning-brew', 'rundown-ai') and sender_domains = '{}'),
+  2, 'morning-brew and rundown-ai have no sender domains');
 select is(
   (select count(*)::int from public.news_sources where sender_domains <> '{}'),
   0, 'no source matches by domain');

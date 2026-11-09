@@ -394,6 +394,17 @@ Also seen: 6 messages from crew@community.morningbrew.com. That is community mai
 
 Message-count check: 468 + 411 + 264 + 207 = 1,350 matched messages. Plus 4 sailthru and 6 community messages, 1,360. One message is from some other sender.
 
+### Second account (2026-11-09)
+
+A header-only scan of the second Takeout (1,939 messages, no body text read) found both missing senders. Migration 0011 fills them in, exact addresses only.
+
+| Source | Sender address | Messages | First | Last |
+|---|---|---|---|---|
+| Morning Brew | crew@morningbrew.com | 1,615 | 2022-05-01 | 2026-11-09 |
+| The Rundown AI | news@daily.therundown.ai | 306 | 2025-09-19 | 2026-11-09 |
+
+Both sign with an aligned DKIM domain (morningbrew.com, daily.therundown.ai). Not matched: morningbrew@mail.sailthru.com (platform), crew@community.morningbrew.com (community), events@morningbrew.com (events). Morning Brew's history goes back to 2022, so the 12-month import must use `--since`.
+
 ### Two newsletters are missing
 
 Morning Brew's daily mail and The Rundown AI are not in the export. The ask to Mason: send the real sender address for each, and widen the Gmail filter so the forward includes them. Until then both sources keep empty address lists, and their mail is held back (the Release button covers it once the address is filled in).
