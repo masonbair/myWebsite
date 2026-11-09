@@ -1,4 +1,4 @@
-import { addDays, MOVER_DAYS, YEAR_DAYS, type TrendKind, type TrendRow } from "@/lib/news/public";
+import { addDays, MOVER_DAYS, YEAR_DAYS, type TrendKind, type TrendRow } from "@/lib/news/trend-data";
 
 export type Direction = "rising" | "falling";
 export type Mover = { kind: TrendKind; key: string; label: string; direction: Direction; last7: number; base: number; change: number };
@@ -37,6 +37,11 @@ export function movers(rows: TrendRow[], today: string): Mover[] {
     if (direction) out.push({ kind: row.kind, key: row.key, label: row.label, direction, last7, base, change: (last7 - base) / Math.max(base, 1) });
   }
   return out.sort((a, b) => b.change - a.change);
+}
+
+/** The first `n` rising topics; companies never appear, so no list of them reads as "stocks to watch". */
+export function risingTopics(list: Mover[], n: number): Mover[] {
+  return list.filter((m) => m.kind === "topic" && m.direction === "rising").slice(0, n);
 }
 
 /** Average tone (-1 to 1) as a plain word; a cut point belongs to the calmer side. */

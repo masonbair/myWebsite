@@ -3,22 +3,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { serviceClient } from "@/lib/supabase/server";
+import { addDays, MOVER_DAYS, YEAR_DAYS, type Coverage, type PublicTrends, type Subject, type TrendKind, type TrendRow } from "@/lib/news/trend-data";
 
-export type TrendKind = "topic" | "company";
-export type TrendRow = {
-  day: string;
-  kind: TrendKind;
-  key: string;
-  label: string;
-  ticker: string | null;
-  stories: number;
-  mentions: number;
-  toneAvg: number;
-  sources: string[];
-};
-export type Coverage = { day: string; sourceName: string; publicUrl: string };
-export type PublicTrends = { today: string; rows: TrendRow[] };
-export type Subject = { kind: TrendKind; key: string; label: string; ticker: string | null; today: string; rows: TrendRow[]; coverage: Coverage[] };
+export type { Coverage, PublicTrends, Subject, TrendKind, TrendRow };
 
 /** Raw reads behind the public trend pages; the database one calls only the text-free trend functions. */
 export type TrendStore = {
@@ -29,11 +16,6 @@ export type TrendStore = {
 };
 type Deps = { store?: TrendStore | null };
 
-/** Days of rows the movers need: the last week plus the four before it. */
-export const MOVER_DAYS = 35;
-/** Days in the 52 weekly buckets a subject page charts. */
-export const YEAR_DAYS = 52 * 7;
-
 const KEY: Record<TrendKind, RegExp> = { topic: /^[a-z0-9-]{2,40}$/, company: /^[1-9][0-9]{0,17}$/ };
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const PLAIN_HTTPS = /^https:\/\/[^\s?#"'<>]+$/;
@@ -41,12 +23,6 @@ const PAGE = 1000;
 
 export const isTrendKind = (v: unknown): v is TrendKind => v === "topic" || v === "company";
 export const isTrendKey = (kind: TrendKind, key: string) => KEY[kind].test(key);
-
-export function addDays(day: string, n: number): string {
-  const d = new Date(`${day}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const count = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : null);

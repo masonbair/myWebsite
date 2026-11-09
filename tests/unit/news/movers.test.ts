@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { moveText, movers, shortDate, topSubjects, toneWord, weeklySeries } from "@/lib/news/movers";
-import type { TrendRow } from "@/lib/news/public";
+import { moveText, movers, risingTopics, shortDate, topSubjects, toneWord, weeklySeries } from "@/lib/news/movers";
+import type { TrendRow } from "@/lib/news/trend-data";
 
 const TODAY = "2026-11-09";
 
@@ -105,5 +105,20 @@ describe("moveText and shortDate", () => {
 
   it("formats a day as Mon D", () => {
     expect(shortDate("2026-11-03")).toBe("Nov 3");
+  });
+});
+
+describe("risingTopics", () => {
+  it("leaves out companies even when one rises fastest", () => {
+    const rows = [
+      row(0, 30, { kind: "company", key: "101", label: "Nvidia" }),
+      row(0, 9, { key: "rates", label: "Rates" }),
+      row(0, 4),
+      row(8, 16, { key: "crypto", label: "Crypto" }),
+    ];
+    const all = movers(rows, TODAY);
+    expect(all[0].key).toBe("101");
+    expect(risingTopics(all, 5).map((m) => m.key)).toEqual(["rates", "ai-chips"]);
+    expect(risingTopics(all, 1).map((m) => m.key)).toEqual(["rates"]);
   });
 });

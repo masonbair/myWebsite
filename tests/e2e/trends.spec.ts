@@ -30,12 +30,17 @@ async function serious(page: Page) {
 test("trends lists topics and companies with the not-advice line", async ({ page }) => {
   await page.goto(full("/trends"));
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  const topics = page.getByRole("region", { name: "Topics" });
-  const companies = page.getByRole("region", { name: "Companies" });
+  const topics = page.getByRole("region", { name: "Topics", exact: true });
+  const companies = page.getByRole("region", { name: "Companies", exact: true });
   await expect(topics.getByRole("link", { name: /AI chips/ })).toHaveAttribute("href", "/trends/topic/ai-chips");
   await expect(companies.getByRole("link", { name: /Nvidia/ })).toHaveAttribute("href", "/trends/company/101");
   await expect(page.getByText(FOOTER)).toBeVisible();
   await expect(page.getByText("Retired topic")).toHaveCount(0);
+  // Nvidia rises in the fixture, but the panel lists topics only.
+  const rising = page.getByRole("region", { name: "Topics rising this week" });
+  await expect(rising.getByRole("link", { name: /Interest rates/ })).toBeVisible();
+  await expect(rising.getByText("Nvidia")).toHaveCount(0);
+  await expect(rising.getByText(/\d+ stories this week, up from/).first()).toBeVisible();
 });
 
 test("trends copy has no trading words and no em dashes", async ({ page }) => {

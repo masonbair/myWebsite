@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getBoard } from "@/lib/board";
+import { getBoard, lowerSpans } from "@/lib/board";
 import { parseNow, readNow } from "@/lib/now";
 import type { GithubActivity } from "@/lib/github";
 import type { PublicTrends } from "@/lib/news/public";
@@ -66,4 +66,28 @@ describe("readNow fixture override", () => {
     vi.stubEnv("NODE_ENV", "production");
     expect((await readNow()).place?.city).not.toBe("Lisbon");
   });
+});
+
+describe("lowerSpans", () => {
+  const cols = (span: string, bp: "md" | "lg") => Number(new RegExp(`${bp}:col-span-(\\d+)`).exec(span)?.[1]);
+
+  // Packs spans left to right the way the grid does and reports any row left short.
+  function shortRows(spans: string[], bp: "md" | "lg", width: number) {
+    const rows: number[] = [0];
+    for (const s of spans) {
+      const n = cols(s, bp);
+      if (rows[rows.length - 1] + n > width) rows.push(0);
+      rows[rows.length - 1] += n;
+    }
+    return rows.filter((r) => r !== width);
+  }
+
+  for (const keys of [["projects"], ["news"], ["projects", "news"], ["news", "bake"], ["projects", "bake"], ["projects", "news", "bake"]]) {
+    it(`fills every row for ${keys.join(" + ")}`, () => {
+      const spans = [...lowerSpans(keys).values()];
+      expect(spans).toHaveLength(keys.length);
+      expect(shortRows(spans, "lg", 12)).toEqual([]);
+      expect(shortRows(spans, "md", 6)).toEqual([]);
+    });
+  }
 });

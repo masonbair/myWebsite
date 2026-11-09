@@ -99,7 +99,7 @@ export default async function SubjectPage({ params }: Props) {
               <h2 id="weekly-title" className="text-2xl font-bold tracking-tight text-ink">
                 Stories per week
               </h2>
-              <p className="mt-1 mb-6 text-sm text-mute">Last 12 months. Hover a week for its count.</p>
+              <p className="mt-1 mb-6 text-sm text-mute">Last 12 months. Open the table for exact counts.</p>
               <CountChart weeks={weeks} />
             </Tile>
           </section>
