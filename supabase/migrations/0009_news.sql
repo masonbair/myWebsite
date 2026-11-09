@@ -248,8 +248,14 @@ create function public.news_items_share() returns trigger
 language plpgsql security definer set search_path = ''
 as $$
 declare
-  link text := pg_catalog.rtrim(substring(new.description from '(https?://[^\s<>"'']+)'), '.,;:!?)]}');
+  link text := substring(new.description from '(https?://[^\s<>"'']+)');
 begin
+  -- Trailing punctuation is the sentence's, except a ')' that closes a '(' in the link, as in Wikipedia links.
+  while link ~ '[].,;:!?)}]$' loop
+    exit when pg_catalog.right(link, 1) = ')'
+      and pg_catalog.length(pg_catalog.replace(link, '(', '')) <= pg_catalog.length(pg_catalog.replace(link, ')', ''));
+    link := pg_catalog.left(link, -1);
+  end loop;
   -- A link over 2,000 characters is skipped rather than cut, since a cut link points somewhere else.
   if link ~ '^https?://.' and pg_catalog.length(link) <= 2000 then
     insert into public.news_shared (item_id, url, title) values (new.id, link, new.title);
@@ -343,6 +349,7 @@ end;
 $$;
 
 -- Only current-run news stories from public newsletters count, so shared reads, sponsors and old runs never reach the public page.
+-- Public is decided by the issue's source, which never changes, not by the source the model wrote on the story.
 create function public.news_refresh_trends(p_from date, p_to date) returns void
 language plpgsql set search_path = ''
 as $$
@@ -357,11 +364,11 @@ begin
   delete from public.news_trends_coverage where day between p_from and p_to;
 
   with current_stories as (
-    select s.id, s.story_date, s.source_id, s.sentiment, s.cluster_id, s.topics, s.company_ids,
+    select s.id, s.story_date, i.source_id, s.sentiment, s.cluster_id, s.topics, s.company_ids,
            coalesce(i.public_url, src.homepage) as public_url
     from public.news_stories s
     join public.news_issues i on i.id = s.issue_id and i.current_run_id = s.run_id
-    join public.news_sources src on src.id = s.source_id and src.public
+    join public.news_sources src on src.id = i.source_id and src.public
     where s.kind = 'news' and s.story_date between p_from and p_to
   ),
   mentions as (
@@ -455,6 +462,7 @@ as $$
   limit least(greatest(p_limit, 1), 50);
 $$;
 
+-- Trend rows outlive a topic being switched off until the next rebuild, so switched-off topics are dropped here.
 create function public.news_public_trends(p_from date, p_to date)
 returns table (day date, kind text, key text, label text, ticker text, stories int, mentions int, tone_avg numeric, sources text[])
 language sql stable set search_path = ''
@@ -467,6 +475,7 @@ as $$
   left join public.news_topics t on d.kind = 'topic' and t.slug = d.key
   left join public.news_companies c on d.kind = 'company' and c.id::text = d.key
   where d.day between p_from and p_to
+    and (d.kind = 'company' or t.active)
   order by d.day, d.kind, d.key;
 $$;
 
@@ -476,7 +485,7 @@ language sql stable set search_path = ''
 as $$
   select v.day, src.name, v.public_url
   from public.news_trends_coverage v
-  join public.news_sources src on src.id = v.source_id
+  join public.news_sources src on src.id = v.source_id and src.public
   where v.kind = p_kind and v.key = p_key and v.day >= p_from
   order by v.day desc, src.name;
 $$;

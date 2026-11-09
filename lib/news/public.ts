@@ -12,7 +12,6 @@ export type TrendStore = {
   today?: string;
   trends(from: string, to: string, only?: { kind: TrendKind; key: string }): Promise<unknown[]>;
   coverage(kind: TrendKind, key: string, from: string): Promise<unknown[]>;
-  inactiveTopics(): Promise<string[]>;
 };
 type Deps = { store?: TrendStore | null };
 
@@ -55,12 +54,10 @@ function parseCoverage(raw: unknown): Coverage | null {
   return { day, sourceName: source_name, publicUrl: public_url };
 }
 
-async function activeRows(store: TrendStore, raw: unknown[]): Promise<TrendRow[]> {
-  // Trend rows outlive a topic being switched off until the next rebuild, so the reader drops them itself.
-  const inactive = new Set(await store.inactiveTopics());
+function parseRows(raw: unknown[]): TrendRow[] {
   return raw
     .map(parseRow)
-    .filter((r): r is TrendRow => r !== null && !(r.kind === "topic" && inactive.has(r.key)))
+    .filter((r): r is TrendRow => r !== null)
     .sort((a, b) => a.day.localeCompare(b.day));
 }
 
@@ -86,11 +83,6 @@ export function databaseStore(client: SupabaseClient): TrendStore {
       if (error) throw error;
       return data ?? [];
     },
-    async inactiveTopics() {
-      const { data, error } = await client.from("news_topics").select("slug").eq("active", false);
-      if (error) throw error;
-      return (data ?? []).map((r: { slug: string }) => r.slug);
-    },
   };
 }
 
@@ -100,21 +92,24 @@ function fixtureStore(name: string): TrendStore {
   const parsed: unknown = JSON.parse(readFileSync(path.join(process.cwd(), "tests", "e2e", "fixtures", name), "utf8"));
   const data = isObj(parsed) ? parsed : {};
   const list = (v: unknown) => (Array.isArray(v) ? v.filter(isObj) : []);
+  const inactive = new Set(Array.isArray(data.inactive_topics) ? data.inactive_topics : []);
   return {
     // The fixture pins its own date so the e2e expectations never drift.
     today: typeof data.today === "string" && DAY.test(data.today) ? data.today : undefined,
     async trends(from, to, only) {
+      // Stands in for news_public_trends, which leaves out switched-off topics.
       return list(data.trends).filter(
-        (r) => String(r.day) >= from && String(r.day) <= to && (!only || (r.kind === only.kind && r.key === only.key)),
+        (r) =>
+          String(r.day) >= from &&
+          String(r.day) <= to &&
+          !(r.kind === "topic" && inactive.has(r.key)) &&
+          (!only || (r.kind === only.kind && r.key === only.key)),
       );
     },
     async coverage(kind, key, from) {
       return list(data.coverage)
         .filter((r) => r.kind === kind && r.key === key && String(r.day) >= from)
         .sort((a, b) => String(b.day).localeCompare(String(a.day)));
-    },
-    async inactiveTopics() {
-      return Array.isArray(data.inactive_topics) ? data.inactive_topics.filter((s): s is string => typeof s === "string") : [];
     },
   };
 }
@@ -134,7 +129,7 @@ export async function readPublicTrends(deps: Deps = {}): Promise<PublicTrends | 
     const store = deps.store !== undefined ? deps.store : defaultStore();
     if (!store) return null;
     const today = store.today ?? easternToday();
-    const rows = await activeRows(store, await store.trends(addDays(today, -(MOVER_DAYS - 1)), today));
+    const rows = parseRows(await store.trends(addDays(today, -(MOVER_DAYS - 1)), today));
     return { today, rows };
   } catch {
     return null;
@@ -150,7 +145,7 @@ export async function readSubject(kind: string, key: string, deps: Deps = {}): P
     const today = store.today ?? easternToday();
     const from = addDays(today, -(YEAR_DAYS - 1));
     const [rawRows, rawCoverage] = await Promise.all([store.trends(from, today, { kind, key }), store.coverage(kind, key, from)]);
-    const rows = (await activeRows(store, rawRows)).filter((r) => r.kind === kind && r.key === key);
+    const rows = parseRows(rawRows).filter((r) => r.kind === kind && r.key === key);
     const latest = rows.at(-1);
     if (!latest) return null;
     const coverage = rawCoverage.map(parseCoverage).filter((c): c is Coverage => c !== null);

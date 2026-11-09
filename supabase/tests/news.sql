@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(99);
+select plan(109);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a9', 'news-owner@example.com'),
@@ -70,7 +70,9 @@ select columns_are('public', 'news_trends_coverage',
 insert into public.news_extraction_runs (id, model, prompt_version, kind) values
   (900001, 'claude-sonnet-5-5', 'v1', 'daily'),
   (900002, 'claude-sonnet-5-5', 'v0', 'daily');
-insert into public.news_topics (slug, name) values ('test-chips', 'Chips'), ('test-ai', 'AI models');
+insert into public.news_topics (slug, name) values
+  ('test-chips', 'Chips'), ('test-ai', 'AI models'), ('test-hidden', 'Hidden'), ('test-off', 'Switched off');
+insert into public.news_sources (id, name, public) values ('test-private', 'Private letter', false);
 insert into public.news_companies (id, name, norm_name, ticker, exchange, ticker_verified) values
   (900001, 'Nvidia', 'test-nvidia', 'NVDA', 'NASDAQ', true),
   (900002, 'OpenAI', 'test-openai', 'OAI', null, false);
@@ -103,7 +105,17 @@ insert into public.news_stories (id, run_id, issue_id, shared_id, source_id, sto
   (900004, 900002, '90000000-0000-0000-0000-000000000001', null, 'morning-brew', '2001-01-02', 'h4', 'news', 2, '{test-chips}', '{900001}', null),
   (900005, 900001, null, '92000000-0000-0000-0000-000000000001', 'shared', '2001-01-02', 'h5', 'news', 2, '{test-chips}', '{900001}', null),
   (900006, 900001, '90000000-0000-0000-0000-000000000001', null, 'morning-brew', '2001-01-02', 'h6', 'news', 2, '{test-ai}', '{}', null),
-  (900007, 900001, '90000000-0000-0000-0000-000000000002', null, 'tech-brew', '2001-01-02', 'h7', 'news', 0, '{test-ai}', '{}', null);
+  (900007, 900001, '90000000-0000-0000-0000-000000000002', null, 'tech-brew', '2001-01-02', 'h7', 'news', 0, '{test-ai}', '{}', null),
+  (900008, 900001, '90000000-0000-0000-0000-000000000001', null, 'morning-brew', '2001-01-02', 'h8', 'news', 0, '{test-off}', '{}', null);
+
+insert into public.news_issues (id, source_id, message_id, status, current_run_id) values
+  ('93000000-0000-0000-0000-000000000001', 'test-private', '<p@test>', 'done', 900001);
+insert into public.news_stories (id, run_id, issue_id, source_id, story_date, headline, kind, sentiment, topics) values
+  (900009, 900001, '93000000-0000-0000-0000-000000000001', 'morning-brew', '2001-01-02', 'h9', 'news', 0, '{test-hidden}');
+
+insert into public.items (id, title, source) values ('91000000-0000-0000-0000-000000000005', 'failed shared fixture', 'test');
+insert into public.news_shared (id, item_id, url, title, status, attempts) values
+  ('92000000-0000-0000-0000-000000000002', '91000000-0000-0000-0000-000000000005', 'https://example.com/failed', 'failed', 'failed', 3);
 
 select throws_ok(
   $$ insert into public.news_stories (run_id, issue_id, shared_id, source_id, story_date, headline, kind, sentiment)
@@ -131,6 +143,8 @@ select throws_ok($$ truncate public.news_shared cascade $$, 'P0001', null, 'post
 select throws_ok($$ truncate public.news_extraction_runs cascade $$, 'P0001', null, 'postgres cannot truncate news_extraction_runs');
 select throws_ok($$ truncate public.news_clusters cascade $$, 'P0001', null, 'postgres cannot truncate news_clusters');
 select throws_ok($$ truncate public.news_sources cascade $$, 'P0001', null, 'postgres cannot truncate news_sources');
+select throws_ok($$ truncate public.news_topics cascade $$, 'P0001', null, 'postgres cannot truncate news_topics');
+select throws_ok($$ truncate public.news_companies cascade $$, 'P0001', null, 'postgres cannot truncate news_companies');
 
 set local role service_role;
 set local request.jwt.claims = '{"role":"service_role"}';
@@ -244,6 +258,25 @@ select results_eq(
      where day = '2001-01-02' and kind = 'topic' and key = 'test-chips' order by source_id $$,
   $$ values ('morning-brew', 'https://www.morningbrew.com/daily/issues/2001-01-02'), ('tech-brew', 'https://www.morningbrew.com/tech') $$,
   'coverage links the issue or falls back to the homepage');
+select is(
+  (select count(*)::int from public.news_trends_daily where key = 'test-hidden')
+  + (select count(*)::int from public.news_trends_coverage where key = 'test-hidden'),
+  0, 'a story from an issue of a non-public newsletter adds nothing, whatever its own source_id says');
+
+reset role;
+update public.news_topics set active = false where slug = 'test-off';
+insert into public.news_trends_coverage (day, kind, key, source_id, public_url)
+  values ('2001-01-02', 'topic', 'test-chips', 'test-private', 'https://private.example/issue');
+set local role service_role;
+select is(
+  (select count(*)::int from public.news_trends_daily where kind = 'topic' and key = 'test-off'),
+  1, 'a topic switched off after the rebuild still has its trend row');
+select is(
+  (select count(*)::int from public.news_public_trends('2001-01-01', '2001-01-03') where kind = 'topic' and key = 'test-off'),
+  0, 'public trends leave out a topic that is switched off');
+select is(
+  (select count(*)::int from public.news_public_coverage('topic', 'test-chips', '2001-01-01') where source_name = 'Private letter'),
+  0, 'public coverage leaves out a newsletter that is not public');
 
 select results_eq(
   $$ select key, label, ticker from public.news_public_trends('2001-01-01', '2001-01-03')
@@ -323,6 +356,11 @@ select results_eq(
   $$ values ('pending', 0) $$,
   'retry moves the issue to pending with attempts reset');
 select is(public.news_retry('90000000-0000-0000-0000-000000000001'), false, 'retry ignores a row that is not failed');
+select is(public.news_retry('92000000-0000-0000-0000-000000000002'), true, 'the owner retries a failed shared row');
+select results_eq(
+  $$ select status, attempts from public.news_shared where id = '92000000-0000-0000-0000-000000000002' $$,
+  $$ values ('pending', 0) $$,
+  'retry moves the shared row to pending with attempts reset');
 
 select lives_ok(
   $$ insert into public.items (id, title, source, description)
@@ -346,12 +384,24 @@ select lives_ok(
 select is(
   (select count(*)::int from public.news_shared where item_id = '91000000-0000-0000-0000-000000000004'),
   0, 'a share without a link adds no news_shared row');
+insert into public.items (id, title, source, description) values
+  ('91000000-0000-0000-0000-000000000006', 'wiki', 'share', 'https://en.wikipedia.org/wiki/Foo_(bar)'),
+  ('91000000-0000-0000-0000-000000000007', 'aside', 'share', '(see https://x.example/a).');
+select is(
+  (select url from public.news_shared where item_id = '91000000-0000-0000-0000-000000000006'),
+  'https://en.wikipedia.org/wiki/Foo_(bar)', 'a share keeps a closing paren that belongs to the link');
+select is(
+  (select url from public.news_shared where item_id = '91000000-0000-0000-0000-000000000007'),
+  'https://x.example/a', 'a share drops a closing paren and period that belong to the sentence');
 
 reset role;
 set local role service_role;
 set local request.jwt.claims = '{"role":"service_role"}';
-select is(
-  (select count(*)::int from public.news_claim('shared', 5)), 1, 'news_claim takes pending shared rows');
+select set_eq(
+  $$ select public.news_claim('shared', 10) $$,
+  $$ select id from public.news_shared where item_id in ('91000000-0000-0000-0000-000000000002',
+       '91000000-0000-0000-0000-000000000005', '91000000-0000-0000-0000-000000000006', '91000000-0000-0000-0000-000000000007') $$,
+  'news_claim takes exactly the pending shared rows');
 
 reset role;
 select results_eq(

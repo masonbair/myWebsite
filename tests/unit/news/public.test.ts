@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readPublicTrends, readSubject, type TrendStore } from "@/lib/news/public";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { databaseStore, readPublicTrends, readSubject, type TrendStore } from "@/lib/news/public";
 
 const raw = (extra: Record<string, unknown> = {}) => ({
   day: "2026-11-08",
@@ -19,7 +20,6 @@ function store(over: Partial<TrendStore> = {}): TrendStore {
     today: "2026-11-09",
     trends: async () => [raw()],
     coverage: async () => [{ day: "2026-11-03", source_name: "Morning Brew", public_url: "https://www.morningbrew.com/issues/nov-3" }],
-    inactiveTopics: async () => [],
     ...over,
   };
 }
@@ -64,17 +64,16 @@ describe("readPublicTrends", () => {
     });
   });
 
-  it("drops malformed rows and rows for inactive topics", async () => {
+  it("drops malformed rows", async () => {
     const rows = [
       raw({ kind: "story" }),
       raw({ day: "yesterday" }),
       raw({ stories: -1 }),
       raw({ key: "../x" }),
       raw({ kind: "company", key: "abc" }),
-      raw({ key: "retired" }),
       raw({ kind: "company", key: "42", label: "Nvidia", ticker: "NVDA" }),
     ];
-    const result = await readPublicTrends({ store: store({ trends: async () => rows, inactiveTopics: async () => ["retired"] }) });
+    const result = await readPublicTrends({ store: store({ trends: async () => rows }) });
     expect(result?.rows.map((r) => `${r.kind}:${r.key}`)).toEqual(["company:42"]);
   });
 
@@ -117,9 +116,8 @@ describe("readSubject", () => {
     expect(await readSubject("company", "ai-chips", { store: store() })).toBeNull();
   });
 
-  it("is null when the subject has no rows or its topic is inactive", async () => {
+  it("is null when the subject has no rows", async () => {
     expect(await readSubject("topic", "ai-chips", { store: store({ trends: async () => [] }) })).toBeNull();
-    expect(await readSubject("topic", "ai-chips", { store: store({ inactiveTopics: async () => ["ai-chips"] }) })).toBeNull();
   });
 
   it("drops coverage links that are not plain https addresses", async () => {
@@ -131,5 +129,22 @@ describe("readSubject", () => {
     ];
     const subject = await readSubject("topic", "ai-chips", { store: store({ coverage }) });
     expect(subject?.coverage.map((c) => c.publicUrl)).toEqual(["https://www.morningbrew.com/tech"]);
+  });
+});
+
+describe("databaseStore", () => {
+  it("reads only the two public trend functions and no table", async () => {
+    const chain = {
+      eq: () => chain,
+      range: async () => ({ data: [raw()], error: null }),
+      limit: async () => ({ data: [], error: null }),
+    };
+    const rpc = vi.fn(() => chain);
+    const from = vi.fn();
+    const client = { rpc, from } as unknown as SupabaseClient;
+    const subject = await readSubject("topic", "ai-chips", { store: databaseStore(client) });
+    expect(subject?.label).toBe("AI chips");
+    expect(from).not.toHaveBeenCalled();
+    expect(rpc.mock.calls.map((c: unknown[]) => c[0]).sort()).toEqual(["news_public_coverage", "news_public_trends"]);
   });
 });
