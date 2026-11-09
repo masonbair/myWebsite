@@ -1,11 +1,11 @@
 import { Directory, File } from 'expo-file-system';
 import { BUCKET, RPC, daylioPath, type AddDaylioExportArgs } from '../../../../shared/collector-contract';
 import { readJson, writeJson } from '../lib/store';
+import { DAYLIO_FOLDER_KEY } from '../lib/storageKeys';
 import { signedIn, supabase } from '../lib/supabase';
 
 export type DaylioJobResult = { uploaded: number; skipped: number; error: string | null };
 
-const FOLDER_KEY = 'daylio-folder-uri';
 const UPLOADED_KEY = 'daylio-uploaded';
 // Matches the 25 MB limit on the daylio bucket.
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -29,7 +29,7 @@ function contentType(name: string): string | null {
 export async function pickDaylioFolder(): Promise<boolean> {
   try {
     const folder = await Directory.pickDirectoryAsync();
-    await writeJson(FOLDER_KEY, folder.uri);
+    await writeJson(DAYLIO_FOLDER_KEY, folder.uri);
     return true;
   } catch {
     return false;
@@ -41,7 +41,7 @@ export async function runDaylioJob(): Promise<DaylioJobResult> {
   const result: DaylioJobResult = { uploaded: 0, skipped: 0, error: null };
   if (!(await signedIn())) return { ...result, error: 'signed-out' };
 
-  const folderUri = await readJson<string | null>(FOLDER_KEY, null);
+  const folderUri = await readJson<string | null>(DAYLIO_FOLDER_KEY, null);
   if (!folderUri) return { ...result, error: 'no-folder' };
 
   let entries: (File | Directory)[];

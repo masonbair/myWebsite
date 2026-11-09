@@ -3,6 +3,7 @@ import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 import { TABLE } from '../../../../shared/collector-contract';
 import { readJson, writeJson } from '../lib/store';
+import { JOB_LAST_OK_KEY } from '../lib/storageKeys';
 import { signedIn, supabase } from '../lib/supabase';
 import type { Point } from './nearestPlace';
 import { loadPrivatePlaces } from './privatePlaces';
@@ -10,7 +11,6 @@ import { toPlaceRow, toReport, type PlaceReport } from './toReport';
 
 export const PLACE_TASK = 'collector-place';
 const LAST_SENT_KEY = 'place-last-sent';
-const LAST_OK_KEY = 'job-last-ok:place';
 // A repeat of the same place this often keeps "last seen" fresh on the site.
 const RESEND_MS = 6 * 60 * 60_000;
 
@@ -40,7 +40,7 @@ export async function runPlaceTask(fixes: Fix[], now = Date.now(), timeZone: str
     if (error) return;
     await writeJson(LAST_SENT_KEY, { report, at: now } satisfies LastSent);
   }
-  await writeJson(LAST_OK_KEY, now);
+  await writeJson(JOB_LAST_OK_KEY.place, now);
 }
 
 async function startPlaceTask(): Promise<void> {

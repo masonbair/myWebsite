@@ -20,10 +20,10 @@ class BatteryStatusModule : Module() {
       power.isIgnoringBatteryOptimizations(context.packageName)
     }
 
-    // 0 means unknown: getAppStandbyBucket needs API 28.
+    // -1 means Android is older than 9 (API 28), which has no standby buckets.
     Function("standbyBucket") {
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-        0
+        -1
       } else {
         val usage = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         usage.appStandbyBucket

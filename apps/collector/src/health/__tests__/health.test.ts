@@ -27,7 +27,7 @@ const good: HealthInput = {
   now: NOW,
 };
 
-const find = (input: HealthInput, key: string) => evaluateHealth(input).find((i) => i.key === key);
+const find = (input: HealthInput, key: string, dev = true) => evaluateHealth(input, dev).find((i) => i.key === key);
 
 describe('evaluateHealth', () => {
   it('marks every item ok when all is well', () => {
@@ -48,11 +48,23 @@ describe('evaluateHealth', () => {
   it.each([45, 50])('flags standby bucket %i', (bucket) => {
     const item = find({ ...good, standbyBucket: bucket }, 'standby');
     expect(item).toMatchObject({ ok: false, fix: 'app-settings' });
-    expect(item?.label).toMatch(/Samsung has put the app to sleep/);
+    expect(item?.label).toMatch(/limited the app in the background/);
   });
 
-  it.each([0, 5, 10, 20, 30, 40])('accepts standby bucket %i', (bucket) => {
+  it.each([-1, 0, 5, 10, 20, 30, 40])('accepts standby bucket %i', (bucket) => {
     expect(find({ ...good, standbyBucket: bucket }, 'standby')?.ok).toBe(true);
+  });
+
+  it('fails closed outside dev when the battery setting cannot be read', () => {
+    const input = { ...good, batteryUnrestricted: null };
+    expect(find(input, 'battery', false)).toMatchObject({ ok: false, fix: 'battery-optimization', label: "Can't read the battery setting" });
+    expect(find(input, 'battery', true)?.ok).toBe(true);
+  });
+
+  it('fails closed outside dev when the standby bucket cannot be read', () => {
+    const input = { ...good, standbyBucket: null };
+    expect(find(input, 'standby', false)).toMatchObject({ ok: false, fix: 'app-settings' });
+    expect(find(input, 'standby', true)?.ok).toBe(true);
   });
 
   it('asks for all photos when access is limited', () => {
@@ -134,13 +146,26 @@ describe('collectHealth', () => {
     expect((await collectHealth(NOW)).photosAccess).toBe('limited');
   });
 
+  it('reports unknown (null) when the native module is missing', async () => {
+    jest.mocked(Battery.isIgnoringBatteryOptimizations).mockReturnValue(null);
+    jest.mocked(Battery.standbyBucket).mockReturnValue(null);
+    const input = await collectHealth(NOW);
+    expect(input.batteryUnrestricted).toBeNull();
+    expect(input.standbyBucket).toBeNull();
+  });
+
+  it('prefers limited when the app reports limited but not granted', async () => {
+    jest.mocked(MediaLibrary.getPermissionsAsync).mockResolvedValue({ granted: false, accessPrivileges: 'limited' } as never);
+    expect((await collectHealth(NOW)).photosAccess).toBe('limited');
+  });
+
   it('does not crash when a native check throws', async () => {
     jest.mocked(Battery.standbyBucket).mockImplementation(() => {
       throw new Error('boom');
     });
     jest.mocked(Location.getBackgroundPermissionsAsync).mockRejectedValue(new Error('boom'));
     const input = await collectHealth(NOW);
-    expect(input.standbyBucket).toBe(0);
+    expect(input.standbyBucket).toBeNull();
     expect(input.backgroundLocation).toBe('undetermined');
   });
 });

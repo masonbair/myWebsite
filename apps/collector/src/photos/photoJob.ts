@@ -2,6 +2,7 @@ import { File } from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library/legacy';
 import { BUCKET, PHOTO_PREFIX, RPC, type AddPhotoArgs } from '../../../../shared/collector-contract';
 import { readJson, writeJson } from '../lib/store';
+import { JOB_LAST_OK_KEY } from '../lib/storageKeys';
 import { signedIn, supabase } from '../lib/supabase';
 import { cleanPhoto } from './cleanPhoto';
 
@@ -9,7 +10,6 @@ export const ALBUM_NAME = 'Website';
 export type PhotoJobResult = { uploaded: number; skipped: number; error: string | null };
 
 const UPLOADED_KEY = 'photos-uploaded';
-const LAST_OK_KEY = 'job-last-ok:photos';
 // Older ids fall off, so a photo that old is re-cleaned and re-uploaded (a no-op server side); the album is expected to stay small.
 const KEEP_IDS = 2000;
 const MAX_UPLOADS_PER_RUN = 20;
@@ -112,6 +112,6 @@ export async function runPhotoJob(now = Date.now()): Promise<PhotoJobResult> {
   }
 
   if (!result.error && result.uploaded === 0 && cleanFailures > 0) result.error = 'clean-failed';
-  if (!result.error) await writeJson(LAST_OK_KEY, now);
+  if (!result.error) await writeJson(JOB_LAST_OK_KEY.photos, now);
   return result;
 }

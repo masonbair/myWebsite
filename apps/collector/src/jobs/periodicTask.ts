@@ -2,10 +2,10 @@ import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 import { runDaylioJob } from '../daylio/daylioJob';
 import { writeJson } from '../lib/store';
+import { JOB_LAST_OK_KEY } from '../lib/storageKeys';
 import { runPhotoJob } from '../photos/photoJob';
 
 export const PERIODIC_TASK = 'collector-periodic';
-const DAYLIO_LAST_OK_KEY = 'job-last-ok:daylio';
 
 /** Runs the photo job, then the Daylio job. One failing never stops the other. */
 export async function runPeriodic(now = Date.now()): Promise<void> {
@@ -16,7 +16,7 @@ export async function runPeriodic(now = Date.now()): Promise<void> {
   }
   try {
     const result = await runDaylioJob();
-    if (!result.error) await writeJson(DAYLIO_LAST_OK_KEY, now);
+    if (!result.error) await writeJson(JOB_LAST_OK_KEY.daylio, now);
   } catch {
     // Same: no new last-ok time.
   }
