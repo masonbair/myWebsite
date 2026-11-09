@@ -27,7 +27,7 @@ export function PhonePhotoCard({ assetId, takenAt, hidden }: { assetId: string; 
 
   return (
     <li className="flex flex-col gap-2">
-      <div className="relative aspect-square overflow-hidden rounded-2xl bg-ink/5 ring-1 ring-ink/5">
+      <div className="relative aspect-square overflow-hidden rounded-2xl border-[2.5px] border-line bg-ink/5 shadow-sticker-sm">
         <Image
           src={`/hub/photos/${assetId}`}
           loader={collectorPhotoLoader}
@@ -37,7 +37,7 @@ export function PhonePhotoCard({ assetId, takenAt, hidden }: { assetId: string; 
           className={`object-cover transition-opacity duration-300 ease-spring ${hidden ? "opacity-35 grayscale" : ""}`}
         />
         {hidden && (
-          <span className="absolute top-2 left-2 rounded-full bg-night/70 px-2.5 py-0.5 text-xs font-medium text-snow">Hidden</span>
+          <span className="absolute top-2 left-2 rounded-full border-2 border-night bg-snow px-2.5 py-0.5 text-xs font-bold text-night">Hidden</span>
         )}
       </div>
       <div className="flex items-center justify-between gap-1 px-0.5">
