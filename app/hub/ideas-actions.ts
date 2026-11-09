@@ -1,12 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { isItemId } from "@/lib/hub/format";
 import { masonStore } from "@/lib/hub/mason-store";
 import type { HubStore, Item } from "@/lib/hub/types";
 import { MEMO_FILE } from "@/lib/hub/memo";
-import { disconnectFromGoogle, SETTINGS_PATH } from "@/lib/ideas/google";
+import { disconnectFromGoogle, GoogleError, SETTINGS_PATH } from "@/lib/ideas/google";
 import { IDEA_LABEL, isIdea } from "@/lib/ideas/read";
 import { MAX_REVIEW_NOTE, recordingFile } from "@/lib/ideas/types";
 import { serviceClient, sessionClient } from "@/lib/supabase/server";
@@ -142,6 +143,14 @@ export async function retryDetection(ref: string): Promise<void> {
 /** Revokes the Google token, blanks it in Vault and marks Google disconnected; the Ideas calendar stays in Mason's account. */
 export async function disconnectGoogle(): Promise<void> {
   await requireOwner();
-  await disconnectFromGoogle(serviceClient(), (input, init) => fetch(input, init));
+  let revokeFailed = false;
+  try {
+    await disconnectFromGoogle(serviceClient(), (input, init) => fetch(input, init));
+  } catch (error) {
+    if (!(error instanceof GoogleError && error.step === "revoke")) throw error;
+    revokeFailed = true;
+  }
   revalidatePath(SETTINGS_PATH);
+  // redirect() throws, so it stays outside the try.
+  if (revokeFailed) redirect(`${SETTINGS_PATH}?google=revoke-failed`);
 }

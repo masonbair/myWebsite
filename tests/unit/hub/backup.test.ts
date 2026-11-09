@@ -153,14 +153,23 @@ describe("hub-restore guards", () => {
   });
 });
 
-// Run with: HUB_TEST_DB_URL=1 HUB_TEST_SUPABASE_URL=http://127.0.0.1:54321 HUB_TEST_SERVICE_KEY=<SERVICE_ROLE_KEY> (from `supabase status -o env`).
+// Run with: HUB_TEST_DB_URL=1 HUB_TEST_SUPABASE_URL=http://127.0.0.1:54321 HUB_TEST_SERVICE_KEY=<SERVICE_ROLE_KEY> (from `supabase status -o env`)
+// HUB_TEST_PG_URL=postgresql://postgres:postgres@127.0.0.1:54322 (the same stack's Postgres, no database name; a full postgres HUB_TEST_DB_URL also works).
 // The round trip restores into a scratch database it creates and drops in the local Postgres, never the shared one.
-const enabled = Boolean(process.env.HUB_TEST_DB_URL);
 const apiUrl = process.env.HUB_TEST_SUPABASE_URL ?? "";
 const serviceKey = process.env.HUB_TEST_SERVICE_KEY ?? "";
-const LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322";
-if (enabled && !/^(127\.0\.0\.1|localhost)$/.test(new URL(apiUrl || "http://invalid").hostname)) {
+const dbUrlVar = process.env.HUB_TEST_DB_URL ?? "";
+// No default port: a guessed 54322 once reached another worktree's stack.
+const pgUrl = (process.env.HUB_TEST_PG_URL || (/^postgres(ql)?:\/\//.test(dbUrlVar) ? dbUrlVar : "")).replace(/\/+$/, "");
+const enabled = Boolean(dbUrlVar) && Boolean(pgUrl);
+// The scratch database name is appended, so any database already in the URL is dropped.
+const LOCAL_DB = pgUrl ? pgUrl.replace(/^(postgres(?:ql)?:\/\/[^/]+).*$/, "$1") : "";
+const isLocal = (url: string) => /^(127\.0\.0\.1|localhost)$/.test(new URL(url || "http://invalid").hostname);
+if (enabled && !isLocal(apiUrl)) {
   throw new Error("HUB_TEST_SUPABASE_URL must be a local Supabase (127.0.0.1 or localhost)");
+}
+if (enabled && !isLocal(pgUrl)) {
+  throw new Error("HUB_TEST_PG_URL must be a local Postgres (127.0.0.1 or localhost)");
 }
 
 // Just enough of Supabase's auth schema for the hub migrations to apply in a bare database.

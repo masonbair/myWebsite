@@ -26,13 +26,33 @@ function fakeService() {
             maybeSingle: async () => ({ data: { ...row }, error: null }),
           }),
         }),
-        update: (cols: Row) => ({
-          eq: async () => {
-            updates.push(cols);
-            Object.assign(row, cols);
-            return { error: null };
-          },
-        }),
+        update: (cols: Row) => {
+          const filters: [op: "eq" | "gt", column: string, value: unknown][] = [];
+          const run = () => {
+            const hit = filters.every(([op, column, value]) => (op === "eq" ? row[column] === value : String(row[column] ?? "") > String(value)));
+            if (hit) {
+              updates.push(cols);
+              Object.assign(row, cols);
+            }
+            return hit;
+          };
+          const chain = {
+            eq(column: string, value: unknown) {
+              filters.push(["eq", column, value]);
+              return chain;
+            },
+            gt(column: string, value: unknown) {
+              filters.push(["gt", column, value]);
+              return chain;
+            },
+            select: async () => ({ data: run() ? [{ id: true }] : [], error: null }),
+            then(resolve: (v: { error: null }) => unknown, reject?: (e: unknown) => unknown) {
+              run();
+              return Promise.resolve({ error: null }).then(resolve, reject);
+            },
+          };
+          return chain;
+        },
       };
     },
     rpc,
@@ -76,7 +96,8 @@ const requireOwner = vi.fn();
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
+const redirect = vi.fn();
+vi.mock("next/navigation", () => ({ redirect: (to: string) => redirect(to) }));
 vi.mock("@/lib/auth/require-owner", () => ({ checkOwner: () => checkOwner(), requireOwner: () => requireOwner() }));
 vi.mock("@/lib/hub/mason-store", () => ({ masonStore: async () => ({}) }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -151,6 +172,7 @@ beforeEach(() => {
   checkOwner.mockResolvedValue({ ok: true, userId: "owner" });
   requireOwner.mockReset();
   requireOwner.mockResolvedValue({ userId: "owner" });
+  redirect.mockReset();
 });
 
 afterEach(() => {
@@ -258,6 +280,15 @@ describe("callback route", () => {
     expectStateCleared(res);
   });
 
+  it("lets a state be used once: a replay of the same callback answers 400", async () => {
+    const first = await callback(callbackRequest({ state: STATE, code: CODE }));
+    expect(first.headers.get("location")).toBe(`${ORIGIN}/hub/ideas/settings?google=connected`);
+    fetchFn.mockClear();
+    const replay = await callback(callbackRequest({ state: STATE, code: CODE }));
+    expect(replay.status).toBe(400);
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
   it("sends a refusal on Google's screen back to settings with a plain message", async () => {
     const res = await callback(callbackRequest({ state: STATE, error: "access_denied" }));
     expect(res.headers.get("location")).toBe(`${ORIGIN}/hub/ideas/settings?google=denied`);
@@ -307,6 +338,15 @@ describe("callback route", () => {
     expect(row).toMatchObject({ connected: true, calendar_id: "cal-1@group.calendar.google.com" });
   });
 
+  it("stores no token and stays not connected when making the calendar fails", async () => {
+    replies.calendar = () => ({ status: 500, body: { error: { status: "INTERNAL" } } });
+    const res = await callback(callbackRequest({ state: STATE, code: CODE }));
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/hub/ideas/settings?google=failed`);
+    expect(setCalls()).toEqual([]);
+    expect(token).toBeNull();
+    expect(row).toMatchObject({ connected: false, calendar_id: null });
+  });
+
   it("reports a failed exchange without storing anything", async () => {
     replies.token = () => ({ status: 400, body: { error: "invalid_grant" } });
     const res = await callback(callbackRequest({ state: STATE, code: CODE }));
@@ -336,15 +376,38 @@ describe("googleFromVault", () => {
     expect(await google.googleFromVault(fakeService() as never, fetchFn)).toBeNull();
   });
 
+  async function connectedAccess() {
+    const access = await google.googleFromVault(fakeService() as never, fetchFn);
+    if (access === null || access === "disconnected") throw new Error("expected a calendar");
+    return access;
+  }
+
+  beforeEach(() => {
+    Object.assign(row, { connected: true, calendar_id: "cal/1@x" });
+  });
+
   it("is disconnected when Vault holds no token", async () => {
+    expect(await google.googleFromVault(fakeService() as never, fetchFn)).toBe("disconnected");
+  });
+
+  it("is disconnected when the row says not connected, even with a token in Vault", async () => {
+    token = REFRESH;
+    row.connected = false;
+    expect(await google.googleFromVault(fakeService() as never, fetchFn)).toBe("disconnected");
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("is disconnected when no calendar id is saved", async () => {
+    token = REFRESH;
+    row.calendar_id = null;
     expect(await google.googleFromVault(fakeService() as never, fetchFn)).toBe("disconnected");
   });
 
   it("refreshes one access token per run and inserts and patches events on the given calendar", async () => {
     token = REFRESH;
-    const cal = await google.googleFromVault(fakeService() as never, fetchFn);
-    if (cal === null || cal === "disconnected") throw new Error("expected a calendar");
-    expect(await cal.insertEvent("cal/1@x", event)).toBe("ev-1");
+    const { calendar: cal, calendarId } = await connectedAccess();
+    expect(calendarId).toBe("cal/1@x");
+    expect(await cal.insertEvent(calendarId, event)).toBe("ev-1");
     await cal.patchEvent("cal/1@x", "ev 1", { summary: "Idea (closed): a thing" });
     const urls = calledUrls();
     expect(urls.filter((u) => u === "https://oauth2.googleapis.com/token")).toHaveLength(1);
@@ -359,16 +422,14 @@ describe("googleFromVault", () => {
   it("throws GoogleRevoked when the token endpoint says invalid_grant", async () => {
     token = REFRESH;
     replies.refresh = () => ({ status: 400, body: { error: "invalid_grant", error_description: "Token has been expired or revoked." } });
-    const cal = await google.googleFromVault(fakeService() as never, fetchFn);
-    if (cal === null || cal === "disconnected") throw new Error("expected a calendar");
+    const { calendar: cal } = await connectedAccess();
     await expect(cal.insertEvent("cal-1", event)).rejects.toBeInstanceOf(google.GoogleRevoked);
   });
 
   it("throws a plain GoogleError, not GoogleRevoked, for other failures", async () => {
     token = REFRESH;
     replies.event = () => ({ status: 500, body: { error: { code: 500, status: "INTERNAL" } } });
-    const cal = await google.googleFromVault(fakeService() as never, fetchFn);
-    if (cal === null || cal === "disconnected") throw new Error("expected a calendar");
+    const { calendar: cal } = await connectedAccess();
     const failure = await cal.insertEvent("cal-1", event).catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(google.GoogleError);
     expect(failure).not.toBeInstanceOf(google.GoogleRevoked);
@@ -399,17 +460,23 @@ describe("disconnectGoogle", () => {
     expect(Date.now() - Date.parse(String(row.disconnected_at))).toBeLessThan(5_000);
   });
 
-  it("still blanks when Google says the token is already dead (400)", async () => {
-    replies.revoke = () => ({ status: 400, body: { error: "invalid_token" } });
+  it.each(["invalid_token", "invalid_grant"])("still blanks when Google says the token is already dead (400 %s)", async (code) => {
+    replies.revoke = () => ({ status: 400, body: { error: code } });
     await disconnectGoogle();
     expect(setCalls()).toEqual([["ideas_google_token_set", { p_token: "" }]]);
     expect(row.connected).toBe(false);
+    expect(redirect).not.toHaveBeenCalled();
   });
 
-  it("keeps the token when Google cannot be reached, so it can still be revoked later", async () => {
-    replies.revoke = () => ({ status: 503, body: {} });
-    await expect(disconnectGoogle()).rejects.toThrow(/revoke/);
+  it.each([
+    ["Google cannot be reached", { status: 503, body: {} }],
+    ["Google refuses for another reason", { status: 400, body: { error: "invalid_request" } }],
+  ])("keeps the token and says so when %s", async (_name, reply) => {
+    replies.revoke = () => reply;
+    await disconnectGoogle();
+    expect(redirect).toHaveBeenCalledWith("/hub/ideas/settings?google=revoke-failed");
     expect(setCalls()).toEqual([]);
+    expect(token).toBe(REFRESH);
     expect(row.connected).toBe(true);
   });
 });
@@ -437,12 +504,15 @@ describe("secrets in logs", () => {
     await callback(callbackRequest({ state: STATE, code: CODE }));
 
     token = REFRESH;
+    Object.assign(row, { connected: true, calendar_id: "c" });
     replies.refresh = () => ({ status: 400, body: { error: "invalid_grant" } });
-    const cal = await google.googleFromVault(fakeService() as never, fetchFn);
-    if (cal !== null && cal !== "disconnected") await cal.patchEvent("c", "e", {}).catch((e: unknown) => console.error(e));
+    const access = await google.googleFromVault(fakeService() as never, fetchFn);
+    if (access === null || access === "disconnected") throw new Error("expected a calendar");
+    await access.calendar.patchEvent("c", "e", {}).catch((e: unknown) => console.error(e));
 
     replies.revoke = () => ({ status: 503, body: { error: `echo ${REFRESH}` } });
     await disconnectGoogle().catch((e: unknown) => console.error(e));
+    await google.disconnectFromGoogle(fakeService() as never, fetchFn).catch((e: unknown) => console.error(e));
 
     expect(logged.length).toBeGreaterThan(0);
     for (const line of logged) {

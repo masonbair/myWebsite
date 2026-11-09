@@ -206,56 +206,78 @@ export async function clearState(service: SupabaseClient): Promise<void> {
   await updateGoogleRow(service, { oauth_state: null, oauth_state_at: null });
 }
 
-/** True when the callback's state equals both the saved one and the cookie, and the saved one is under 10 minutes old. */
-export function stateIsValid(row: Pick<GoogleRow, "oauth_state" | "oauth_state_at">, fromUrl: string | null, fromCookie: string | undefined, now: Date): boolean {
-  const savedAt = row.oauth_state_at ? Date.parse(row.oauth_state_at) : NaN;
-  const fresh = Number.isFinite(savedAt) && now.getTime() - savedAt < STATE_MAX_AGE_MS && savedAt <= now.getTime() + 60_000;
-  const matchesSaved = sameState(fromUrl, row.oauth_state);
-  const matchesCookie = sameState(fromUrl, fromCookie);
-  return fresh && matchesSaved && matchesCookie;
+const STATE_SHAPE = /^[A-Za-z0-9_-]{43}$/;
+
+/** Clears the saved state in one statement; true only when it equalled `presented` and was under 10 minutes old. */
+export async function claimState(service: SupabaseClient, presented: string | null, now: Date): Promise<boolean> {
+  let claimed = false;
+  if (presented && STATE_SHAPE.test(presented)) {
+    const { data, error } = await service
+      .from("idea_google")
+      .update({ oauth_state: null, oauth_state_at: null })
+      .eq("id", true)
+      .eq("oauth_state", presented)
+      .gt("oauth_state_at", new Date(now.getTime() - STATE_MAX_AGE_MS).toISOString())
+      .select("id");
+    if (error) throw new Error(`could not claim the oauth state: ${error.code ?? "unknown"}`);
+    claimed = (data ?? []).length === 1;
+  }
+  // A state that did not match is still single use: clear whatever is saved.
+  if (!claimed) await clearState(service);
+  return claimed;
 }
 
-/** Stores the refresh token in Vault and makes the Ideas calendar unless one is saved; stores nothing without a refresh token. */
+/** Makes the Ideas calendar unless one is saved, then stores the refresh token and marks Google connected; stores nothing without a refresh token. */
 export async function connectGoogle(
   service: SupabaseClient,
   opts: { code: string; redirectUri: string; config: GoogleConfig; fetchFn: FetchFn },
 ): Promise<"connected" | "no-refresh-token"> {
   const { accessToken, refreshToken } = await exchangeCode(opts.code, opts.redirectUri, opts.config, opts.fetchFn);
   if (!refreshToken) return "no-refresh-token";
-  await writeToken(service, refreshToken);
-  let calendarId = (await readGoogleRow(service)).calendar_id;
-  if (!calendarId) {
+  // Calendar first: a failure here must leave no live token in Vault behind a "Not connected" page.
+  if (!(await readGoogleRow(service)).calendar_id) {
     const created = await calendarCall(opts.fetchFn, "calendar create", accessToken, "POST", CALENDARS_URL, { summary: CALENDAR_NAME });
     if (typeof created.id !== "string") throw new GoogleError("calendar create", 200, "no_calendar_id");
-    calendarId = created.id;
+    await updateGoogleRow(service, { calendar_id: created.id });
   }
-  await updateGoogleRow(service, { calendar_id: calendarId, connected: true, connected_at: new Date().toISOString(), disconnected_at: null });
+  await writeToken(service, refreshToken);
+  await updateGoogleRow(service, { connected: true, connected_at: new Date().toISOString(), disconnected_at: null });
   return "connected";
 }
+
+const DEAD_TOKEN_CODES = new Set(["invalid_token", "invalid_grant"]);
 
 /** Revokes the token at Google, then blanks Vault and marks Google disconnected; the calendar id stays for a later reconnect. */
 export async function disconnectFromGoogle(service: SupabaseClient, fetchFn: FetchFn): Promise<void> {
   const token = await readToken(service);
   if (token) {
     const res = await postForm(fetchFn, REVOKE_URL, { token });
-    // 400 means Google already considers the token dead, which is the goal.
-    if (!res.ok && res.status !== 400) throw new GoogleError("revoke", res.status, await errorCode(res));
+    if (!res.ok) {
+      const code = await errorCode(res);
+      // Only these codes mean Google already considers the token dead, which is the goal.
+      if (!(res.status === 400 && code !== null && DEAD_TOKEN_CODES.has(code))) throw new GoogleError("revoke", res.status, code);
+    }
   }
   await writeToken(service, "");
   await updateGoogleRow(service, { connected: false, disconnected_at: new Date().toISOString() });
 }
 
-/** Calendar client for one job run (one access token, memory only); null when keys are unset, "disconnected" when Vault is blank. */
-export async function googleFromVault(service: SupabaseClient, fetchFn: FetchFn): Promise<GoogleCalendar | "disconnected" | null> {
+export type GoogleAccess = { calendar: GoogleCalendar; calendarId: string };
+
+/** Calendar client and the Ideas calendar id for one job run (one access token, memory only); null when keys are unset. */
+export async function googleFromVault(service: SupabaseClient, fetchFn: FetchFn): Promise<GoogleAccess | "disconnected" | null> {
   const config = googleConfig();
   if (!config) return null;
+  const row = await readGoogleRow(service);
+  if (!row.connected || !row.calendar_id) return "disconnected";
   const refreshToken = await readToken(service);
   if (!refreshToken) return "disconnected";
+  const calendarId = row.calendar_id;
 
   let accessToken: Promise<string> | null = null;
   const access = () => (accessToken ??= refreshAccessToken(refreshToken, config, fetchFn));
 
-  return {
+  const calendar: GoogleCalendar = {
     async insertEvent(calendarId, ev) {
       const created = await calendarCall(fetchFn, "event insert", await access(), "POST", eventsUrl(calendarId), ev);
       if (typeof created.id !== "string") throw new GoogleError("event insert", 200, "no_event_id");
@@ -265,4 +287,5 @@ export async function googleFromVault(service: SupabaseClient, fetchFn: FetchFn)
       await calendarCall(fetchFn, "event patch", await access(), "PATCH", eventsUrl(calendarId, eventId), patch);
     },
   };
+  return { calendar, calendarId };
 }

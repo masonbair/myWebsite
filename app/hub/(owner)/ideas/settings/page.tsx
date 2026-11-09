@@ -22,10 +22,11 @@ const MESSAGES: Record<string, { text: string; ok: boolean }> = {
   },
   "not-configured": { text: "Google is not set up on this site yet.", ok: false },
   failed: { text: "Connecting to Google did not work. Try again in a minute.", ok: false },
+  "revoke-failed": { text: "Google did not answer. Google is still connected. Try Disconnect again later.", ok: false },
 };
 
 function day(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" });
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: process.env.HUB_TIME_ZONE || "America/Denver" });
 }
 
 export default async function IdeasSettingsPage({ searchParams }: PageProps<"/hub/ideas/settings">) {

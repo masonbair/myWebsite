@@ -70,7 +70,7 @@ function hubServer(port: number, name: "hub" | "hub-live", workerLive: boolean) 
       HUB_WORKER_TOKEN: HUB_E2E_WORKER_TOKEN,
       MEMO_UPLOAD_TOKEN: HUB_E2E_MEMO_TOKEN,
       HUB_AGENT_TOKEN: HUB_E2E_AGENT_TOKEN,
-      // Fake Google keys: the settings page shows Connect, and specs stub accounts.google.com so nothing reaches Google.
+      // Fake Google keys so the settings page shows Connect; specs read the start redirect without following it, so nothing reaches Google.
       GOOGLE_OAUTH_CLIENT_ID: "e2e-client.apps.googleusercontent.com",
       GOOGLE_OAUTH_CLIENT_SECRET: "e2e-client-secret",
       IDEAS_MONTHLY_BUDGET_USD: "25",
