@@ -54,7 +54,7 @@ He uses it in two ways **(Mason)**:
 ## Constraints
 
 - Same stack as the hub: Next.js 16 on Vercel, Supabase project `masonbair` (ref `wsivoyqhtmpnxjakowpi`), Vercel Blob (private, OIDC, `BLOB_STORE_ID`), pg_cron and pg_net with Vault secrets, ntfy.
-- Free or nearly free, except the Claude API, which is paid. Expected cost is a few dollars a month plus a one-time import (see "Costs"). A monthly cap stops spending.
+- Free or nearly free. The Claude API is paid, but Mason's Claude Ultra plan includes $200 a month of Claude API credits in his linked Console org, "Mason's Individual Org" (credits do not roll over; https://platform.claude.com/docs/en/about-claude/api-credits-for-subscribers). Expected use is a few dollars a month plus a one-time import, well inside the credits. A monthly cap stops spending. **(Mason)**
 - Supabase free plan: 500 MB database. Raw emails are large, so they go to Blob, not Postgres.
 - Hub rules carry over: owner-only row-level security (each row readable only by Mason's login), no deletes on source data, migrations reviewed for security and applied with `supabase db push` only after local tests pass. Mason reviews every migration before it reaches the live database.
 - The builder never writes Vercel env vars or Vault secrets. Mason adds them; the builder lists them in `docs/hub-setup.md`.
@@ -84,13 +84,13 @@ pg_cron every 30 min ──pg_net──▶ /api/hub/events/news ─────�
 
 ### Dependency on project 4 **(Mason)**
 
-Intake is forwarding. Mason sets a Gmail filter that auto-forwards the six newsletters to an address on his domain, for example `news@masonbair.com`. That needs email receiving on the domain, which is project 4. Project 4 is not built.
+Intake is forwarding. Mason sets a Gmail filter that auto-forwards the six newsletters to an address on his domain, for example `news@masonbair.com`; the chosen address is `news@in.masonbair.com` (below). That needs email receiving on the domain, which is project 4. Project 4 is not built.
 
 ### Minimal inbound piece if project 4 is not done **(Coordinator's call)**
 
 Build only what this project needs, in a way project 4 can keep:
 
-- **Resend inbound** receives mail and posts each message to a webhook on the site. Use a **subdomain** for it, for example `news@in.masonbair.com`. A subdomain gets its own mail records (MX records, the DNS entries that say which server takes a domain's mail), so the main domain's IONOS mail records stay untouched. This avoids the risky DNS move that project 4 must plan carefully (see its "Watch out" section). **(Spec writer's call)**
+- **Resend inbound** receives mail and posts each message to a webhook on the site. Use a **subdomain**: the address is `news@in.masonbair.com` **(Mason, approved 2026-11-09)**. A subdomain gets its own mail records (MX records, the DNS entries that say which server takes a domain's mail), so the main domain's IONOS mail records stay untouched. This avoids the risky DNS move that project 4 must plan carefully (see its "Watch out" section).
 - Note the earlier spec chose Cloudflare Email Routing for receiving. Cloudflare can only forward to another inbox or run a Cloudflare Worker; it cannot post to the site's webhook by itself. Resend inbound posts directly. When project 4 is built, it decides whether the main domain uses Resend too. Either way, this project only needs "a message to the news address reaches `/api/news/inbound` with the raw email".
 - **Webhook check:** verify Resend's signature on every call (secret `RESEND_INBOUND_SECRET`). Unsigned or wrongly signed calls get 401 and nothing is stored.
 - **Sender check:** a message is processed only if it came through Mason's Gmail forwarding and its original sender matches one of the six newsletters' known sender addresses (kept in a `news_sources` table). Anything else is stored as `quarantined`: kept, never extracted, visible on the private news page.
@@ -222,8 +222,8 @@ Making it visible:
 - Every Claude call stores model, input, cached and output tokens, and dollar cost (from a price table in code) in a `news_usage` table.
 - The private news page shows cost this month, last month, and per issue.
 - The connector has a tool for it (below).
-- **Cap:** `NEWS_MONTHLY_BUDGET_USD` (default 10). When month-to-date cost reaches it, extraction pauses, issues keep arriving and wait, and ntfy tells Mason once. Nothing is lost; raising the cap or the new month resumes it.
-- The backfill has its own estimate shown before it starts, and Mason confirms it.
+- **Cap:** `NEWS_MONTHLY_BUDGET_USD` (default 25) **(Mason)**. When month-to-date cost reaches it, extraction pauses, issues keep arriving and wait, and ntfy tells Mason once. Nothing is lost; raising the cap or the new month resumes it.
+- The backfill has its own estimate shown before it starts, and Mason confirms it. **(Mason: the ~$40 import is approved in principle, but the script still shows the estimate and waits for his explicit go when it runs.)**
 
 ---
 
@@ -320,9 +320,9 @@ It does not need to be a reader. Claude is the main way in.
 
 ## Env vars and secrets (Mason adds them)
 
-- `ANTHROPIC_API_KEY`: Claude API key, Vercel Production only.
+- `ANTHROPIC_API_KEY`: Claude API key, Vercel Production only. **It must be made in "Mason's Individual Org"**, the Console org linked to his Claude Ultra plan, so usage draws from the monthly credits. Mason creates and adds it himself. **(Mason)**
 - `RESEND_INBOUND_SECRET`: webhook signing secret (if Resend inbound is used).
-- `NEWS_MONTHLY_BUDGET_USD`: optional, default 10.
+- `NEWS_MONTHLY_BUDGET_USD`: optional, default 25.
 - Resend account and the inbound subdomain's DNS records at IONOS (Mason adds the records; the builder lists them).
 - No new Vault secret: the `news` event reuses `hub_events_url` and `hub_events_token`.
 
@@ -358,8 +358,9 @@ It does not need to be a reader. Claude is the main way in.
 
 ## Open questions for Mason
 
-- **Monthly budget:** is a $10 cap right, and is about $40 for the one-time import OK (if Sonnet is chosen)?
-- **Subdomain address:** is `news@in.masonbair.com` fine, or must it be on the main domain (which means doing project 4's DNS move first)?
+None open. Answered 2026-11-09 **(Mason)**:
+- **Budget:** API route stays, paid from his Claude Ultra API credits ($200 a month). Monthly cap $25; at the cap extraction pauses and no mail is lost. The ~$40 one-time import is approved in principle; it still shows its estimate and waits for his go at run time.
+- **Address:** `news@in.masonbair.com` on the subdomain is approved.
 
 ## Builder check (2026-11-09)
 
@@ -372,4 +373,4 @@ A fresh builder read this doc and asked six questions. Sorted:
 | Companies without a verified ticker on the public page? | Spec writer's call | Shown by name, ticker hidden. See section 3. |
 | Archive links whose address holds headline words? | Spec writer's call | Allowed as link target; link text is name and date. See section 8. |
 | Who approves re-running extraction, under what budget? | Spec writer's call | Mason confirms an estimate; own one-time budget. See "Costs". |
-| Budget, subdomain, and when past emails arrive | Mason's (first two); Spec writer's call (timing) | Budget and subdomain stay in "Open questions for Mason". Takeout export moves to step 0. |
+| Budget, subdomain, and when past emails arrive | Mason's (first two); Spec writer's call (timing) | Mason answered both (see "Open questions for Mason"). Takeout export moves to step 0. |
