@@ -101,7 +101,7 @@ claude mcp add --transport http hub-local http://localhost:3000/api/mcp/mcp --he
 Until HiNote memos move to the hub, ideas spoken in Mac HiNote recordings reach the Ideas Lab through a small read-only job. The HiNote flow itself (hinote-sync, then todo-hub, then Todoist) is not touched.
 
 - What it does: every 15 minutes `scripts/ideas-recording-sync.ts` lists `~/HiNotes/transcripts/*.txt` (hinote-sync's folder: `home = ~/HiNotes`, transcripts named `<recording stem>.txt`) and posts each new one to `POST /api/hub/ideas/recording` as `{ file: <stem>, recorded: <file mtime, local>, transcript }`. The hub keeps one `idea_recordings` row per file name and writes nothing else; the Ideas Lab job reads it like a memo.
-- It never writes in the transcripts folder. It remembers what it sent in `~/.config/hub/ideas-recording-sent.json`. A 200 or 201 counts as sent. A 400 or 413 is marked `rejected <status>` and not sent again. A 401, a 5xx or no network stops the run without marking anything, so the next run tries again. It skips empty transcripts and ones changed in the last two minutes. Its log (`~/Library/Logs/ideas-recording.log`) holds file names and status codes only, never transcript text.
+- It never writes in the transcripts folder. It remembers what it sent in `~/.config/hub/ideas-recording-sent.json`. A 200 or 201 counts as sent. A 400 or 413 is marked `rejected <status>` and not sent again. A 401, a 5xx or no network stops the run without marking anything, so the next run tries again. It skips empty transcripts and ones changed in the last two minutes. Its first run sends nothing old (step 4). Its log (`~/Library/Logs/ideas-recording.log`) holds file names and status codes only, never transcript text.
 - It refuses to run unless `~/.config/hub/ideas-recording-token` is a plain file of yours with mode 600.
 
 Install (Mason, on the Mac; migration 0008 must be live first):
@@ -117,10 +117,12 @@ Install (Mason, on the Mac; migration 0008 must be live first):
    ```sh
    cp ~/Desktop/programming/myWebsite/scripts/ideas-recording-sync.ts ~/.config/hub/ideas-recording-sync.ts
    ```
-4. Optional, to skip recordings made before today (otherwise the first run sends every transcript in the folder, and each one costs a Haiku detection call, a few cents at most): mark them all as handled.
+4. Old transcripts are not sent unless you ask. On its first run (no `~/.config/hub/ideas-recording-sent.json` yet) the script marks every transcript already in the folder `skipped at install`, sends nothing and exits 0. From then on only new transcripts go. Each one sent costs a Haiku detection call and can file idea items that are never deleted, so a backlog could use up the month's cap. To send old ones on purpose, run it once by hand with an opt-in:
    ```sh
-   node -e 'const fs=require("fs"),p=require("path"),d=p.join(process.env.HOME,"HiNotes/transcripts"),o={};for(const f of fs.readdirSync(d))if(f.endsWith(".txt"))o[f]="skipped at install";fs.writeFileSync(p.join(process.env.HOME,".config/hub/ideas-recording-sent.json"),JSON.stringify(o,null,2),{mode:0o600})'
+   node ~/.config/hub/ideas-recording-sync.ts ~/HiNotes/transcripts --since 2026-11-01   # those changed on or after that local date
+   node ~/.config/hub/ideas-recording-sync.ts ~/HiNotes/transcripts --include-existing   # all of them
    ```
+   This works before or after the first run: it sends the matching `skipped at install` files and leaves the rest skipped.
 5. Fill the plist's placeholders and install it. `ABSOLUTE_NODE_24_PATH` is the full path of a Node 24 binary (`command -v node`, and check `node --version` prints v24). If that path changes (a Node upgrade under nvm), fill and reload the plist again.
    ```sh
    NODE="$(command -v node)"; "$NODE" --version
@@ -135,7 +137,7 @@ Install (Mason, on the Mac; migration 0008 must be live first):
    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.masonbair.ideas-recording.plist
    launchctl print gui/$(id -u)/com.masonbair.ideas-recording | grep -E 'state|last exit'
    ```
-   Exit 0 is a clean run, 1 means it stopped and will retry, 2 means it refused (token file missing, empty or not mode 600).
+   Exit 0 is a clean run, 1 means it stopped and will retry, 2 means it refused: the token file is missing, empty or not mode 600; the sent file is not valid JSON; `HUB_URL` is not https (plain http is allowed only to localhost or 127.0.0.1); or an argument is wrong.
 7. Check: within 15 minutes of a new recording's transcript, its ideas show in the Ideas Lab with the footer `From HiNote recording <file>, recorded <time>`. A recording the Ideas Lab could not read after three tries shows under "Could not read" as `HiNote recording <file>` with Try again.
 
 Uninstall (also the first step of the memo-detection cutover in `docs/hub-cutover-notes.md`):

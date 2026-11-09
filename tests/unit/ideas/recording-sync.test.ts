@@ -1,8 +1,8 @@
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { localTime, syncRecordings, type SyncDeps } from "@/scripts/ideas-recording-sync";
+import { localTime, parseArgs, syncRecordings, type Existing, type SyncDeps } from "@/scripts/ideas-recording-sync";
 
 const TOKEN = "laptop-token";
 const OLD = new Date("2026-11-08T09:00:00");
@@ -25,11 +25,12 @@ function token(mode = 0o600, text = `${TOKEN}\n`) {
 }
 
 /** A fake hub that answers by file name, defaulting to 201. */
-function deps(statuses: Record<string, number | Error> = {}): SyncDeps {
+function deps(statuses: Record<string, number | Error> = {}, extra: { existing?: Existing; hubUrl?: string } = {}): SyncDeps {
   return {
     dir,
     configDir,
-    hubUrl: "https://hub.test",
+    hubUrl: extra.hubUrl ?? "https://hub.test",
+    existing: extra.existing,
     now: () => new Date("2026-11-09T12:00:00"),
     log: (line) => logs.push(line),
     fetch: (async (url: string, init: RequestInit) => {
@@ -42,6 +43,8 @@ function deps(statuses: Record<string, number | Error> = {}): SyncDeps {
   };
 }
 
+/** An install whose first run already happened, with nothing old left to send. */
+const installed = () => writeFileSync(join(configDir, "ideas-recording-sent.json"), "{}\n");
 const sent = () => JSON.parse(readFileSync(join(configDir, "ideas-recording-sent.json"), "utf8")) as Record<string, string>;
 const snapshot = () => readdirSync(dir).map((name) => [name, statSync(join(dir, name)).mtimeMs, readFileSync(join(dir, name), "utf8")]);
 
@@ -53,6 +56,7 @@ beforeEach(() => {
   mkdirSync(configDir);
   posted = [];
   logs = [];
+  installed();
 });
 
 describe("ideas-recording-sync", () => {
@@ -116,7 +120,7 @@ describe("ideas-recording-sync", () => {
     transcript("b.txt", "y");
     expect(await syncRecordings(deps({ a: status }))).toBe(1);
     expect(posted.map((p) => p.body.file)).toEqual(["a"]);
-    expect(() => sent()).toThrow();
+    expect(sent()).toEqual({});
     expect(await syncRecordings(deps())).toBe(0);
     expect(sent()).toEqual({ "a.txt": "sent", "b.txt": "sent" });
   });
@@ -125,7 +129,7 @@ describe("ideas-recording-sync", () => {
     token();
     transcript("a.txt", "x");
     expect(await syncRecordings(deps({ a: new Error("offline") }))).toBe(1);
-    expect(() => sent()).toThrow();
+    expect(sent()).toEqual({});
   });
 
   it("skips an empty transcript and one written in the last two minutes, without marking either", async () => {
@@ -152,8 +156,82 @@ describe("ideas-recording-sync", () => {
     token();
     transcript("a.txt", "x");
     writeFileSync(join(configDir, "ideas-recording-sent.json"), "{not json");
-    expect(await syncRecordings(deps())).toBe(1);
+    expect(await syncRecordings(deps())).toBe(2);
     expect(posted).toEqual([]);
+  });
+
+  it("on its first run marks every existing transcript skipped at install and sends nothing", async () => {
+    rmSync(join(configDir, "ideas-recording-sent.json"));
+    token();
+    transcript("a.txt", "old idea");
+    transcript("b.txt", "older idea");
+    expect(await syncRecordings(deps())).toBe(0);
+    expect(posted).toEqual([]);
+    expect(sent()).toEqual({ "a.txt": "skipped at install", "b.txt": "skipped at install" });
+    expect(statSync(join(configDir, "ideas-recording-sent.json")).mode & 0o777).toBe(0o600);
+    transcript("c.txt", "a new idea");
+    expect(await syncRecordings(deps())).toBe(0);
+    expect(posted.map((p) => p.body.file)).toEqual(["c"]);
+  });
+
+  it("with --since sends only existing transcripts changed on or after that date", async () => {
+    rmSync(join(configDir, "ideas-recording-sent.json"));
+    token();
+    transcript("old.txt", "x", new Date("2026-11-01T10:00:00"));
+    transcript("edge.txt", "y", new Date("2026-11-05T00:00:00"));
+    transcript("new.txt", "z", new Date("2026-11-07T10:00:00"));
+    expect(await syncRecordings(deps({}, { existing: { since: "2026-11-05" } }))).toBe(0);
+    expect(posted.map((p) => p.body.file).sort()).toEqual(["edge", "new"]);
+    expect(sent()).toEqual({ "old.txt": "skipped at install", "edge.txt": "sent", "new.txt": "sent" });
+  });
+
+  it("with --include-existing sends the ones skipped at install, later too", async () => {
+    rmSync(join(configDir, "ideas-recording-sent.json"));
+    token();
+    transcript("a.txt", "x");
+    await syncRecordings(deps());
+    expect(posted).toEqual([]);
+    expect(await syncRecordings(deps({}, { existing: "all" }))).toBe(0);
+    expect(posted.map((p) => p.body.file)).toEqual(["a"]);
+    expect(sent()).toEqual({ "a.txt": "sent" });
+  });
+
+  it.each(["http://masonbair.com", "http://192.168.1.5:3000", "ftp://masonbair.com", "not a url"])(
+    "refuses HUB_URL %s and sends nothing",
+    async (hubUrl) => {
+      token();
+      transcript("a.txt", "x");
+      expect(await syncRecordings(deps({}, { hubUrl }))).toBe(2);
+      expect(posted).toEqual([]);
+    },
+  );
+
+  it.each(["https://masonbair.com", "http://localhost:3000", "http://127.0.0.1:18791"])("accepts HUB_URL %s", async (hubUrl) => {
+    token();
+    transcript("a.txt", "x");
+    expect(await syncRecordings(deps({}, { hubUrl }))).toBe(0);
+    expect(posted[0].url).toBe(`${hubUrl}/api/hub/ideas/recording`);
+  });
+
+  it("writes the sent file mode 600 even over a leftover temp file", async () => {
+    token();
+    transcript("a.txt", "x");
+    const temp = join(configDir, "ideas-recording-sent.json.tmp");
+    writeFileSync(temp, "stale");
+    chmodSync(temp, 0o644);
+    expect(await syncRecordings(deps())).toBe(0);
+    expect(statSync(join(configDir, "ideas-recording-sent.json")).mode & 0o777).toBe(0o600);
+    expect(sent()).toEqual({ "a.txt": "sent" });
+  });
+
+  it("reads its arguments", () => {
+    expect(parseArgs([], "/default")).toEqual({ dir: "/default", existing: "skip" });
+    expect(parseArgs(["/t", "--include-existing"], "/default")).toEqual({ dir: "/t", existing: "all" });
+    expect(parseArgs(["--since", "2026-11-05", "/t"], "/default")).toEqual({ dir: "/t", existing: { since: "2026-11-05" } });
+    expect(parseArgs(["--since", "2026-02-30"], "/d")).toMatch(/real date/);
+    expect(parseArgs(["--since"], "/d")).toMatch(/real date/);
+    expect(parseArgs(["--all"], "/d")).toMatch(/unexpected/);
+    expect(parseArgs(["/a", "/b"], "/d")).toMatch(/unexpected/);
   });
 
   it("formats local time as YYYY-MM-DDTHH:MM:SS", () => {
