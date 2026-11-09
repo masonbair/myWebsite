@@ -34,7 +34,9 @@ test.describe("news page", () => {
       await seedIssue({ subject, status: "failed", source_id: "rundown-ai", last_error: "rate limited" });
       await page.goto("/hub/news");
       await expect(page.getByRole("heading", { level: 1, name: "News" })).toBeVisible();
-      await expect(page.getByText("Costs show once the shared cost log is live.")).toBeVisible();
+      const costs = page.getByRole("region", { name: "Cost this month" });
+      await expect(costs.getByText("This month", { exact: true })).toBeVisible();
+      await expect(costs.getByText("Per issue", { exact: true })).toBeVisible();
       const row = page.getByRole("listitem").filter({ hasText: subject });
       await expect(row).toContainText("Failed");
       await expect(row).toContainText("rate limited");
@@ -53,6 +55,20 @@ test.describe("news page", () => {
       await expect(page).toHaveURL(new RegExp(`/hub/news/quarantine/${id}$`));
       await expect(page.getByRole("heading", { level: 1, name: subject })).toBeVisible();
       await expect(page.getByText("The raw email could not be loaded.")).toBeVisible();
+    });
+
+    test("releases a held back email to a newsletter, which then waits to be read", async ({ page }) => {
+      const subject = `e2e release ${randomUUID().slice(0, 8)}`;
+      const id = await seedIssue({ subject, status: "quarantined", source_id: null, from_address: "new-sender@example.com" });
+      await page.goto(`/hub/news/quarantine/${id}`);
+      await page.getByLabel("Newsletter").selectOption({ label: "Morning Brew" });
+      await page.getByRole("button", { name: "Release" }).click();
+      await expect(page).toHaveURL(/\/hub\/news$/);
+      await expect(page.getByRole("link", { name: new RegExp(subject) })).toHaveCount(0);
+      const brew = page.getByRole("region", { name: "Morning Brew" });
+      await expect(brew.getByRole("listitem").filter({ hasText: subject })).toContainText("Waiting");
+      const { data } = await serviceClient().from("news_issues").select("source_id, status").eq("id", id).single();
+      expect(data).toEqual({ source_id: "morning-brew", status: "pending" });
     });
 
     test("the page and the inbox fit a 360px phone with no sideways scroll", async ({ page }) => {

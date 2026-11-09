@@ -379,3 +379,26 @@ export function createNewsReader(client: SupabaseClient, now: () => Date = () =>
     },
   };
 }
+
+/** The owner page's three cost figures from the connector's monthly summary; per issue is this month's extract cost over issues done this month. */
+export function pageCosts(summary: CostSummary, doneThisMonth: number): Costs {
+  const [thisMonth, lastMonth] = summary.months;
+  const extract = thisMonth?.byPurpose.extract ?? 0;
+  return {
+    thisMonth: thisMonth?.total ?? 0,
+    lastMonth: lastMonth?.total ?? 0,
+    perIssue: doneThisMonth > 0 ? cents(extract / doneThisMonth) : null,
+  };
+}
+
+/** Reads ai_usage and this month's done issues for the owner page; the service client, because the page has already checked the owner. */
+export async function readPageCosts(client: SupabaseClient, now: Date): Promise<Costs> {
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+  const [summary, done] = await Promise.all([
+    createNewsReader(client, () => now).costs(2),
+    client.from("news_issues").select("id", { count: "exact", head: true }).eq("status", "done").gte("received_at", monthStart).lt("received_at", nextMonthStart),
+  ]);
+  if (done.error) throw new Error(done.error.message);
+  return pageCosts(summary, done.count ?? 0);
+}

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { RetryIssueButton } from "@/components/hub/RetryIssueButton";
 import { focusRing, panel } from "@/components/hub/styles";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { readNewsOverview, type IssueRow } from "@/lib/news/reader";
+import { readNewsOverview, readPageCosts, type IssueRow } from "@/lib/news/reader";
 import { serviceClient, sessionClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time";
 
@@ -27,7 +27,9 @@ async function pausedMonth(): Promise<string | null> {
 
 export default async function NewsPage() {
   await requireOwner();
-  const overview = await readNewsOverview(await sessionClient(), new Date(), { pausedMonth }).catch(() => null);
+  const now = new Date();
+  const costs = () => readPageCosts(serviceClient(), now);
+  const overview = await readNewsOverview(await sessionClient(), now, { pausedMonth, costs }).catch(() => null);
 
   return (
     <main>
@@ -48,7 +50,7 @@ export default async function NewsPage() {
               <p className="mt-2 text-sm font-semibold text-accent-ink">Paused. The monthly cap was reached, so reading is off until next month.</p>
             )}
             {overview.costThisMonth === null ? (
-              <p className="mt-2 text-sm text-mute">Costs show once the shared cost log is live.</p>
+              <p className="mt-2 text-sm text-mute">Costs could not be loaded. Try again in a minute.</p>
             ) : (
               <dl className="mt-2 grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <Stat label="This month" value={usd(overview.costThisMonth)} />

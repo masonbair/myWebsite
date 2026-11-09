@@ -151,6 +151,34 @@ describe("news snapshot", () => {
   });
 });
 
+describe("news snapshot before 0009", () => {
+  function failingClient(error: { code: string; message: string }) {
+    return {
+      from() {
+        const q = {
+          select: () => q,
+          order: () => q,
+          limit: () => q,
+          gt: () => q,
+          then: (resolve: (v: { data: null; error: typeof error }) => void) => resolve({ data: null, error }),
+        };
+        return q;
+      },
+    };
+  }
+
+  it("returns an empty news section when the news tables are missing", async () => {
+    for (const code of ["42P01", "PGRST205"]) {
+      const news = await createSnapshotSource(failingClient({ code, message: "missing" }) as never).news();
+      expect(news).toEqual(emptyNews);
+    }
+  });
+
+  it("still fails on any other error", async () => {
+    await expect(createSnapshotSource(failingClient({ code: "57014", message: "timeout" }) as never).news()).rejects.toMatchObject({ code: "57014" });
+  });
+});
+
 describe("restore column lists", () => {
   it("uses the same issue and shared column lists as the snapshot, and lists all eight news tables", () => {
     const cols = restoreColumns();

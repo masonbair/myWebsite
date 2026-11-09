@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readNewsOverview } from "@/lib/news/reader";
+import { pageCosts, readNewsOverview, type CostMonth } from "@/lib/news/reader";
 
 type Rows = Record<string, Record<string, unknown>[]>;
 
@@ -125,5 +125,19 @@ describe("readNewsOverview", () => {
 
   it("throws when a read fails", async () => {
     await expect(readNewsOverview(fakeClient(rows, "news_issues"), now)).rejects.toThrow();
+  });
+});
+
+describe("pageCosts", () => {
+  const month = (m: string, total: number, extract = 0): CostMonth => ({ month: m, total, byPurpose: extract ? { extract } : {}, byModel: {} });
+
+  it("takes this month, last month, and this month's extract cost over done issues", () => {
+    const summary = { cap: 25, capSpendThisMonth: 3, months: [month("2026-11", 3.5, 1.2), month("2026-10", 2)] };
+    expect(pageCosts(summary, 30)).toEqual({ thisMonth: 3.5, lastMonth: 2, perIssue: 0.04 });
+  });
+
+  it("has no per-issue cost before an issue is done this month", () => {
+    const summary = { cap: 25, capSpendThisMonth: 0, months: [month("2026-11", 0.3, 0.3), month("2026-10", 0)] };
+    expect(pageCosts(summary, 0)).toEqual({ thisMonth: 0.3, lastMonth: 0, perIssue: null });
   });
 });

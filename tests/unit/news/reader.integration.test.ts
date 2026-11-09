@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
-import { createNewsReader } from "@/lib/news/reader";
+import { createNewsReader, readPageCosts } from "@/lib/news/reader";
 
 // Run with: NEWS_TEST_DB=1 NEWS_TEST_SUPABASE_URL=http://127.0.0.1:55321 NEWS_TEST_SERVICE_KEY=<SERVICE_ROLE_KEY> (from `supabase status -o env`)
 // Refuses to load unless the API URL is local, because test rows can never be deleted.
@@ -123,5 +123,24 @@ describe.skipIf(!enabled)("news reader against local Supabase", () => {
     expect(costs.cap).toBeGreaterThan(0);
     expect(costs.capSpendThisMonth).toBeGreaterThanOrEqual(0.5);
     expect(costs.months[0].byPurpose.extract).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it("reads the owner page costs: this month, last month, and extract cost per done issue", async () => {
+    // A random far-future month keeps rows from other runs out, since ai_usage and news_issues rows are never deleted.
+    const year = 2300 + Math.floor(Math.random() * 600);
+    const now = new Date(Date.UTC(year, 5, 15));
+    const at = (month: number) => new Date(Date.UTC(year, month, 2)).toISOString();
+    const usage = (purpose: string, cost: number, month: number) => ({ feature: "news", model: "claude-sonnet-5-5", purpose, cost_usd: cost, at: at(month) });
+    ok(await client.from("ai_usage").insert([usage("extract", 0.5, 5), usage("dedupe", 0.25, 5), usage("backfill", 1, 5), usage("extract", 2, 4)]));
+    const issue = (status: string) => ({
+      source_id: "morning-brew",
+      message_id: `<${randomUUID()}@example.test>`,
+      subject: "Synthetic",
+      clean_text: "t",
+      status,
+      received_at: at(5),
+    });
+    ok(await client.from("news_issues").insert([issue("done"), issue("done"), issue("failed")]));
+    expect(await readPageCosts(client, now)).toEqual({ thisMonth: 1.75, lastMonth: 2, perIssue: 0.25 });
   });
 });
