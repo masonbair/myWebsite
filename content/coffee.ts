@@ -49,7 +49,7 @@ export const coffee: {
 } = {
   title: "Coffee chat",
   description:
-    "Book a 30 minute video coffee chat with Mason Bair, a software engineer and Kent State CS graduate, about DevSecOps, hackathons, CS careers, or working remotely while traveling.",
+    "Book a free 30 minute video coffee chat with Mason Bair, a software engineer and Kent State CS graduate, about DevSecOps, hackathons, CS careers, or working remotely while traveling.",
   heading: "Coffee chat with Mason Bair",
   bio: [
     "I'm a software engineer working across DevSecOps, system administration, and software development.",
@@ -58,6 +58,7 @@ export const coffee: {
   format: [
     { label: "Length", value: "30 min" },
     { label: "Where", value: "Video call" },
+    { label: "Cost", value: "Free" },
   ],
   bookLabel: "Book a time: 30 minute coffee chat with Mason Bair on Google Calendar, opens in a new tab",
   topicsHeading: "What we can talk about",
@@ -113,6 +114,7 @@ export const coffee: {
       q: "How do I book a coffee chat with Mason Bair?",
       a: `Press Book a time, pick an open slot, and you'll get a calendar invite with a video link. If the booking page doesn't work for you, email ${contact.email} instead.`,
     },
+    { q: "Is it free?", a: "Yes. Coffee chats are free." },
     { q: "How long is a coffee chat?", a: "Thirty minutes over video, so bring your own coffee." },
     {
       q: "Who is it for?",

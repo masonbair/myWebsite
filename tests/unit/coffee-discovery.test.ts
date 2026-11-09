@@ -27,8 +27,18 @@ describe("coffee json-ld", () => {
     expect(coffee.niches.map((n) => n.id)).toEqual(["devsecops", "nomad", "kent-state"]);
   });
 
-  it("never claims the chat is free until Mason confirms it", () => {
-    expect(JSON.stringify([ld, coffee]).toLowerCase()).not.toMatch(/\bfree\b/);
+  it("says the chat is free, as a zero-price Offer on a Service Mason provides", () => {
+    expect(ld.mainEntity["@type"]).toBe("Service");
+    expect(ld.mainEntity.provider).toEqual({ "@id": "https://masonbair.com/#person" });
+    expect(ld.mainEntity.offers).toMatchObject({ "@type": "Offer", price: "0", priceCurrency: "USD" });
+    expect(coffee.description).toMatch(/\bfree\b/);
+    expect(coffee.format).toContainEqual({ label: "Cost", value: "Free" });
+    expect(coffee.faqs.find((f) => f.q === "Is it free?")?.a).toMatch(/^Yes\./);
+    expect(readFileSync("public/llms.txt", "utf8")).toMatch(/\bfree 30 minute\b/);
+  });
+
+  it("leaves hiring and referrals unanswered until Mason decides", () => {
+    expect(JSON.stringify(coffee).toLowerCase()).not.toMatch(/\b(hiring|referral)/);
   });
 });
 
