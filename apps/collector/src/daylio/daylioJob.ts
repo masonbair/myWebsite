@@ -1,5 +1,5 @@
 import { Directory, File } from 'expo-file-system';
-import { BUCKET, RPC, daylioPath, type AddDaylioExportArgs } from '../../../../shared/collector-contract';
+import { BUCKET, RPC, daylioNameFits, daylioPath, type AddDaylioExportArgs } from '../../../../shared/collector-contract';
 import { readJson, writeJson } from '../lib/store';
 import { DAYLIO_FOLDER_KEY } from '../lib/storageKeys';
 import { signedIn, supabase } from '../lib/supabase';
@@ -63,7 +63,7 @@ export async function runDaylioJob(): Promise<DaylioJobResult> {
 
     const size = entry.size;
     const modifiedMs = entry.modificationTime === null ? null : Math.trunc(entry.modificationTime);
-    if (!(size > 0) || size > MAX_BYTES || modifiedMs === null || modifiedMs <= 0) {
+    if (!(size > 0) || size > MAX_BYTES || modifiedMs === null || modifiedMs <= 0 || !daylioNameFits(entry.name)) {
       result.skipped += 1;
       continue;
     }

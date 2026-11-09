@@ -32,8 +32,17 @@ export type AddDaylioExportArgs = { p_path: string; p_filename: string; p_size_b
 /** at is an ISO timestamp; each key is 1-40 of a-z, 0-9, `:`, `_`, `-`; no other fields are accepted. */
 export type HeartbeatArgs = { p_status: { at: string; items: { key: string; ok: boolean }[] } };
 
+function daylioSafeName(filename: string): string {
+  return filename.replace(/[^A-Za-z0-9._-]/g, "_").replace(/\.{2,}/g, ".");
+}
+
+/** False for a name the server refuses (over 255 characters) or that would be cut in its path (over 200 once made safe). */
+export function daylioNameFits(filename: string): boolean {
+  return Array.from(filename).length <= 255 && daylioSafeName(filename).length <= 200;
+}
+
 /** Where one version of a Daylio export is stored; a re-export with the same name but new size or time gets its own path. */
 export function daylioPath(filename: string, sizeBytes: number, modifiedMs: number): string {
-  const safe = filename.replace(/[^A-Za-z0-9._-]/g, "_").replace(/\.{2,}/g, ".").slice(0, 200) || "export";
+  const safe = daylioSafeName(filename).slice(0, 200) || "export";
   return `${DAYLIO_PREFIX}${modifiedMs}-${sizeBytes}-${safe}`;
 }

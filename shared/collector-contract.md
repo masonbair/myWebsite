@@ -32,7 +32,7 @@ The site shows `city, country` for a public place and `region, country` for a pr
 ## Paths and shapes
 
 - Photos: `collector/<assetId>.jpg`, with letters, digits, `_` and `-` only in `<assetId>` (up to 200). `p_path` must be exactly that.
-- Daylio: `daylioPath(filename, sizeBytes, modifiedMs)` gives `exports/<modifiedMs>-<sizeBytes>-<safe filename>`. Each version of a re-exported file gets its own path, so a new export with an old name is never lost. Send `p_modified_at` as `new Date(modifiedMs).toISOString()`; the server checks the path matches the time and size.
+- Daylio: `daylioPath(filename, sizeBytes, modifiedMs)` gives `exports/<modifiedMs>-<sizeBytes>-<safe filename>`. Each version of a re-exported file gets its own path, so a new export with an old name is never lost. Send `p_modified_at` as `new Date(modifiedMs).toISOString()`; the server checks the path matches the time and size. The phone skips a file whose name is over 255 characters, or over 200 once made safe (`daylioNameFits`), so a cut name never stands in for a different file.
 - Heartbeat: exactly `{ at, items }`. `at` is an ISO timestamp. Each item is exactly `{ key, ok }`: `key` is 1-40 of `a-z 0-9 : _ -`, `ok` is a boolean. Up to 50 items. Anything else is refused.
 
 ## Who reads what

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { daylioPath } from "@/shared/collector-contract";
+import { daylioNameFits, daylioPath } from "@/shared/collector-contract";
 
 describe("daylioPath", () => {
   it("puts the modified time and size first, so each version of a file has its own path", () => {
@@ -12,5 +12,14 @@ describe("daylioPath", () => {
     expect(daylioPath("../../etc/passwd", 5, 7)).toBe("exports/7-5-._._etc_passwd");
     expect(daylioPath("", 5, 7)).toBe("exports/7-5-export");
     expect(daylioPath("x".repeat(300), 5, 7)).toHaveLength("exports/7-5-".length + 200);
+  });
+});
+
+describe("daylioNameFits", () => {
+  it("accepts a name up to 200 characters once made safe and 255 as given", () => {
+    expect(daylioNameFits("x".repeat(200))).toBe(true);
+    expect(daylioNameFits("x".repeat(201))).toBe(false);
+    expect(daylioNameFits(".".repeat(255))).toBe(true);
+    expect(daylioNameFits(".".repeat(256))).toBe(false);
   });
 });

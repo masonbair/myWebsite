@@ -68,6 +68,16 @@ describe('runDaylioJob', () => {
     expect(upload).not.toHaveBeenCalled();
   });
 
+  it('skips and counts names the server would refuse: over 200 characters once made safe, or over 255 as given', async () => {
+    const fits = `${'a'.repeat(196)}.csv`;
+    const tooLongSafe = `${'a'.repeat(197)}.csv`;
+    const tooLongRaw = `${'.'.repeat(260)}a.csv`;
+    listing(file(fits), file(tooLongSafe), file(tooLongRaw));
+    expect(await runDaylioJob()).toEqual({ uploaded: 1, skipped: 2, error: null });
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('collector_add_daylio_export', expect.objectContaining({ p_filename: fits }));
+  });
+
   it('uploads only csv and daylio files, then records each with the same size and time', async () => {
     const m = 1_762_000_000_123;
     listing(file('daylio_export_2026_11_04.csv', 1000, m), file('backup_2026_11_04.daylio', 2000, m), file('notes.txt'));
