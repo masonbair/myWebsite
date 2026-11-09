@@ -10,7 +10,7 @@ const grotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-grotesk" }
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 
 const description =
-  `I'm Mason Bair, a software engineer, baker, and traveler who has been to ${now.countriesVisited} countries and graduated from Kent State in May 2026.`;
+  `I'm Mason Bair! A software engineer at Fullsend, a digital nomad ${now.countriesVisited} countries in, and a honey-only baker. Come say hey.`;
 
 // Share images come from the opengraph-image files, so none are listed here.
 export const metadata: Metadata = {

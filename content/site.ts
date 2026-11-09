@@ -12,10 +12,11 @@ export type Work = {
 export type Achievement = { title: string; summary: string; tech: string[]; image?: SiteImage };
 
 export const about: string[] = [
-  "I'm Mason. I graduated from Kent State University in May 2026 with a B.S. in Computer Science and a 3.97 GPA, and now I travel and work remotely. My work sits across DevSecOps, system administration, and software development.",
-  "I spent a full year studying abroad at Tartu University in Estonia, from August 2024 to June 2025. It changed how I think about technology and working with people from other countries.",
-  "As an Assistant System Administrator at Kent State, I set up GPU servers for research, automated work with Ansible, and kept more than 20 research servers in line with security rules. Before that, as a DevSecOps intern at Nationwide, I built tools that save over $10K a year and simplified CI/CD pipelines for more than 1,000 applications.",
-  "Outside of work I was President of HacKSU, Kent State's largest CS club. I organized hackathons and mentored other students. I travel, I bake artisan bread, and I'm an Eagle Scout. As a Choose Ohio First scholarship recipient, I cared about building tech communities and making technology open to everyone.",
+  "I'm Mason! I finished my CS degree at Kent State in May 2026 (3.97 GPA), and then I packed a bag. Now I'm a software engineer at Fullsend, working remotely as a digital nomad from wherever I land. Before that I did DevSecOps, system administration and a lot of building in between.",
+  "I spent a full school year at Tartu University in Estonia, from August 2024 to June 2025, and honestly I still miss it. It's where I learned how fun it is to build things with people from all over the world.",
+  "As an Assistant System Administrator at Kent State, I set up GPU servers for research, automated a ton with Ansible, and kept 20+ research servers in line with security rules. Before that I was a DevSecOps intern at Nationwide, building Python tools for security data and cleaning up CI/CD pipelines for 1,000+ apps.",
+  "Outside of class I was President of HacKSU, Kent State's biggest CS club, and I did industry outreach for the university. I ran hackathons, brought in speakers, and set up a lot of coffee chats. In April 2026 I got the Distinguished Student Leadership Award, which I'm still pretty proud of.",
+  "When I'm not on the move, I bake! Mostly banana bread and pumpkin bread, plus pumpkin pie, brownies and cookies. I don't use white sugar, so honey sweetens everything I make. The oven's on pause while I travel. I'm also an Eagle Scout.",
 ];
 
 export const portrait: SiteImage = {
@@ -27,11 +28,24 @@ export const portrait: SiteImage = {
 
 export const work: Work[] = [
   {
+    title: "Software Engineer",
+    org: "Fullsend Solutions",
+    dates: "May 2026 to now",
+    summary: "My first full-time job out of school! I build software for Fullsend, fully remote, from wherever I'm traveling that month.",
+    tech: ["Software development", "Remote work"],
+    image: {
+      src: "/misc/image_of_code.webp",
+      alt: "A laptop and a monitor showing code in a dark editor in a dim room",
+      width: 3000,
+      height: 4000,
+    },
+  },
+  {
     title: "Assistant System Administrator",
     org: "Kent State University",
     dates: "August 2025 to May 2026",
     summary:
-      "I set up and deployed Dell R760 GPU servers for faculty research. I automated Tenable agents, updates, and compliance across 20+ servers with Ansible, and I wrote VPN guides for several operating systems for the CS department.",
+      "I set up Dell R760 GPU servers for faculty research. I automated Tenable agents, updates and compliance across 20+ servers with Ansible, and wrote VPN guides for the CS department so nobody had to guess.",
     tech: ["Ubuntu Server", "Ansible", "SSSD", "LDAP", "Docker", "Lambda AI Stack"],
     image: {
       src: "/misc/Mason_at_RSM_office.webp",
@@ -45,7 +59,7 @@ export const work: Work[] = [
     org: "Nationwide",
     dates: "May 2025 to August 2025",
     summary:
-      "I built Python apps that pull in SonarQube data to reprioritize issues across 1,000+ apps. I migrated CI/CD workflows and built the Sonar Sweep tool, which saves $10K+ a year.",
+      "I built Python apps that pull in SonarQube data to reprioritize security issues across 1,000+ apps, and I migrated CI/CD workflows. A super fun first look at security at a big company.",
     tech: ["Python", "GitHub Actions", "SonarQube", "CI/CD", "Docker"],
     image: {
       src: "/misc/Mason_at_RSM_office_2.webp",
@@ -59,7 +73,7 @@ export const work: Work[] = [
     org: "HacKSU",
     dates: "May 2025 to May 2026",
     summary:
-      "I led Kent State's largest CS club with a team of 6. We ran weekly meetings for 10 to 30 people, the Kent Hack Enough hackathon, and talks from industry speakers.",
+      "I led Kent State's biggest CS club with a team of 6. We ran weekly meetings for 10 to 30 people, the Kent Hack Enough hackathon, and a bunch of talks from industry speakers.",
     tech: ["Leadership", "Event management", "Community building"],
     image: {
       src: "/misc/Mason_infront_of_hacksu_sign.webp",
@@ -69,10 +83,24 @@ export const work: Work[] = [
     },
   },
   {
+    title: "Industry Outreach",
+    org: "Kent State University",
+    dates: "September 2025 to May 2026",
+    summary:
+      "I reached out to companies and tech folks to connect them with Kent State CS. Lots of emails, lots of coffee chats, and some really cool people met along the way.",
+    tech: ["Outreach", "Networking", "Coffee chats"],
+    image: {
+      src: "/misc/Mason_networking_at_hackathon.webp",
+      alt: "Mason in a red bucket hat and yellow hoodie posing with another student outside at a hackathon",
+      width: 1024,
+      height: 1536,
+    },
+  },
+  {
     title: "Study abroad",
     org: "Tartu University, Estonia",
     dates: "August 2024 to June 2025",
-    summary: "A full academic year studying Computer Science at Tartu University while exploring Eastern European tech culture.",
+    summary: "A full school year studying CS at Tartu University, and exploring as much of Europe as I could on the side.",
     tech: ["International perspective", "Cultural adaptation", "Tech diversity"],
     image: {
       src: "/misc/Mason_traveling.webp",
@@ -86,7 +114,7 @@ export const work: Work[] = [
     org: "ImageJ Web App",
     dates: "September 2023 to May 2025",
     summary:
-      "I led the build of a web version of ImageJ for biology students. I containerized it with Docker and deployed it with Apache, WSGI, and Ray clusters for distributed processing.",
+      "I led the build of a web version of ImageJ, so biology students could study huge cell images without melting their laptops. I put it in Docker and ran it with Apache, WSGI and Ray clusters.",
     tech: ["Angular", "Python", "TypeScript", "Docker", "Apache", "Ray"],
     image: {
       src: "/misc/Mason_at_carnegie_mellon.webp",
@@ -100,7 +128,7 @@ export const work: Work[] = [
     org: "Kent State University",
     dates: "August 2023 to August 2024",
     summary:
-      "First line of support for Windows, Linux, and macOS. I tracked down and fixed software issues and worked on my Apple Repair Certification.",
+      "I was the first person you'd talk to when your Windows, Linux or Mac broke. I tracked down a lot of weird bugs and worked on my Apple Repair Certification.",
     tech: ["Technical support", "Multi OS troubleshooting", "Customer service"],
     image: {
       src: "/misc/image_of_code.webp",
@@ -115,7 +143,7 @@ export const achievements: Achievement[] = [
   {
     title: "NexHacks, 1st and 2nd place",
     summary:
-      "1st place with The Token Company. 2nd place with DevSwarm, which triages tasks for large teams using n8n workflows with triage, coding, and confidence agents.",
+      "Two wins in one weekend! 1st place with The Token Company, and 2nd with DevSwarm, which sorts tasks for big teams using n8n workflows with triage, coding and confidence agents.",
     tech: ["Svelte", "Python", "n8n", "AI agents"],
     image: {
       src: "/misc/Mason_with_nexhacks_team.webp",
@@ -127,19 +155,19 @@ export const achievements: Achievement[] = [
   {
     title: "Hack Ohi/O",
     summary:
-      "An adaptive AI learning platform with 50+ widgets and tools. Its Adaptive Composition Engine shapes the experience around how each person learns.",
+      "An AI learning platform with 50+ widgets and tools. Its Adaptive Composition Engine shapes everything around how each person learns.",
     tech: ["LLM integration", "AI agents", "Adaptive learning"],
   },
   {
     title: "Honors",
     summary:
-      "Choose Ohio First Scholarship in Computer Science, 2023 to May 2026. Eagle Scout with Scouts BSA, St. Francis Xavier, 2016 to 2022. Active in the MLH community and the hackathon circuit.",
+      "Distinguished Student Leadership Award, April 2026. Choose Ohio First Scholarship in Computer Science, 2023 to May 2026. Eagle Scout with Scouts BSA, St. Francis Xavier, 2016 to 2022. And a regular in the MLH hackathon crowd.",
     tech: [],
   },
   {
     title: "Hack Dearborn 4, 1st place overall",
     summary:
-      "A Bluetooth mesh service that passes messages between devices with no central server. I built the UI and the API for the mesh network.",
+      "A Bluetooth mesh that passes messages from device to device with no central server. I built the UI and the API for it.",
     tech: ["Bluetooth mesh", "API development", "Decentralized networks"],
     image: {
       src: "/misc/Mason_coding_at_hackathon.webp",
@@ -151,12 +179,12 @@ export const achievements: Achievement[] = [
   {
     title: "RecipleRecollection",
     summary:
-      "A recipe web app in C# and ASP.NET Core, with Python scraping for recipe details, user accounts, a SQL database, and container deploys on Azure.",
+      "A recipe app (of course) in C# and ASP.NET Core, with Python scraping for recipe details, user accounts, a SQL database and container deploys on Azure.",
     tech: ["C#", "ASP.NET", "Python", "SQL", "Azure", "Docker"],
   },
   {
     title: "Markov Maze Prediction Calculator",
-    summary: "A C++ calculator that uses linear algebra and Markov chains to predict paths through a maze.",
+    summary: "A C++ calculator that uses linear algebra and Markov chains to guess where you'll end up in a maze.",
     tech: ["C++", "Linear algebra", "Algorithm design"],
   },
 ];
@@ -226,7 +254,7 @@ export const siteUpdated = "2026-11-09";
 
 export const hello = {
   tag: "Open to coffee chats",
-  heading: "Hi, I'm Mason.",
-  body: "I'm a software engineer who bakes, travels, and builds from wherever I land. Glad you're here.",
-  note: "30 min, video, no agenda needed",
+  heading: "Hey! I'm Mason.",
+  body: "I'm a software engineer and a digital nomad, building from wherever I land. I'd love to chat with anyone who has something interesting to share.",
+  note: "30 min, video, free",
 };

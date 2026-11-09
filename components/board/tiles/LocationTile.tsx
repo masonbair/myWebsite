@@ -22,7 +22,7 @@ export function LocationTile({ place, countriesVisited }: { place: Place | null;
     <Tile tilt="left" core="flex flex-col justify-between gap-5 bg-tea p-6 text-night">
       <div>
         <Prompt>whereami</Prompt>
-        <span className={`${tag} text-[11px] mt-1.5 border-line bg-surface text-ink`}>{place ? "Right now" : "So far"}</span>
+        <span className={`${tag} text-[11px] mt-1.5 border-line bg-surface text-ink`}>{place ? "Digital nomad, right now" : "Digital nomad"}</span>
       </div>
       {place ? (
         <>
@@ -38,7 +38,7 @@ export function LocationTile({ place, countriesVisited }: { place: Place | null;
         </>
       ) : (
         <div className="flex items-end justify-between gap-3">
-          <p className="text-2xl leading-tight font-bold">countries and counting</p>
+          <p className="text-2xl leading-tight font-bold">countries so far, and counting!</p>
           <CountryStamp count={countriesVisited} />
         </div>
       )}

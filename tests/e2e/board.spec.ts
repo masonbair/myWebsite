@@ -49,13 +49,13 @@ test("no empty grid cells", async ({ page }) => {
 test("mobile has no horizontal scroll", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile", "phone width only");
   await page.goto(fixtureUrl("full"));
-  await expect(page.getByRole("heading", { name: "Hi, I'm Mason." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hey! I'm Mason." })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
 });
 
 test("hello visible without scroll", async ({ page }) => {
   await page.goto("/");
-  const heading = page.getByRole("heading", { name: "Hi, I'm Mason." });
+  const heading = page.getByRole("heading", { name: "Hey! I'm Mason." });
   await expect(heading).toBeVisible();
   const box = await heading.boundingBox();
   expect(box).not.toBeNull();
@@ -67,7 +67,7 @@ test.describe("without javascript", () => {
 
   test("hello shows without javascript", async ({ page }) => {
     await page.goto("/");
-    const heading = page.getByRole("heading", { name: "Hi, I'm Mason." });
+    const heading = page.getByRole("heading", { name: "Hey! I'm Mason." });
     await expect(heading).toBeVisible();
     // toBeVisible ignores opacity, so multiply it up the tree to catch a fade that never finishes.
     await expect
@@ -167,7 +167,7 @@ test.describe("photo slideshow", () => {
 
     test("stays on one photo with no control", async ({ page }) => {
       await page.goto("/");
-      await expect(page.getByRole("heading", { name: "Hi, I'm Mason." })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Hey! I'm Mason." })).toBeVisible();
       await page.waitForLoadState("load");
       await page.waitForTimeout(500);
       await expect(page.getByRole("button", { name: "Pause photo slideshow" })).toHaveCount(0);

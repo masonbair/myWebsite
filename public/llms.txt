@@ -1,10 +1,10 @@
 # Mason Bair
 
-> Mason Bair is a software engineer working across DevSecOps, system administration, and software development. He graduated from Kent State University in May 2026 with a B.S. in Computer Science and now travels and works remotely.
+> Mason Bair is a software engineer at Fullsend Solutions and a digital nomad who works remotely while he travels. His background is DevSecOps, system administration, and software development. He graduated from Kent State University in May 2026 with a B.S. in Computer Science, and received the Distinguished Student Leadership Award in April 2026.
 
 ## Coffee chats
 
-Mason takes free 30 minute video coffee chats with students, new grads, career changers, and anyone curious about tech.
+Mason takes free 30 minute video coffee chats with anyone who has something interesting to share. He wants to learn from as many people as he can, whatever their background or experience level.
 
 - [Book a coffee chat](https://masonbair.com/coffee): The page explains topics, time zones, and both ways to book.
 - [Booking calendar](https://calendar.app.google/suAxGdTVkbEB2GFN6): Google Calendar booking page that shows open times in the visitor's time zone. Needs JavaScript.
@@ -15,7 +15,7 @@ Topics:
 - [DevSecOps](https://masonbair.com/coffee#devsecops): CI/CD, security checks in pipelines, getting a first DevSecOps role. Mason was a DevSecOps intern at Nationwide.
 - [Digital nomad software engineering](https://masonbair.com/coffee#nomad): Working remotely while traveling, across time zones.
 - [Hackathons](https://masonbair.com/coffee#kent-state): Organizing Kent Hack Enough as HacKSU President, and placing 1st and 2nd at NexHacks.
-- [Kent State CS](https://masonbair.com/coffee#kent-state): Classes, campus jobs, internships, HacKSU, and running the Kent Hack Enough hackathon.
+- [Kent State CS](https://masonbair.com/coffee#kent-state): Classes, campus jobs, internships, HacKSU, industry outreach, and running the Kent Hack Enough hackathon.
 
 ## Connect
 

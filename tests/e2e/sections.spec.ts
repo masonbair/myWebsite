@@ -63,11 +63,11 @@ test("resume contact block links to the coffee chat page", async ({ page }) => {
 test("ended roles are in the past and copy is current", async ({ request }) => {
   const html = await (await request.get("/")).text();
   expect(html).not.toContain("to present");
-  expect(html).not.toContain("digital nomad");
+  expect(html).toContain("digital nomad");
   expect(html).not.toContain("Hackathons and honors");
   expect(html).toContain("August 2025 to May 2026");
   expect(html).toContain("May 2025 to May 2026");
-  expect(html).toContain("Hackathons, projects, and honors");
-  expect(html).toContain("been to 23 countries");
+  expect(html).toContain("Hackathons, projects, and a few wins");
+  expect(html).toContain("digital nomad 23 countries in");
   expect(html).not.toContain("21 countries");
 });

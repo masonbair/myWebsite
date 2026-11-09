@@ -13,7 +13,7 @@ describe("phone guard pattern", () => {
     "3000 4000",
     "/_next/image?url=%2Fmisc%2Fa.webp&w=640&q=75 640w, /_next/image?url=%2Fmisc%2Fa.webp&w=750&q=75 750w",
     '{"width":3000,"height":4000,"count":1330}',
-    "1,330 contributions, 20+ servers, $10K+",
+    "1,330 contributions, 20+ servers, 1,000+ apps",
     "0.123 456 7890",
   ])("ignores %s", (s) => expect(s).not.toMatch(PHONE));
 });

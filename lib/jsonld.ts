@@ -11,11 +11,13 @@ const person = {
   name: "Mason Bair",
   jobTitle: "Software Engineer",
   description:
-    "Software engineer working across DevSecOps, system administration, and software development. Kent State computer science graduate, May 2026.",
+    "Software engineer at Fullsend Solutions and digital nomad. Background in DevSecOps, system administration, and software development. Kent State computer science graduate, May 2026.",
   image: `${siteUrl}/misc/Mason_web.webp`,
   url: siteUrl,
   sameAs: [contact.github, contact.linkedin],
+  worksFor: { "@type": "Organization", name: "Fullsend Solutions" },
   alumniOf: { "@type": "CollegeOrUniversity", name: "Kent State University" },
+  award: ["Distinguished Student Leadership Award (2026)", "Choose Ohio First Scholarship in Computer Science", "Eagle Scout"],
   knowsAbout: ["DevSecOps", "System administration", "Software development", "CI/CD", "Ansible", "Docker", "AWS", "Hackathons"],
   potentialAction: { "@type": "ScheduleAction", name: "Book a coffee chat", target: COFFEE_URL },
 };
@@ -43,7 +45,7 @@ export function coffeeJsonLd() {
       "@type": "Service",
       name: "Coffee chat with Mason Bair",
       serviceType: "Career coffee chat",
-      description: "A free 30 minute video call about DevSecOps, hackathons, CS careers, or working remotely while traveling.",
+      description: "A free 30 minute video call with anyone who has something interesting to share. Topics often include DevSecOps, hackathons, CS careers, and working remotely while traveling.",
       provider: { "@id": PERSON_ID },
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD", url: COFFEE_URL },
     },
