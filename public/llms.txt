@@ -4,7 +4,7 @@
 
 ## Coffee chats
 
-Mason takes free 30 minute video coffee chats with anyone who has something interesting to share. He wants to learn from as many people as he can, whatever their background or experience level.
+Mason takes free 30 minute video coffee chats with anyone who has something interesting to share. He likes learning from people, whatever they do and however long they've done it.
 
 - [Book a coffee chat](https://masonbair.com/coffee): The page explains topics, time zones, and both ways to book.
 - [Booking calendar](https://calendar.app.google/suAxGdTVkbEB2GFN6): Google Calendar booking page that shows open times in the visitor's time zone. Needs JavaScript.

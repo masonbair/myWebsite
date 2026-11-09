@@ -12,11 +12,11 @@ export type Work = {
 export type Achievement = { title: string; summary: string; tech: string[]; image?: SiteImage };
 
 export const about: string[] = [
-  "I'm Mason! I finished my CS degree at Kent State in May 2026 (3.97 GPA), and then I packed a bag. Now I'm a software engineer at Fullsend, working remotely as a digital nomad from wherever I land. Before that I did DevSecOps, system administration and a lot of building in between.",
-  "I spent a full school year at Tartu University in Estonia, from August 2024 to June 2025, and honestly I still miss it. It's where I learned how fun it is to build things with people from all over the world.",
-  "As an Assistant System Administrator at Kent State, I set up GPU servers for research, automated a ton with Ansible, and kept 20+ research servers in line with security rules. Before that I was a DevSecOps intern at Nationwide, building Python tools for security data and cleaning up CI/CD pipelines for 1,000+ apps.",
-  "Outside of class I was President of HacKSU, Kent State's biggest CS club, and I did industry outreach for the university. I ran hackathons, brought in speakers, and set up a lot of coffee chats. In April 2026 I got the Distinguished Student Leadership Award, which I'm still pretty proud of.",
-  "When I'm not on the move, I bake! Mostly banana bread and pumpkin bread, plus pumpkin pie, brownies and cookies. I don't use white sugar, so honey sweetens everything I make. The oven's on pause while I travel. I'm also an Eagle Scout.",
+  "I'm Mason. I finished my CS degree at Kent State in May 2026 with a 3.97 GPA and then packed a bag. Now I'm a software engineer at Fullsend and I work remotely from wherever I am. Before that I did DevSecOps and sysadmin work.",
+  "I spent a full school year at Tartu University in Estonia, August 2024 to June 2025. I still miss it. My classmates came from all over the world and building stuff with them was so fun.",
+  "At Kent State I was an Assistant System Administrator. I set up GPU servers for research and used Ansible to keep 20+ research servers in line with security rules. Before that I interned in DevSecOps at Nationwide, writing Python tools for security data and moving CI/CD pipelines for 1,000+ apps.",
+  "I was also President of HacKSU, Kent State's biggest CS club, and did industry outreach for the university. A big part of both was emailing people and setting up coffee chats. In April 2026 I got the Distinguished Student Leadership Award.",
+  "When I'm home I bake a lot. Mostly banana bread and pumpkin bread, sometimes pumpkin pie, brownies or cookies. I don't use white sugar, everything gets sweetened with honey. Baking's on hold while I travel though. Also, I'm an Eagle Scout.",
 ];
 
 export const portrait: SiteImage = {
@@ -31,7 +31,7 @@ export const work: Work[] = [
     title: "Software Engineer",
     org: "Fullsend Solutions",
     dates: "May 2026 to now",
-    summary: "My first full-time job out of school! I build software for Fullsend, fully remote, from wherever I'm traveling that month.",
+    summary: "My first full-time job after graduating. I build software for Fullsend, fully remote, so I can work from wherever I'm traveling.",
     tech: ["Software development", "Remote work"],
     image: {
       src: "/misc/image_of_code.webp",
@@ -45,7 +45,7 @@ export const work: Work[] = [
     org: "Kent State University",
     dates: "August 2025 to May 2026",
     summary:
-      "I set up Dell R760 GPU servers for faculty research. I automated Tenable agents, updates and compliance across 20+ servers with Ansible, and wrote VPN guides for the CS department so nobody had to guess.",
+      "I set up Dell R760 GPU servers for faculty research. I used Ansible to automate Tenable agents, updates and compliance on 20+ servers, and I wrote the CS department's VPN guides.",
     tech: ["Ubuntu Server", "Ansible", "SSSD", "LDAP", "Docker", "Lambda AI Stack"],
     image: {
       src: "/misc/Mason_at_RSM_office.webp",
@@ -59,7 +59,7 @@ export const work: Work[] = [
     org: "Nationwide",
     dates: "May 2025 to August 2025",
     summary:
-      "I built Python apps that pull in SonarQube data to reprioritize security issues across 1,000+ apps, and I migrated CI/CD workflows. A super fun first look at security at a big company.",
+      "I built Python apps that pull in SonarQube data to reprioritize security issues across 1,000+ apps. I also migrated CI/CD workflows. It was my first real look at security at a big company.",
     tech: ["Python", "GitHub Actions", "SonarQube", "CI/CD", "Docker"],
     image: {
       src: "/misc/Mason_at_RSM_office_2.webp",
@@ -73,7 +73,7 @@ export const work: Work[] = [
     org: "HacKSU",
     dates: "May 2025 to May 2026",
     summary:
-      "I led Kent State's biggest CS club with a team of 6. We ran weekly meetings for 10 to 30 people, the Kent Hack Enough hackathon, and a bunch of talks from industry speakers.",
+      "I led Kent State's biggest CS club with a team of 6. We ran weekly meetings for 10 to 30 people and put on the Kent Hack Enough hackathon. I also brought in speakers from industry.",
     tech: ["Leadership", "Event management", "Community building"],
     image: {
       src: "/misc/Mason_infront_of_hacksu_sign.webp",
@@ -87,7 +87,7 @@ export const work: Work[] = [
     org: "Kent State University",
     dates: "September 2025 to May 2026",
     summary:
-      "I reached out to companies and tech folks to connect them with Kent State CS. Lots of emails, lots of coffee chats, and some really cool people met along the way.",
+      "I reached out to companies and people in tech to connect them with Kent State CS. Mostly that meant emailing people and setting up coffee chats. I met some really cool people this way.",
     tech: ["Outreach", "Networking", "Coffee chats"],
     image: {
       src: "/misc/Mason_networking_at_hackathon.webp",
@@ -100,7 +100,7 @@ export const work: Work[] = [
     title: "Study abroad",
     org: "Tartu University, Estonia",
     dates: "August 2024 to June 2025",
-    summary: "A full school year studying CS at Tartu University, and exploring as much of Europe as I could on the side.",
+    summary: "A full school year studying CS at Tartu University. I traveled around Europe on the side.",
     tech: ["International perspective", "Cultural adaptation", "Tech diversity"],
     image: {
       src: "/misc/Mason_traveling.webp",
@@ -114,7 +114,7 @@ export const work: Work[] = [
     org: "ImageJ Web App",
     dates: "September 2023 to May 2025",
     summary:
-      "I led the build of a web version of ImageJ, so biology students could study huge cell images without melting their laptops. I put it in Docker and ran it with Apache, WSGI and Ray clusters.",
+      "I led the build of a web version of ImageJ so biology students could open huge cell images without using up their own laptops. It runs in Docker with Apache, WSGI and Ray clusters.",
     tech: ["Angular", "Python", "TypeScript", "Docker", "Apache", "Ray"],
     image: {
       src: "/misc/Mason_at_carnegie_mellon.webp",
@@ -128,7 +128,7 @@ export const work: Work[] = [
     org: "Kent State University",
     dates: "August 2023 to August 2024",
     summary:
-      "I was the first person you'd talk to when your Windows, Linux or Mac broke. I tracked down a lot of weird bugs and worked on my Apple Repair Certification.",
+      "I was the first person you talked to when your Windows, Linux or Mac broke. I fixed a lot of weird bugs and worked toward my Apple Repair Certification.",
     tech: ["Technical support", "Multi OS troubleshooting", "Customer service"],
     image: {
       src: "/misc/image_of_code.webp",
@@ -143,7 +143,7 @@ export const achievements: Achievement[] = [
   {
     title: "NexHacks, 1st and 2nd place",
     summary:
-      "Two wins in one weekend! 1st place with The Token Company, and 2nd with DevSwarm, which sorts tasks for big teams using n8n workflows with triage, coding and confidence agents.",
+      "1st place with The Token Company and 2nd with DevSwarm. DevSwarm sorts tasks for big teams using n8n workflows with triage, coding and confidence agents.",
     tech: ["Svelte", "Python", "n8n", "AI agents"],
     image: {
       src: "/misc/Mason_with_nexhacks_team.webp",
@@ -155,13 +155,13 @@ export const achievements: Achievement[] = [
   {
     title: "Hack Ohi/O",
     summary:
-      "An AI learning platform with 50+ widgets and tools. Its Adaptive Composition Engine shapes everything around how each person learns.",
+      "An AI learning platform with 50+ widgets and tools. Its Adaptive Composition Engine changes the experience based on how each person learns.",
     tech: ["LLM integration", "AI agents", "Adaptive learning"],
   },
   {
     title: "Honors",
     summary:
-      "Distinguished Student Leadership Award, April 2026. Choose Ohio First Scholarship in Computer Science, 2023 to May 2026. Eagle Scout with Scouts BSA, St. Francis Xavier, 2016 to 2022. And a regular in the MLH hackathon crowd.",
+      "Distinguished Student Leadership Award, April 2026. Choose Ohio First Scholarship in Computer Science, 2023 to May 2026. Eagle Scout with Scouts BSA, St. Francis Xavier, 2016 to 2022. I'm also pretty active in the MLH hackathon community.",
     tech: [],
   },
   {
@@ -184,7 +184,7 @@ export const achievements: Achievement[] = [
   },
   {
     title: "Markov Maze Prediction Calculator",
-    summary: "A C++ calculator that uses linear algebra and Markov chains to guess where you'll end up in a maze.",
+    summary: "A C++ calculator that uses linear algebra and Markov chains to predict where you'll end up in a maze.",
     tech: ["C++", "Linear algebra", "Algorithm design"],
   },
 ];
@@ -255,6 +255,6 @@ export const siteUpdated = "2026-11-09";
 export const hello = {
   tag: "Open to coffee chats",
   heading: "Hey! I'm Mason.",
-  body: "I'm a software engineer and a digital nomad, building from wherever I land. I'd love to chat with anyone who has something interesting to share.",
+  body: "I'm a software engineer and a digital nomad. I work from wherever I'm at, and I'm always up for a coffee chat with someone who has something interesting to share.",
   note: "30 min, video, free",
 };

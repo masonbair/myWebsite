@@ -5,5 +5,5 @@ export const size = ogSize;
 export const contentType = "image/png";
 
 export default function Image() {
-  return ogImage({ title: "Mason Bair", line: "Software engineer and digital nomad. Come say hey!" });
+  return ogImage({ title: "Mason Bair", line: "Software engineer and digital nomad." });
 }

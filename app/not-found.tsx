@@ -12,7 +12,7 @@ export default function NotFound() {
       <Tile tilt="left" core="flex flex-col gap-5 bg-tea p-7 text-night md:p-10">
         <Prompt>cd ./that-page</Prompt>
         <h1 className="text-4xl leading-none font-bold tracking-[-0.04em] md:text-5xl">Page not found</h1>
-        <p className="text-lg leading-relaxed">Oops, nothing here! It may have moved, or the link has a typo.</p>
+        <p className="text-lg leading-relaxed">Nothing here. It may have moved, or the link has a typo.</p>
         <Link href="/" className={`${stickerButtonShape} ${focusRingOnColor} mt-2 self-start border-night bg-night text-snow`}>
           Back to the home page
           <span className={buttonBubble}>

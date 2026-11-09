@@ -55,7 +55,7 @@ function AchievementCell({ a, cell }: { a: Achievement; cell: Cell }) {
 
 export function Achievements() {
   return (
-    <Section id="achievements" title="Hackathons, projects, and a few wins" prompt="cat wins.txt">
+    <Section id="achievements" title="Hackathons and side projects" prompt="cat wins.txt">
       <div className="mt-10 grid grid-cols-1 gap-5 md:mt-14 md:grid-cols-6 lg:grid-cols-12">
         {achievements.map((a, i) => (
           <AchievementCell key={a.title} a={a} cell={cells[i]} />

@@ -38,7 +38,7 @@ export function LocationTile({ place, countriesVisited }: { place: Place | null;
         </>
       ) : (
         <div className="flex items-end justify-between gap-3">
-          <p className="text-2xl leading-tight font-bold">countries so far, and counting!</p>
+          <p className="text-2xl leading-tight font-bold">countries so far</p>
           <CountryStamp count={countriesVisited} />
         </div>
       )}

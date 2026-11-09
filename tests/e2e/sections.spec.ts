@@ -67,7 +67,7 @@ test("ended roles are in the past and copy is current", async ({ request }) => {
   expect(html).not.toContain("Hackathons and honors");
   expect(html).toContain("August 2025 to May 2026");
   expect(html).toContain("May 2025 to May 2026");
-  expect(html).toContain("Hackathons, projects, and a few wins");
-  expect(html).toContain("digital nomad 23 countries in");
+  expect(html).toContain("Hackathons and side projects");
+  expect(html).toContain("digital nomad (23 countries so far)");
   expect(html).not.toContain("21 countries");
 });
