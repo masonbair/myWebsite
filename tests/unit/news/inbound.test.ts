@@ -291,4 +291,32 @@ describe("handleInbound", () => {
     await handleInbound(signed(received), deps);
     expect([...rows.values()][0].status).toBe("quarantined");
   });
+  describe("several forwarding addresses", () => {
+    const list = " A@Example.test ,, b@example.test, ";
+    const statusFor = async (retrieved: Partial<Retrieved>, forwardFrom = list) => {
+      const { deps, rows } = setup({ retrieved, env: { forwardFrom } });
+      await handleInbound(signed(received), deps);
+      return [...rows.values()][0].status;
+    };
+
+    it("accepts mail forwarded by either address, tolerating spaces and case", async () => {
+      expect(await statusFor({ headers: { "X-Forwarded-For": "reader@example.test a@example.test" }, received_for: [] })).toBe("pending");
+      expect(await statusFor({ headers: {}, received_for: ["B@EXAMPLE.test"] })).toBe("pending");
+    });
+
+    it("quarantines mail forwarded by a third address", async () => {
+      expect(await statusFor({ headers: { "X-Forwarded-For": "c@example.test" }, received_for: [] })).toBe("quarantined");
+    });
+
+    it("matches whole addresses only", async () => {
+      expect(await statusFor({ headers: { "X-Forwarded-For": "evil-a@example.test" }, received_for: [] }, "a@example.test, b@example.test")).toBe("quarantined");
+    });
+
+    it("answers 503 when the list has no addresses", async () => {
+      for (const forwardFrom of [" , ,, ", "   ", ""]) {
+        const { deps } = setup({ env: { forwardFrom } });
+        expect((await handleInbound(signed(received), deps)).status).toBe(503);
+      }
+    });
+  });
 });

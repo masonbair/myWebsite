@@ -508,6 +508,20 @@ describe("importMessages", () => {
   });
 });
 
+describe("importMessages across two accounts", () => {
+  it("counts each file's sources and collapses a message that sits in both", async () => {
+    const deps = memoryIngest();
+    const opts = { since: "2026-01-01", log: quiet };
+    const accountA = [rawEmail(1, "crew@morningbrew.test", "Mon, 05 Jan 2026 10:00:00 +0000"), rawEmail(2, "crew@morningbrew.test", "Tue, 06 Jan 2026 10:00:00 +0000")];
+    const accountB = [rawEmail(2, "crew@morningbrew.test", "Tue, 06 Jan 2026 10:00:00 +0000"), rawEmail(3, "crew@morningbrew.test", "Wed, 07 Jan 2026 10:00:00 +0000")];
+    const a = await importMessages(messages(accountA), deps, opts);
+    const b = await importMessages(messages(accountB), deps, opts);
+    expect(a).toEqual({ bySource: { "Morning Brew": 2 }, created: 2, duplicates: 0, quarantined: 0, older: 0, errors: 0 });
+    expect(b).toEqual({ bySource: { "Morning Brew": 1 }, created: 1, duplicates: 1, quarantined: 0, older: 0, errors: 0 });
+    expect(deps.rows).toHaveLength(3);
+  });
+});
+
 describe("reclean", () => {
   it("fills empty clean_text from the stored raw email", async () => {
     const mem = memoryStore([issue(1, { cleanText: "", rawPath: "news/raw/a.eml" }), issue(2, { cleanText: "", rawPath: "news/raw/missing.eml" })]);

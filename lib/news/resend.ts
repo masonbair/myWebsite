@@ -6,6 +6,7 @@ import { ingestEmail, type IngestDeps } from "./ingest";
 export type InboundDeps = {
   secret: string | undefined;
   apiKey: string | undefined;
+  /** Comma-separated Gmail addresses that forward newsletters in. */
   forwardFrom: string | undefined;
   fetchFn: typeof fetch;
   dnsResolve: DnsResolve;
@@ -28,11 +29,15 @@ type Retrieved = {
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
-function forwardedTo(retrieved: Retrieved, forwardFrom: string): boolean {
-  const want = forwardFrom.trim().toLowerCase();
+function parseForwarders(list: string | undefined): string[] {
+  return (list ?? "").split(",").map((a) => a.trim().toLowerCase()).filter(Boolean);
+}
+
+function forwardedTo(retrieved: Retrieved, forwarders: string[]): boolean {
+  const want = new Set(forwarders);
   const header = Object.entries(retrieved.headers ?? {}).find(([k]) => k.toLowerCase() === "x-forwarded-for")?.[1];
   const values = [header, ...(Array.isArray(retrieved.received_for) ? retrieved.received_for : [])];
-  return values.some((v) => typeof v === "string" && v.split(/[\s<>,;"]+/).some((token) => token.toLowerCase() === want));
+  return values.some((v) => typeof v === "string" && v.split(/[\s<>,;"]+/).some((token) => want.has(token.toLowerCase())));
 }
 
 function allowedRawHost(url: URL): boolean {
@@ -41,8 +46,9 @@ function allowedRawHost(url: URL): boolean {
 
 /** Verifies a Resend `email.received` webhook, fetches the raw email and ingests it; Resend retries on 502. */
 export async function handleInbound(request: Request, deps: InboundDeps): Promise<Response> {
-  const { secret, apiKey, forwardFrom, ingest } = deps;
-  if (!secret || !apiKey || !forwardFrom || !ingest) return json({ error: "not configured" }, 503);
+  const { secret, apiKey, ingest } = deps;
+  const forwarders = parseForwarders(deps.forwardFrom);
+  if (!secret || !apiKey || forwarders.length === 0 || !ingest) return json({ error: "not configured" }, 503);
 
   const bytes = await readCappedBody(request, MAX_EVENT_BYTES);
   if (!bytes) return json({ error: "too large" }, 413);
@@ -108,7 +114,7 @@ export async function handleInbound(request: Request, deps: InboundDeps): Promis
     }
 
     const dkimFrom = await alignedDkimFrom(raw, deps.dnsResolve);
-    const result = await ingestEmail(raw, ingest, { kind: "webhook", forwardedOk: forwardedTo(retrieved, forwardFrom), dkimFrom });
+    const result = await ingestEmail(raw, ingest, { kind: "webhook", forwardedOk: forwardedTo(retrieved, forwarders), dkimFrom });
     console.info("news inbound", {
       emailId,
       status: result.status,
