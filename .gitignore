@@ -13,3 +13,7 @@ next-env.d.ts
 supabase/.temp/
 .vitest/
 .playwright-mcp/
+
+# local agent/tool folders
+.claude/worktrees/
+.nodeterm/
