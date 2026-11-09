@@ -72,3 +72,15 @@ it('with ask false only checks the permission, so a background run never prompts
   (Location.getForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'denied' });
   expect(await coarseFix({ ask: false })).toBeNull();
 });
+
+it('with fallback false never uses a last-known position', async () => {
+  jest.useFakeTimers();
+  current.mockReturnValue(new Promise(() => {}));
+  lastKnown.mockResolvedValue(LONDON);
+  const result = coarseFix({ fallback: false });
+  await jest.advanceTimersByTimeAsync(20_000);
+  expect(await result).toBeNull();
+  current.mockRejectedValue(new Error('no provider'));
+  expect(await coarseFix({ fallback: false })).toBeNull();
+  expect(lastKnown).not.toHaveBeenCalled();
+});

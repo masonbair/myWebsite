@@ -17,6 +17,7 @@ jest.mock('../../modules/battery-status', () => ({
 jest.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: jest.fn(),
+  getForegroundPermissionsAsync: jest.fn(),
   getCurrentPositionAsync: jest.fn(),
   getLastKnownPositionAsync: jest.fn(),
   Accuracy: { Lowest: 1, Balanced: 3 },
@@ -274,8 +275,25 @@ it('changing private places sends nothing while reporting is off', async () => {
   expect(Location.getCurrentPositionAsync).toHaveBeenCalledTimes(1);
 });
 
+it('marking a place private uses only a fresh fix: no fix means nothing saved, nothing sent', async () => {
+  (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+  (Location.getForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+  (Location.getCurrentPositionAsync as jest.Mock).mockRejectedValue(new Error('timed out'));
+  (Location.getLastKnownPositionAsync as jest.Mock).mockResolvedValue({ coords: { latitude: 51.5, longitude: -0.12 } });
+  await show();
+  await fireEvent.press(screen.getByText('Mark this place private'));
+  await fireEvent.changeText(await screen.findByPlaceholderText('Name for this place'), 'test-a');
+  await fireEvent.press(screen.getByText('Save place'));
+  await screen.findByText('Could not get your location. Try again outside or in a minute.');
+  expect(Location.getLastKnownPositionAsync).not.toHaveBeenCalled();
+  expect(screen.queryByText('Remove test-a')).toBeNull();
+  expect(await AsyncStorage.getItem('private-places')).toBeNull();
+  expect(runPlaceTask).not.toHaveBeenCalled();
+});
+
 it('asks for permission and saves nothing when location is refused', async () => {
   (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'denied' });
+  (Location.getForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'denied' });
   await show();
   await fireEvent.press(screen.getByText('Mark this place private'));
   await fireEvent.changeText((await screen.findByPlaceholderText('Name for this place')), 'Cabin');

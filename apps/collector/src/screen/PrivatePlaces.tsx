@@ -1,3 +1,4 @@
+import * as Location from 'expo-location';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { coarseFix } from '../place/coarseFix';
@@ -5,6 +6,8 @@ import type { Point } from '../place/nearestPlace';
 import { addPrivatePlace, loadPrivatePlaces, removePrivatePlace } from '../place/privatePlaces';
 import { Button } from './Button';
 import { ERROR } from './theme';
+
+const NO_FIX = 'Could not get your location. Try again outside or in a minute.';
 
 /** reportPlace is null while place reporting is off; otherwise a change re-sends the place so the site updates now. */
 export function PrivatePlaces({ reportPlace }: { reportPlace: ((at: Point) => Promise<void>) | null }) {
@@ -31,9 +34,11 @@ export function PrivatePlaces({ reportPlace }: { reportPlace: ((at: Point) => Pr
     setError(null);
     let at: Point | null;
     try {
-      at = await coarseFix();
+      // A last-known position may be from another place, which would mark the wrong area private.
+      at = await coarseFix({ fallback: false });
       if (!at) {
-        setError('Location permission is needed to mark this place.');
+        const allowed = (await Location.getForegroundPermissionsAsync()).status === 'granted';
+        setError(allowed ? NO_FIX : 'Location permission is needed to mark this place.');
         return;
       }
       await addPrivatePlace(name, at);
@@ -41,7 +46,7 @@ export function PrivatePlaces({ reportPlace }: { reportPlace: ((at: Point) => Pr
       setLabel('');
       await reload();
     } catch {
-      setError('Could not get your location. Try again.');
+      setError(NO_FIX);
       return;
     }
     await sendQuietly(at);

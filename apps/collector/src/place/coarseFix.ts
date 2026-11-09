@@ -15,13 +15,14 @@ function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 
 /**
  * One low-accuracy fix, never fine; a recent last-known position if no fix comes in time.
- * Null when location is not allowed or neither exists. ask false never prompts (for background runs).
+ * Null when location is not allowed or neither exists. ask false never prompts (for background runs);
+ * fallback false never uses a last-known position (it may be from somewhere else).
  */
-export async function coarseFix({ ask = true }: { ask?: boolean } = {}): Promise<Point | null> {
+export async function coarseFix({ ask = true, fallback = true }: { ask?: boolean; fallback?: boolean } = {}): Promise<Point | null> {
   const { status } = await (ask ? Location.requestForegroundPermissionsAsync() : Location.getForegroundPermissionsAsync());
   if (status !== 'granted') return null;
   const position =
     (await within(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest }), FIX_TIMEOUT_MS).catch(() => null)) ??
-    (await Location.getLastKnownPositionAsync({ maxAge: LAST_KNOWN_MAX_AGE_MS }).catch(() => null));
+    (fallback ? await Location.getLastKnownPositionAsync({ maxAge: LAST_KNOWN_MAX_AGE_MS }).catch(() => null) : null);
   return position ? { latitude: position.coords.latitude, longitude: position.coords.longitude } : null;
 }
