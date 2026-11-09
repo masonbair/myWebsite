@@ -29,7 +29,8 @@ test.describe("dark", () => {
     expect(bg).not.toBe("rgb(247, 246, 253)");
     const [r, g, b, a = 1] = bg.match(/[\d.]+/g)!.map(Number);
     expect(a).toBe(1);
-    expect(Math.max(r, g, b)).toBeLessThan(40);
+    // The sticker dark canvas is #15142a, so its blue channel is 42.
+    expect(Math.max(r, g, b)).toBeLessThan(48);
   });
 });
 

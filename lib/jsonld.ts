@@ -1,5 +1,5 @@
 import { contact, siteUrl } from "@/content/site";
-import { bookingUrl, coffee } from "@/content/coffee";
+import { bookingUrl, coffee, coffeeUpdated } from "@/content/coffee";
 
 export const PERSON_ID = `${siteUrl}/#person`;
 const COFFEE_URL = `${siteUrl}/coffee`;
@@ -37,8 +37,30 @@ export function coffeeJsonLd() {
     url: COFFEE_URL,
     name: coffee.heading,
     description: coffee.description,
+    dateModified: new Date(coffeeUpdated).toISOString(),
     about: { "@id": PERSON_ID },
-    potentialAction: { "@type": "ScheduleAction", name: "Book a coffee chat", target: bookingUrl },
+    mainEntity: {
+      "@type": "Service",
+      name: "Coffee chat with Mason Bair",
+      serviceType: "Career coffee chat",
+      description: "A free 30 minute video call about DevSecOps, hackathons, CS careers, or working remotely while traveling.",
+      provider: { "@id": PERSON_ID },
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD", url: COFFEE_URL },
+    },
+    hasPart: coffee.niches.map((niche) => ({
+      "@type": "WebPageElement",
+      name: niche.heading,
+      url: `${COFFEE_URL}#${niche.id}`,
+    })),
+    potentialAction: {
+      "@type": "ScheduleAction",
+      name: "Book a coffee chat",
+      target: {
+        "@type": "EntryPoint",
+        urlTemplate: bookingUrl,
+        actionPlatform: ["https://schema.org/DesktopWebPlatform", "https://schema.org/MobileWebPlatform"],
+      },
+    },
   };
 }
 

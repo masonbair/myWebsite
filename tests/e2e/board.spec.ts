@@ -157,7 +157,8 @@ test.describe("photo slideshow", () => {
       await expect(slideshow(page).locator("img")).toHaveAttribute("loading", "eager");
       const src = await slideshow(page).locator("img").getAttribute("src");
       const file = new URL(src!, "http://x").searchParams.get("url") ?? src!;
-      await expect(page.locator(`link[rel="preload"][imagesrcset*="${encodeURIComponent(file)}"]`)).toHaveCount(0);
+      // The hello tile is text now, so this photo is often the largest paint and earns its one preload.
+      await expect(page.locator(`link[rel="preload"][imagesrcset*="${encodeURIComponent(file)}"]`)).toHaveCount(1);
     });
   });
 

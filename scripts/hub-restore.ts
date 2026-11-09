@@ -40,6 +40,8 @@ function assertSnapshot(value: unknown): asserts value is Snapshot {
     (s.nowPlace === undefined || Array.isArray(s.nowPlace)) &&
     (s.nowPlacePrivacy === undefined || Array.isArray(s.nowPlacePrivacy)) &&
     (s.nowBake === undefined || Array.isArray(s.nowBake)) &&
+    (s.collectorPhoto === undefined || Array.isArray(s.collectorPhoto)) &&
+    (s.collectorDaylioExport === undefined || Array.isArray(s.collectorDaylioExport)) &&
     (s.itemsHistory === undefined || Array.isArray(s.itemsHistory)) &&
     (s.auditLog === undefined || Array.isArray(s.auditLog)) &&
     (s.news === undefined || (typeof s.news === "object" && s.news !== null));
@@ -85,6 +87,18 @@ const NOW_BAKE_SQL = `
   insert into public.now_bake (id, name, photo, baked_at)
   select id, name, photo, baked_at
   from jsonb_to_recordset($1::jsonb) as r(id bigint, name text, photo text, baked_at timestamptz)`;
+
+const COLLECTOR_PHOTO_SQL = `
+  insert into public.collector_photo (id, path, asset_id, taken_at, width, height, hidden, created_at)
+  select id, path, asset_id, taken_at, width, height, hidden, created_at
+  from jsonb_to_recordset($1::jsonb) as r(id bigint, path text, asset_id text, taken_at timestamptz, width integer, height integer,
+       hidden boolean, created_at timestamptz)`;
+
+const COLLECTOR_DAYLIO_EXPORT_SQL = `
+  insert into public.collector_daylio_export (id, path, filename, size_bytes, modified_at, created_at)
+  select id, path, filename, size_bytes, modified_at, created_at
+  from jsonb_to_recordset($1::jsonb) as r(id bigint, path text, filename text, size_bytes bigint, modified_at timestamptz,
+       created_at timestamptz)`;
 
 const ITEMS_HISTORY_SQL = `
   insert into public.items_history (id, item_id, title, description, changed_by, changed_at)
@@ -207,6 +221,28 @@ async function restore(snapshot: Snapshot, target: string): Promise<Record<strin
     await db.query(syncIdentity("now_place"));
     await db.query(syncIdentity("now_place_privacy"));
     await db.query(syncIdentity("now_bake"));
+    const collectorPhoto = (snapshot.collectorPhoto ?? []).map((p) => ({
+      id: p.id,
+      path: p.path,
+      asset_id: p.assetId,
+      taken_at: p.takenAt,
+      width: p.width,
+      height: p.height,
+      hidden: p.hidden,
+      created_at: p.createdAt,
+    }));
+    const collectorDaylioExport = (snapshot.collectorDaylioExport ?? []).map((d) => ({
+      id: d.id,
+      path: d.path,
+      filename: d.filename,
+      size_bytes: d.sizeBytes,
+      modified_at: d.modifiedAt,
+      created_at: d.createdAt,
+    }));
+    await db.query(COLLECTOR_PHOTO_SQL, [JSON.stringify(collectorPhoto)]);
+    await db.query(COLLECTOR_DAYLIO_EXPORT_SQL, [JSON.stringify(collectorDaylioExport)]);
+    await db.query(syncIdentity("collector_photo"));
+    await db.query(syncIdentity("collector_daylio_export"));
     const itemsHistory = (snapshot.itemsHistory ?? []).map((v) => ({
       id: v.id,
       item_id: v.itemId,
@@ -252,6 +288,8 @@ async function restore(snapshot: Snapshot, target: string): Promise<Record<strin
       nowPlace: nowPlace.length,
       nowPlacePrivacy: nowPlacePrivacy.length,
       nowBake: nowBake.length,
+      collectorPhoto: collectorPhoto.length,
+      collectorDaylioExport: collectorDaylioExport.length,
       itemsHistory: itemsHistory.length,
       auditLog: auditLog.length,
     };

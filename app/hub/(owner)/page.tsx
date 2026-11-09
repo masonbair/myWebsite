@@ -34,7 +34,7 @@ export default async function InboxPage({ searchParams }: PageProps<"/hub">) {
       {justSavedId && (
         <p
           role="status"
-          className="mb-6 flex items-center gap-2 rounded-tile bg-accent/10 px-4 py-3 text-sm font-semibold text-accent-ink"
+          className="mb-6 flex items-center gap-2 rounded-tile border-[2.5px] border-line bg-accent px-4 py-3 text-sm font-semibold text-night shadow-sticker-sm"
         >
           <Check size={16} weight="bold" aria-hidden />
           Saved to inbox

@@ -106,6 +106,13 @@ describe("now actions", () => {
     expect(inserts).toEqual([]);
   });
 
+  it("never writes a privacy row for a private place the phone sent without a city", async () => {
+    rows = { place: { ...place, city: null, private: true, sentPrivate: true }, bake: null };
+    expect(await setPlacePrivateAction(true)).toEqual({ ok: true });
+    expect(await setPlacePrivateAction(false)).toEqual({ ok: false, error: "The phone sent this place as private, so it stays private." });
+    expect(inserts).toEqual([]);
+  });
+
   it("refuses a value that is not true or false", async () => {
     expect(await setPlacePrivateAction("yes" as unknown as boolean)).toEqual({ ok: false, error: "Bad request." });
     expect(inserts).toEqual([]);

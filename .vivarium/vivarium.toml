@@ -1,0 +1,104 @@
+[project]
+name = "myWebsite"
+tags = []
+
+[commands.build]
+run = "npm run build"
+
+[commands.test]
+run = "npm test"
+
+[commands.start]
+run = "npm start"
+in_check = false
+
+[probes.lighthouse]
+script = "probes/lighthouse.sh"
+unit = "score"
+timeout_s = 300
+
+[probes.tiles]
+script = "probes/tiles.sh"
+unit = "tiles"
+
+[[goals]]
+metric = "home_search"
+op = ">="
+target = 100
+why = "People and AI tools must find the coffee chat."
+confirmed = true
+
+[[goals]]
+metric = "coffee_search"
+op = ">="
+target = 100
+why = "People and AI tools must find the coffee chat."
+confirmed = true
+
+[[goals]]
+metric = "home_agent"
+op = ">="
+target = 100
+why = "AI agents looking for coffee chats must be able to read the site."
+confirmed = true
+
+[[goals]]
+metric = "coffee_agent"
+op = ">="
+target = 100
+why = "AI agents looking for coffee chats must be able to read the site."
+confirmed = true
+
+[[goals]]
+metric = "home_speed"
+op = ">="
+target = 95
+why = "Visitors leave if the first screen is slow."
+load_sensitive = true
+confirmed = true
+
+[[goals]]
+metric = "coffee_speed"
+op = ">="
+target = 95
+why = "Visitors leave if the booking page is slow."
+load_sensitive = true
+confirmed = true
+
+[[goals]]
+metric = "home_lcp_s"
+op = "<="
+target = 2.5
+why = "The main photo must show fast on a slow phone connection."
+load_sensitive = true
+confirmed = true
+
+[[goals]]
+metric = "coffee_lcp_s"
+op = "<="
+target = 2.5
+why = "The booking page must show fast on a slow phone connection."
+load_sensitive = true
+confirmed = true
+
+[[goals]]
+metric = "home_access"
+op = ">="
+target = 100
+why = "Everyone should be able to use the site."
+confirmed = true
+
+[[goals]]
+metric = "coffee_access"
+op = ">="
+target = 100
+why = "Everyone should be able to book a coffee chat."
+confirmed = true
+
+[[goals]]
+metric = "tiles"
+op = "<="
+target = 8
+why = "Keeps the first screen focused on who Mason is and the coffee chat."
+scope = true
+confirmed = true

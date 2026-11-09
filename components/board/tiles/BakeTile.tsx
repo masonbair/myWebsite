@@ -6,7 +6,7 @@ import { Tile } from "../Tile";
 
 export function BakeTile({ bake }: { bake: Bake }) {
   return (
-    <Tile core="flex items-stretch gap-5 bg-tea p-6 md:p-7">
+    <Tile tilt="right" core="flex items-stretch gap-5 bg-tea p-6 md:p-7">
       <div className="flex min-w-0 flex-1 flex-col justify-between gap-6">
         <Cookie weight="light" size={28} className="text-night" aria-hidden />
         <div>
@@ -16,7 +16,7 @@ export function BakeTile({ bake }: { bake: Bake }) {
         </div>
       </div>
       {bake.photo && (
-        <div className="relative w-2/5 shrink-0 overflow-hidden rounded-[calc(1.5rem-0.375rem-0.5rem)]">
+        <div className="relative w-2/5 shrink-0 overflow-hidden rounded-xl border-2 border-night">
           <Image src={bake.photo} alt={bake.name} fill sizes="(min-width: 1024px) 15vw, 40vw" className="object-cover" />
         </div>
       )}

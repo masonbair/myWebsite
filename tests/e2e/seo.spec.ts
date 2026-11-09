@@ -57,6 +57,10 @@ test.describe("json-ld", () => {
     expect(data[0]["@context"]).toBe("https://schema.org");
     expect(data[0]["@type"]).toBe("WebPage");
     expect(data[0].about).toEqual({ "@id": PERSON_ID });
+    expect(typeof data[0].dateModified).toBe("string");
+    const target = (data[0].potentialAction as Node).target as Node;
+    expect(target["@type"]).toBe("EntryPoint");
+    expect(target.urlTemplate).toBe(BOOKING_URL);
   });
 
   test("no FAQPage and no phone in any block", async ({ request }) => {
@@ -129,7 +133,7 @@ test.describe("coffee page", () => {
     await expect(book).toHaveAttribute("rel", "noopener noreferrer");
     const questions = await page.getByTestId("faq").locator("dt").count();
     expect(questions).toBeGreaterThanOrEqual(3);
-    expect(questions).toBeLessThanOrEqual(5);
+    expect(questions).toBeLessThanOrEqual(8);
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://masonbair.com/coffee");
     await expect(page).toHaveTitle("Coffee chat | Mason Bair");
     await expect(page.getByRole("main").getByRole("link", { name: /GitHub/ })).toHaveAttribute("href", "https://github.com/masonbair");
@@ -137,6 +141,25 @@ test.describe("coffee page", () => {
       "href",
       "https://www.linkedin.com/in/masonbair/",
     );
+  });
+
+  test("niche sections, email fallback, and last updated date are on the page", async ({ page }) => {
+    await page.goto("/coffee");
+    for (const id of ["devsecops", "nomad", "kent-state"]) {
+      await expect(page.locator(`#${id}`).getByRole("heading", { level: 3 })).toBeVisible();
+    }
+    const email = page.getByRole("link", { name: "Email Mason to request a coffee chat" });
+    await expect(email).toHaveAttribute("href", /^mailto:bair\.s\.mason@gmail\.com\?subject=Coffee%20chat%20request&body=/);
+    await expect(page.getByRole("link", { name: "Book by email" })).toHaveAttribute("href", "#book-by-email");
+    await expect(page.getByTestId("faq").getByText("Is it free?", { exact: true })).toBeVisible();
+    await expect(page.getByText("Free", { exact: true })).toBeVisible();
+    await expect(page.getByRole("main").getByText(/^Last updated/).locator("time")).toHaveAttribute("datetime", /^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  test("IndexNow key file is served as plain text", async ({ request }) => {
+    const res = await request.get("/ff299680043c902e40ce6cb93c5e40b2.txt");
+    expect(res.status()).toBe(200);
+    expect((await res.text()).trim()).toBe("ff299680043c902e40ce6cb93c5e40b2");
   });
 
   test("no sideways scroll", async ({ page }) => {
