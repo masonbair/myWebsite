@@ -21,17 +21,16 @@ export type ClaudeUsage = {
   server_tool_use?: { web_search_requests?: number | null } | null;
 };
 
-export function costOf(model: ModelId, usage: ClaudeUsage): number {
+/** Dollar cost of one call; `batch` halves it (Message Batches API price). */
+export function costOf(model: ModelId, usage: ClaudeUsage, opts: { batch?: boolean } = {}): number {
   const p = PRICES[model];
   const input = usage.input_tokens ?? 0;
   const output = usage.output_tokens ?? 0;
   const cacheRead = usage.cache_read_input_tokens ?? 0;
   const cacheWrite = usage.cache_creation_input_tokens ?? 0;
   const searches = usage.server_tool_use?.web_search_requests ?? 0;
-  return (
-    ((input + cacheRead * 0.1 + cacheWrite * 1.25) * p.input + output * p.output) / 1_000_000 +
-    searches * WEB_SEARCH_USD
-  );
+  const tokens = ((input + cacheRead * 0.1 + cacheWrite * 1.25) * p.input + output * p.output) / 1_000_000;
+  return (opts.batch ? tokens / 2 : tokens) + searches * WEB_SEARCH_USD;
 }
 
 export type UsageRow = {
@@ -40,12 +39,13 @@ export type UsageRow = {
   itemId: string | null;
   purpose: string;
   usage: ClaudeUsage;
+  batch?: boolean;
 };
 
 /** Inserts one ai_usage row with the computed cost; returns the cost in USD. */
 export async function recordUsage(client: SupabaseClient, row: UsageRow): Promise<number> {
   const { usage } = row;
-  const cost = Math.round(costOf(row.model, usage) * 1e6) / 1e6;
+  const cost = Math.round(costOf(row.model, usage, { batch: row.batch }) * 1e6) / 1e6;
   const { error } = await client.from("ai_usage").insert({
     feature: row.feature,
     model: row.model,

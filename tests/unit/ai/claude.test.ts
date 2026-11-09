@@ -50,6 +50,11 @@ describe("costOf", () => {
     ).toBeCloseTo(0.05);
   });
 
+  it("prices a typical news issue on Sonnet, and halves it for batch", () => {
+    expect(costOf("claude-sonnet-5-5", { input_tokens: 8000, output_tokens: 2500 })).toBeCloseTo(0.041, 10);
+    expect(costOf("claude-sonnet-5-5", { input_tokens: 8000, output_tokens: 2500 }, { batch: true })).toBeCloseTo(0.0205, 10);
+  });
+
   it("counts missing or null fields as 0", () => {
     expect(
       costOf("claude-opus-5-5", {
@@ -102,6 +107,20 @@ describe("recordUsage", () => {
       purpose: "review",
       cost_usd: cost,
     });
+  });
+
+  it("records half the cost for a batch row", async () => {
+    const { client, inserted } = fakeClient([]);
+    const cost = await recordUsage(client, {
+      feature: "news",
+      model: "claude-sonnet-5-5",
+      itemId: null,
+      purpose: "backfill",
+      usage: { input_tokens: 8000, output_tokens: 2500 },
+      batch: true,
+    });
+    expect(cost).toBe(0.0205);
+    expect(inserted[0].cost_usd).toBe(0.0205);
   });
 
   it("throws when the insert fails", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { capUsd } from "@/lib/news/budget";
+import { capUsd, NEWS_CAPPED_PURPOSES } from "@/lib/news/budget";
 
 describe("capUsd", () => {
   it("defaults to 25", () => {
@@ -13,5 +13,11 @@ describe("capUsd", () => {
     for (const bad of ["", "abc", "0", "-5", "NaN", "Infinity", "10usd"]) {
       expect(capUsd({ NEWS_MONTHLY_BUDGET_USD: bad })).toBe(25);
     }
+  });
+});
+
+describe("NEWS_CAPPED_PURPOSES", () => {
+  it("counts extract, dedupe and shared only", () => {
+    expect([...NEWS_CAPPED_PURPOSES]).toEqual(["extract", "dedupe", "shared"]);
   });
 });
