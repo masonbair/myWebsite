@@ -69,6 +69,8 @@ node scripts/hub-restore.ts hub-backups-2026-11-05.json --target postgresql://po
 - It runs in one transaction with `session_replication_role = replica`, so the hub guard triggers (which refuse done items, `claude` labels and Mason's comments from anyone but the signed-in owner) are skipped for the restore only.
 - It restores items (with archive reason, client key and completed time), comments, `hub_state`, `memo_files`, and the `now_place`, `now_place_privacy` and `now_bake` rows (ids kept, identity sequences moved past them).
 - It also restores `items_history` (earlier titles and descriptions) and `audit_log`, ids kept. Backups made before 2026-11-05 hold neither.
+- It restores the Collector app's `collector_photo` rows (with `hidden`) and `collector_daylio_export` rows, ids kept. It does not restore `collector_heartbeat` or any Storage file (`photos`, `daylio` buckets): the phone keeps the originals and uploads again.
+- A backup that holds a private place with no city (sent by the Collector app) restores only into a database that already has `0007_collector.sql` applied.
 - It does not restore `hub_owner`, auth users, or the `updated_at` time of `hub_state` rows. Mason is recorded as the owner again on his first sign-in.
 - Restoring into a new Supabase project: turn "Allow new users to sign up" on just long enough for Mason's first sign-in, then off again (see Auth setup, step 4).
 

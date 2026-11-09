@@ -33,6 +33,17 @@ export type BackupNowPlacePrivacy = {
   createdAt: string;
 };
 export type BackupNowBake = { id: number; name: string; photo: string | null; bakedAt: string };
+export type BackupCollectorPhoto = {
+  id: number;
+  path: string;
+  assetId: string;
+  takenAt: string;
+  width: number;
+  height: number;
+  hidden: boolean;
+  createdAt: string;
+};
+export type BackupDaylioExport = { id: number; path: string; filename: string; sizeBytes: number; modifiedAt: string; createdAt: string };
 export type BackupAuditEntry = { id: number; actor: string; action: string; itemId: string | null; detail: unknown; at: string };
 
 export type Snapshot = {
@@ -43,6 +54,8 @@ export type Snapshot = {
   nowPlace: BackupNowPlace[];
   nowPlacePrivacy: BackupNowPlacePrivacy[];
   nowBake: BackupNowBake[];
+  collectorPhoto: BackupCollectorPhoto[];
+  collectorDaylioExport: BackupDaylioExport[];
   itemsHistory: ItemVersion[];
   auditLog: BackupAuditEntry[];
   takenAt: string;
@@ -56,6 +69,8 @@ export interface SnapshotSource {
   nowPlace(): Promise<BackupNowPlace[]>;
   nowPlacePrivacy(): Promise<BackupNowPlacePrivacy[]>;
   nowBake(): Promise<BackupNowBake[]>;
+  collectorPhoto(): Promise<BackupCollectorPhoto[]>;
+  collectorDaylioExport(): Promise<BackupDaylioExport[]>;
   itemsHistory(): Promise<ItemVersion[]>;
   auditLog(): Promise<BackupAuditEntry[]>;
 }
@@ -78,6 +93,8 @@ export async function snapshot(source: SnapshotSource, now: Date = new Date()): 
   const nowPlace = await source.nowPlace();
   const nowPlacePrivacy = await source.nowPlacePrivacy();
   const nowBake = await source.nowBake();
+  const collectorPhoto = await source.collectorPhoto();
+  const collectorDaylioExport = await source.collectorDaylioExport();
   const hubState = await source.hubState();
   const memoFiles = await source.memoFiles();
   const comments = await source.comments();
@@ -92,6 +109,8 @@ export async function snapshot(source: SnapshotSource, now: Date = new Date()): 
     nowPlace,
     nowPlacePrivacy,
     nowBake,
+    collectorPhoto,
+    collectorDaylioExport,
     itemsHistory,
     auditLog,
     takenAt: now.toISOString(),
@@ -227,6 +246,42 @@ export function createSnapshotSource(client: SupabaseClient): SnapshotSource {
     async nowBake() {
       const rows = await all<{ id: number; name: string; photo: string | null; baked_at: string }>("now_bake", "id");
       return rows.map((r) => ({ id: r.id, name: r.name, photo: r.photo, bakedAt: r.baked_at }));
+    },
+    async collectorPhoto() {
+      const rows = await all<{
+        id: number;
+        path: string;
+        asset_id: string;
+        taken_at: string;
+        width: number;
+        height: number;
+        hidden: boolean;
+        created_at: string;
+      }>("collector_photo", "id");
+      return rows.map((r) => ({
+        id: r.id,
+        path: r.path,
+        assetId: r.asset_id,
+        takenAt: r.taken_at,
+        width: r.width,
+        height: r.height,
+        hidden: r.hidden,
+        createdAt: r.created_at,
+      }));
+    },
+    async collectorDaylioExport() {
+      const rows = await all<{ id: number; path: string; filename: string; size_bytes: number; modified_at: string; created_at: string }>(
+        "collector_daylio_export",
+        "id",
+      );
+      return rows.map((r) => ({
+        id: r.id,
+        path: r.path,
+        filename: r.filename,
+        sizeBytes: r.size_bytes,
+        modifiedAt: r.modified_at,
+        createdAt: r.created_at,
+      }));
     },
     async itemsHistory() {
       const rows = await all<{ id: number; item_id: string; title: string; description: string; changed_by: string; changed_at: string }>(

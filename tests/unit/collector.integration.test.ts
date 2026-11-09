@@ -4,7 +4,7 @@ import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { beforeAll, describe, expect, it } from "vitest";
 import { readNowRows } from "@/lib/now";
-import { BUCKET, DAYLIO_PREFIX, PHOTO_PREFIX, RPC, TABLE, type PlaceRow } from "@/shared/collector-contract";
+import { BUCKET, DAYLIO_PREFIX, PHOTO_PREFIX, RPC, TABLE, daylioPath, type PlaceRow } from "@/shared/collector-contract";
 
 // Run with: HUB_TEST_DB_URL=1 HUB_TEST_SUPABASE_URL=http://127.0.0.1:54321 HUB_TEST_SERVICE_KEY=<SERVICE_ROLE_KEY> HUB_TEST_ANON_KEY=<ANON_KEY> (from `supabase status -o env`)
 // Rows can never be deleted, so every test writes rows with unique names.
@@ -123,6 +123,8 @@ describe.skipIf(!enabled)("collector tables, RPCs and storage against local Supa
       expect((await anon().rpc(RPC.addPhoto, args(assetId))).error).not.toBeNull();
       expect((await owner.rpc(RPC.addPhoto, { ...args(assetId), p_path: `other/${assetId}.jpg` })).error).not.toBeNull();
       expect((await owner.rpc(RPC.addPhoto, { ...args(assetId), p_path: `collector/../${assetId}.jpg` })).error).not.toBeNull();
+      expect((await owner.rpc(RPC.addPhoto, { ...args(assetId), p_path: `collector/other${assetId}.jpg` })).error).not.toBeNull();
+      expect((await owner.rpc(RPC.addPhoto, { ...args(`${assetId}/x`), p_asset_id: `${assetId}/x` })).error).not.toBeNull();
       expect(await rows(assetId)).toHaveLength(0);
     });
 
@@ -130,17 +132,17 @@ describe.skipIf(!enabled)("collector tables, RPCs and storage against local Supa
       const assetId = `it${randomUUID().slice(0, 8)}`;
       expect((await owner.rpc(RPC.addPhoto, args(assetId))).error).toBeNull();
 
-      const hidden = await owner.rpc("collector_set_photo_hidden", { p_asset_id: assetId, p_hidden: true });
+      const hidden = await owner.rpc(RPC.setPhotoHidden, { p_asset_id: assetId, p_hidden: true });
       expect(hidden).toMatchObject({ error: null, data: true });
       expect((await rows(assetId))[0].hidden).toBe(true);
 
-      expect((await stranger.rpc("collector_set_photo_hidden", { p_asset_id: assetId, p_hidden: false })).error).not.toBeNull();
-      expect((await anon().rpc("collector_set_photo_hidden", { p_asset_id: assetId, p_hidden: false })).error).not.toBeNull();
+      expect((await stranger.rpc(RPC.setPhotoHidden, { p_asset_id: assetId, p_hidden: false })).error).not.toBeNull();
+      expect((await anon().rpc(RPC.setPhotoHidden, { p_asset_id: assetId, p_hidden: false })).error).not.toBeNull();
       expect((await rows(assetId))[0].hidden).toBe(true);
 
-      expect(await owner.rpc("collector_set_photo_hidden", { p_asset_id: assetId, p_hidden: false })).toMatchObject({ error: null, data: true });
+      expect(await owner.rpc(RPC.setPhotoHidden, { p_asset_id: assetId, p_hidden: false })).toMatchObject({ error: null, data: true });
       expect((await rows(assetId))[0].hidden).toBe(false);
-      expect(await owner.rpc("collector_set_photo_hidden", { p_asset_id: "no-such-asset", p_hidden: true })).toMatchObject({ error: null, data: false });
+      expect(await owner.rpc(RPC.setPhotoHidden, { p_asset_id: "no-such-asset", p_hidden: true })).toMatchObject({ error: null, data: false });
 
       expect((await owner.from("collector_photo").update({ hidden: true }).eq("asset_id", assetId)).error).not.toBeNull();
       expect((await owner.from("collector_photo").select("asset_id")).error).not.toBeNull();
@@ -151,14 +153,15 @@ describe.skipIf(!enabled)("collector tables, RPCs and storage against local Supa
   });
 
   describe("collector_add_daylio_export", () => {
-    const args = (filename: string) => ({
-      p_path: `${DAYLIO_PREFIX}${filename}`,
+    const modifiedMs = Date.parse("2026-11-02T08:00:00.250Z");
+    const args = (filename: string, size = 12345) => ({
+      p_path: daylioPath(filename, size, modifiedMs),
       p_filename: filename,
-      p_size_bytes: 12345,
-      p_modified_at: "2026-11-02T08:00:00Z",
+      p_size_bytes: size,
+      p_modified_at: new Date(modifiedMs).toISOString(),
     });
     const rows = async (filename: string) =>
-      (await service().from("collector_daylio_export").select("*").eq("filename", filename)).data ?? [];
+      (await service().from("collector_daylio_export").select("*").eq("filename", filename).order("size_bytes")).data ?? [];
 
     it("adds one row however often the owner sends it", async () => {
       const filename = `daylio_export_${randomUUID().slice(0, 8)}.csv`;
@@ -167,10 +170,28 @@ describe.skipIf(!enabled)("collector tables, RPCs and storage against local Supa
       expect(await rows(filename)).toHaveLength(1);
     });
 
-    it("refuses a stranger, anon and a path outside exports/", async () => {
+    it("keeps a re-export with the same file name as a second row and a second object", async () => {
+      const filename = `daylio export ${randomUUID().slice(0, 8)}.csv`;
+      const csv = (text: string) => new Blob([text], { type: "text/csv" });
+      for (const [size, body] of [
+        [11, "a,b\n1,2\n"],
+        [17, "a,b\n1,2\n3,4\n"],
+      ] as const) {
+        const a = args(filename, size);
+        expect((await owner.storage.from(BUCKET.daylio).upload(a.p_path, csv(body), { contentType: "text/csv" })).error).toBeNull();
+        expect((await owner.rpc(RPC.addDaylioExport, a)).error).toBeNull();
+      }
+      const found = await rows(filename);
+      expect(found.map((r) => r.path)).toEqual([daylioPath(filename, 11, modifiedMs), daylioPath(filename, 17, modifiedMs)]);
+      for (const r of found) expect((await service().storage.from(BUCKET.daylio).download(r.path)).error).toBeNull();
+    });
+
+    it("refuses a stranger, anon and a path that does not match the file's version", async () => {
       const filename = `daylio_export_${randomUUID().slice(0, 8)}.csv`;
       expect((await stranger.rpc(RPC.addDaylioExport, args(filename))).error).not.toBeNull();
       expect((await anon().rpc(RPC.addDaylioExport, args(filename))).error).not.toBeNull();
+      expect((await owner.rpc(RPC.addDaylioExport, { ...args(filename), p_path: `${DAYLIO_PREFIX}${filename}` })).error).not.toBeNull();
+      expect((await owner.rpc(RPC.addDaylioExport, { ...args(filename), p_path: daylioPath(filename, 999, modifiedMs) })).error).not.toBeNull();
       expect((await owner.rpc(RPC.addDaylioExport, { ...args(filename), p_path: `other/${filename}` })).error).not.toBeNull();
       expect(await rows(filename)).toHaveLength(0);
     });
@@ -187,13 +208,37 @@ describe.skipIf(!enabled)("collector tables, RPCs and storage against local Supa
 
       expect((await stranger.rpc(RPC.heartbeat, { p_status: { at, items: [{ key: `${key}-x`, ok: true }] } })).error).not.toBeNull();
       expect((await anon().rpc(RPC.heartbeat, { p_status })).error).not.toBeNull();
-      expect((await owner.rpc(RPC.heartbeat, { p_status: [1, 2] })).error).not.toBeNull();
       expect((await owner.from("collector_heartbeat").select("status")).error).not.toBeNull();
+    });
+
+    it("accepts exactly { at, items: [{ key, ok }] } and nothing else", async () => {
+      const at = new Date().toISOString();
+      expect((await owner.rpc(RPC.heartbeat, { p_status: { at, items: [] } })).error).toBeNull();
+      expect((await owner.rpc(RPC.heartbeat, { p_status: { at: "2026-11-09T12:00:00+01:00", items: [{ key: "place:last_ok", ok: false }] } })).error).toBeNull();
+      const bad: unknown[] = [
+        [1, 2],
+        {},
+        { at },
+        { at, items: [], extra: 1 },
+        { at: 12, items: [] },
+        { at: "yesterday", items: [] },
+        { at, items: {} },
+        { at, items: [{ key: "photos" }] },
+        { at, items: [{ key: "photos", ok: "yes" }] },
+        { at, items: [{ key: "Photos", ok: true }] },
+        { at, items: [{ key: "x".repeat(41), ok: true }] },
+        { at, items: [{ key: "photos", ok: true, note: "hi" }] },
+        { at, items: ["photos"] },
+      ];
+      for (const p_status of bad) {
+        const { error } = await owner.rpc(RPC.heartbeat, { p_status });
+        expect(error?.message, JSON.stringify(p_status)).toMatch(/collector_heartbeat_status_check/);
+      }
     });
   });
 
   describe("storage", () => {
-    it("lets the owner add a photo under collector/ once, anyone read it, and nobody else write", async () => {
+    it("lets the owner add a photo under collector/ once, keeps it off the public internet, and lets nobody else write", async () => {
       const name = `${PHOTO_PREFIX}${randomUUID()}.jpg`;
       expect((await owner.storage.from(BUCKET.photos).upload(name, JPEG, { contentType: "image/jpeg" })).error).toBeNull();
 
@@ -203,10 +248,12 @@ describe.skipIf(!enabled)("collector tables, RPCs and storage against local Supa
       expect(overwrite.error).not.toBeNull();
       await owner.storage.from(BUCKET.photos).remove([name]);
 
-      const publicUrl = `${apiUrl}/storage/v1/object/public/photos/${name}`;
-      const read = await fetch(publicUrl);
-      expect(read.status).toBe(200);
-      expect(new Uint8Array(await read.arrayBuffer())).toEqual(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]));
+      expect((await fetch(`${apiUrl}/storage/v1/object/public/photos/${name}`)).status).not.toBe(200);
+      expect((await anon().storage.from(BUCKET.photos).download(name)).error).not.toBeNull();
+      expect((await stranger.storage.from(BUCKET.photos).download(name)).error).not.toBeNull();
+      expect((await anon().storage.from(BUCKET.photos).list("collector")).data ?? []).toEqual([]);
+      const served = await service().storage.from(BUCKET.photos).download(name);
+      expect(new Uint8Array(await served.data!.arrayBuffer())).toEqual(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]));
 
       expect((await owner.storage.from(BUCKET.photos).upload(`other/${randomUUID()}.jpg`, JPEG, { contentType: "image/jpeg" })).error).not.toBeNull();
       expect((await owner.storage.from(BUCKET.photos).upload(`${randomUUID()}.jpg`, JPEG, { contentType: "image/jpeg" })).error).not.toBeNull();
@@ -220,11 +267,14 @@ describe.skipIf(!enabled)("collector tables, RPCs and storage against local Supa
 
     it("keeps daylio exports private: the owner adds under exports/ only, and anon cannot read them", async () => {
       const csv = new Blob(["full_date,mood\n2026-11-01,good\n"], { type: "text/csv" });
-      const name = `${DAYLIO_PREFIX}${randomUUID()}.csv`;
+      const name = daylioPath(`${randomUUID()}.csv`, 32, Date.now());
       expect((await owner.storage.from(BUCKET.daylio).upload(name, csv, { contentType: "text/csv" })).error).toBeNull();
       expect((await owner.storage.from(BUCKET.daylio).upload(`other/${randomUUID()}.csv`, csv, { contentType: "text/csv" })).error).not.toBeNull();
       expect(
-        (await stranger.storage.from(BUCKET.daylio).upload(`${DAYLIO_PREFIX}${randomUUID()}.csv`, csv, { contentType: "text/csv" })).error,
+        (await owner.storage.from(BUCKET.daylio).upload(`${DAYLIO_PREFIX}${randomUUID()}.csv`, csv, { contentType: "text/csv" })).error,
+      ).not.toBeNull();
+      expect(
+        (await stranger.storage.from(BUCKET.daylio).upload(daylioPath(`${randomUUID()}.csv`, 32, Date.now()), csv, { contentType: "text/csv" })).error,
       ).not.toBeNull();
 
       expect((await fetch(`${apiUrl}/storage/v1/object/public/daylio/${name}`)).status).not.toBe(200);
