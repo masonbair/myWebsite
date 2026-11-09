@@ -4,7 +4,7 @@
 
 ## Coffee chats
 
-Mason takes 30 minute video coffee chats with students, new grads, career changers, and anyone curious about tech.
+Mason takes free 30 minute video coffee chats with students, new grads, career changers, and anyone curious about tech.
 
 - [Book a coffee chat](https://masonbair.com/coffee): The page explains topics, time zones, and both ways to book.
 - [Booking calendar](https://calendar.app.google/suAxGdTVkbEB2GFN6): Google Calendar booking page that shows open times in the visitor's time zone. Needs JavaScript.
