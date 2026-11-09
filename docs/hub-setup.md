@@ -266,3 +266,14 @@ Then in the browser:
 ### 9. Backups
 
 The daily backup and `scripts/hub-restore.ts` include the six Ideas Lab tables: `ai_usage`, `idea_settings`, `idea_reviews`, `idea_sources`, `idea_resurface` and `idea_recordings`. `idea_google` is left out: it holds only connection state, and the Google token lives in Vault, so after a restore you connect Google again. See "Restore a backup" above.
+
+## Site analytics (/hub/analytics)
+
+Public page reads are counted in `proxy.ts` and written to Supabase through `analytics_record` (migration 0012). Nothing is stored per request: rows are daily counts. Visitor hashes are kept only for the current day, then turned into counts.
+
+1. Vercel env (Production and Preview): `ANALYTICS_SALT` = a long random string, e.g. the output of `openssl rand -hex 32`. Without it, bots and page views are still counted but unique visitors are not.
+2. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` must already be set (the hub uses them).
+3. Run `supabase db push` for 0012. It adds a pg_cron job, `analytics-roll-visitors`, at 05:10 UTC.
+4. New public routes: add them to `KNOWN_PATHS` in `lib/analytics/classify.ts`, or they show as "other".
+
+Abuse limits: per day, at most 5,000 distinct count rows (the rest fold into one "overflow" row), 20,000 visitor hashes and 200 unknown-bot samples. If junk traffic ever gets heavy, add a Vercel Firewall rate-limit rule (Project → Firewall → Rules → Rate limit, e.g. 120 requests per minute per IP on `/`). Check the plan price first.

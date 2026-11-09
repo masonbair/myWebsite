@@ -201,8 +201,10 @@ test("the game is home only: /coffee has no cat, no score pill, and no nav gap",
   await expect(page.getByTestId("score")).toHaveCount(0);
   if (testInfo.project.name === "desktop") {
     const nav = page.getByRole("navigation", { name: "Main" });
-    const gap = await nav.evaluate((el) => el.getBoundingClientRect().right - el.querySelector("ul")!.getBoundingClientRect().right);
-    // Only the nav's own 8 px right padding, no empty slot where the pill was.
-    expect(gap).toBeLessThanOrEqual(9);
+    const gap = await nav.evaluate(
+      (el) => el.getBoundingClientRect().right - el.querySelector("ul")!.getBoundingClientRect().right - parseFloat(getComputedStyle(el).paddingRight),
+    );
+    // Only the nav's own right padding, no empty slot where the pill was.
+    expect(gap).toBeLessThanOrEqual(1);
   }
 });

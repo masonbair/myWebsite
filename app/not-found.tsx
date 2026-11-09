@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { Prompt, Tile } from "@/components/board/Tile";
-import { buttonBubble, stickerButton } from "@/components/ui/sticker";
+import { buttonBubble, focusRingOnColor, stickerButtonShape } from "@/components/ui/sticker";
 
 export const metadata: Metadata = { title: "Page not found", robots: { index: false } };
 
@@ -13,7 +13,7 @@ export default function NotFound() {
         <Prompt>cd ./that-page</Prompt>
         <h1 className="text-4xl leading-none font-bold tracking-[-0.04em] md:text-5xl">Page not found</h1>
         <p className="text-lg leading-relaxed">This page does not exist. It may have moved, or the link has a typo.</p>
-        <Link href="/" className={`${stickerButton} mt-2 self-start`}>
+        <Link href="/" className={`${stickerButtonShape} ${focusRingOnColor} mt-2 self-start border-night bg-night text-snow`}>
           Back to the home page
           <span className={buttonBubble}>
             <ArrowLeft weight="bold" size={16} aria-hidden />

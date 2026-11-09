@@ -74,6 +74,7 @@ function hubServer(port: number, name: "hub" | "hub-live", workerLive: boolean) 
       GOOGLE_OAUTH_CLIENT_ID: "e2e-client.apps.googleusercontent.com",
       GOOGLE_OAUTH_CLIENT_SECRET: "e2e-client-secret",
       IDEAS_MONTHLY_BUDGET_USD: "25",
+      ANALYTICS_SALT: "analytics-e2e-salt-local-only",
       // Set explicitly so a value in .env.local can never decide which state a test sees.
       HUB_WORKER_LIVE: workerLive ? "true" : "false",
       // Only the live server registers the service worker, so the other hub specs never run behind one.

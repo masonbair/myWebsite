@@ -3,7 +3,7 @@
 import { ArrowUpRight } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
-export type NavLink = { label: string; href: string; external?: boolean };
+export type NavLink = { label: string; href: string; external?: boolean; highlight?: boolean };
 
 export function NavMenu({ links }: { links: NavLink[] }) {
   const [open, setOpen] = useState(false);
@@ -12,7 +12,7 @@ export function NavMenu({ links }: { links: NavLink[] }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    const wide = window.matchMedia("(min-width: 768px)");
+    const wide = window.matchMedia("(min-width: 1024px)");
     const onWide = () => wide.matches && setOpen(false);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -31,8 +31,6 @@ export function NavMenu({ links }: { links: NavLink[] }) {
     };
   }, [open]);
 
-  const bar =
-    "absolute left-1/2 h-0.5 w-[18px] -translate-x-1/2 bg-ink transition-transform duration-500 ease-spring motion-reduce:transition-none";
 
   return (
     <>
@@ -43,10 +41,9 @@ export function NavMenu({ links }: { links: NavLink[] }) {
         aria-controls="mobile-menu"
         aria-label={open ? "Close menu" : "Open menu"}
         onClick={() => setOpen((o) => !o)}
-        className="relative size-10 rounded-full border-2 border-line bg-surface outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink active:scale-[0.96] md:hidden"
+        className="flex h-10 items-center rounded-full border-[2.5px] border-line bg-surface px-4 text-sm font-bold text-ink shadow-sticker-sm outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-accent-ink active:translate-x-0.5 active:translate-y-0.5 active:shadow-none lg:hidden"
       >
-        <span className={`${bar} top-1/2 ${open ? "rotate-45" : "-translate-y-[3.5px]"}`} />
-        <span className={`${bar} top-1/2 ${open ? "-rotate-45" : "translate-y-[3.5px]"}`} />
+        {open ? "Close" : "Menu"}
       </button>
       {/* Always mounted so CSS can fade it out; `invisible` drops it from focus and the accessibility tree when closed. */}
       <div
@@ -55,19 +52,21 @@ export function NavMenu({ links }: { links: NavLink[] }) {
         aria-modal="true"
         aria-label="Menu"
         inert={!open}
-        className={`fixed inset-0 -z-10 bg-canvas transition-[opacity,visibility] duration-[350ms] ease-spring motion-reduce:transition-none md:hidden ${
+        className={`fixed inset-0 -z-10 bg-canvas transition-[opacity,visibility] duration-[350ms] ease-spring motion-reduce:transition-none lg:hidden ${
           open ? "visible opacity-100" : "invisible opacity-0"
         }`}
       >
-        <ul className="flex flex-col gap-2 px-6 pt-28">
-          {links.map(({ label, href, external }, i) => (
+        <ul className="flex flex-col gap-2 px-6 pt-[calc(env(safe-area-inset-top,0px)+6.5rem)]">
+          {links.map(({ label, href, external, highlight }, i) => (
             <li key={href} className="overflow-hidden">
               <a
                 href={href}
                 onClick={() => setOpen(false)}
                 {...(external && { target: "_blank", rel: "noopener noreferrer" })}
                 style={{ transitionDelay: open ? `${80 + i * 50}ms` : "0ms" }}
-                className={`flex items-center gap-2 py-1 text-4xl font-semibold tracking-tight text-ink outline-none transition-[translate,opacity] duration-600 ease-spring focus-visible:text-accent-ink motion-reduce:transition-none ${
+                className={`flex items-center gap-2 py-1 text-4xl font-bold tracking-tight outline-none transition-[translate,opacity] duration-600 ease-spring focus-visible:underline focus-visible:decoration-[3px] focus-visible:underline-offset-4 motion-reduce:transition-none ${
+                  highlight ? "text-accent-ink" : "text-ink"
+                } ${
                   open ? "translate-y-0 opacity-100" : "translate-y-full opacity-0"
                 }`}
               >
