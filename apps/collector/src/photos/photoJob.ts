@@ -10,6 +10,7 @@ export type PhotoJobResult = { uploaded: number; skipped: number; error: string 
 
 const UPLOADED_KEY = 'photos-uploaded';
 const LAST_OK_KEY = 'job-last-ok:photos';
+// Older ids fall off, so a photo that old is re-cleaned and re-uploaded (a no-op server side); the album is expected to stay small.
 const KEEP_IDS = 2000;
 const MAX_UPLOADS_PER_RUN = 20;
 const MAX_FAILURES_PER_RUN = 3;
@@ -37,7 +38,9 @@ export async function runPhotoJob(now = Date.now()): Promise<PhotoJobResult> {
   if (!(await signedIn())) return { ...result, error: 'signed-out' };
 
   const permission = await MediaLibrary.getPermissionsAsync(false, ['photo']);
-  if (!permission.granted || permission.accessPrivileges !== 'all') return { ...result, error: 'photos-partial-access' };
+  if (permission.accessPrivileges === 'limited') return { ...result, error: 'photos-partial-access' };
+  if (!permission.granted || permission.accessPrivileges === 'none') return { ...result, error: 'photos-denied' };
+  if (permission.accessPrivileges !== 'all') return { ...result, error: 'photos-partial-access' };
 
   const album = await MediaLibrary.getAlbumAsync(ALBUM_NAME);
   if (!album) return { ...result, error: 'album-missing' };
@@ -45,6 +48,7 @@ export async function runPhotoJob(now = Date.now()): Promise<PhotoJobResult> {
   const done = await readJson<string[]>(UPLOADED_KEY, []);
   const doneSet = new Set(done);
   let failures = 0;
+  let cleanFailures = 0;
   let after: string | undefined;
 
   paging: for (;;) {
@@ -68,6 +72,7 @@ export async function runPhotoJob(now = Date.now()): Promise<PhotoJobResult> {
         cleaned = await cleanPhoto(asset.uri);
       } catch {
         result.skipped += 1;
+        cleanFailures += 1;
         continue;
       }
 
@@ -106,6 +111,7 @@ export async function runPhotoJob(now = Date.now()): Promise<PhotoJobResult> {
     after = page.endCursor;
   }
 
+  if (!result.error && result.uploaded === 0 && cleanFailures > 0) result.error = 'clean-failed';
   if (!result.error) await writeJson(LAST_OK_KEY, now);
   return result;
 }

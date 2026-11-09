@@ -12,7 +12,8 @@ jest.mock('../cleanPhoto', () => ({
   cleanPhoto: jest.fn(),
   ExifRemainsError: class ExifRemainsError extends Error {},
 }));
-jest.mock('expo-file-system', () => ({ File: jest.fn(() => ({ delete: jest.fn() })) }));
+const mockDelete = jest.fn();
+jest.mock('expo-file-system', () => ({ File: jest.fn(() => ({ delete: mockDelete })) }));
 jest.mock('expo-media-library/legacy', () => ({
   getPermissionsAsync: jest.fn(),
   getAlbumAsync: jest.fn(),
@@ -45,6 +46,7 @@ beforeEach(async () => {
   perms.mockReset().mockResolvedValue({ granted: true, accessPrivileges: 'all' });
   getAlbum.mockReset().mockResolvedValue({ id: 'album-1', title: 'Website' });
   getAssets.mockReset().mockResolvedValue(page([]));
+  mockDelete.mockReset();
   clean.mockReset().mockResolvedValue({ uri: 'file:///cache/out.jpg', width: 2400, height: 1800, bytes: BYTES });
   upload.mockReset().mockResolvedValue({ error: null });
   storageFrom.mockReset().mockReturnValue({ upload });
@@ -65,10 +67,23 @@ describe('runPhotoJob', () => {
     expect(upload).not.toHaveBeenCalled();
   });
 
-  it.each([['limited'], ['none'], [undefined]])('refuses photo access of %s', async (accessPrivileges) => {
-    perms.mockResolvedValue({ granted: true, accessPrivileges });
+  it.each([['limited', true], [undefined, true]])('refuses photo access of %s', async (accessPrivileges, granted) => {
+    perms.mockResolvedValue({ granted, accessPrivileges });
     expect(await runPhotoJob(NOW)).toEqual({ uploaded: 0, skipped: 0, error: 'photos-partial-access' });
     expect(getAlbum).not.toHaveBeenCalled();
+  });
+
+  it.each([['none', false], ['none', true], [undefined, false]])('reports denied access (%s, granted %s)', async (accessPrivileges, granted) => {
+    perms.mockResolvedValue({ granted, accessPrivileges });
+    expect(await runPhotoJob(NOW)).toEqual({ uploaded: 0, skipped: 0, error: 'photos-denied' });
+    expect(getAlbum).not.toHaveBeenCalled();
+  });
+
+  it('reports clean-failed, and does not mark the run ok, when nothing uploads because cleaning fails', async () => {
+    getAssets.mockResolvedValue(page([photo('a1'), photo('a2')]));
+    clean.mockRejectedValue(new Error('decode failed'));
+    expect(await runPhotoJob(NOW)).toEqual({ uploaded: 0, skipped: 2, error: 'clean-failed' });
+    expect(await stored('job-last-ok:photos')).toBeNull();
   });
 
   it('uploads only photos not yet uploaded, then records the row and the asset id', async () => {
@@ -86,6 +101,7 @@ describe('runPhotoJob', () => {
       p_height: 1800,
     });
     expect(await stored('photos-uploaded')).toEqual(['old', 'a1', 'b_2']);
+    expect(mockDelete).toHaveBeenCalledTimes(2);
     expect(await stored('job-last-ok:photos')).toBe(NOW);
   });
 

@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { hasExif } from '../hasExif';
+import { hasExif, inspectJpeg } from '../hasExif';
 
 const fixture = (name: string) => new Uint8Array(readFileSync(join(__dirname, 'fixtures', name)));
 const ascii = (s: string) => Array.from(s, (c) => c.charCodeAt(0));
@@ -36,5 +36,18 @@ describe('hasExif', () => {
 
   it('does not run past a truncated segment', () => {
     expect(hasExif(new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0xff, 0xff, 0x45]))).toBe(false);
+  });
+});
+
+describe('inspectJpeg', () => {
+  it('is clean only for a well-formed JPEG that reaches its image data', () => {
+    expect(inspectJpeg(fixture('no-exif.jpg'))).toBe('clean');
+    expect(inspectJpeg(fixture('with-gps.jpg'))).toBe('metadata');
+  });
+
+  it('is unparseable for truncated, non-JPEG and empty input', () => {
+    expect(inspectJpeg(fixture('no-exif.jpg').slice(0, 40))).toBe('unparseable');
+    expect(inspectJpeg(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).toBe('unparseable');
+    expect(inspectJpeg(new Uint8Array())).toBe('unparseable');
   });
 });

@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { File } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import { cleanPhoto, ExifRemainsError } from '../cleanPhoto';
+import { cleanPhoto, ExifRemainsError, UnreadableJpegError } from '../cleanPhoto';
 
 jest.mock('expo-file-system', () => ({ File: jest.fn() }));
 jest.mock('expo-image-manipulator', () => ({
@@ -13,26 +13,36 @@ jest.mock('expo-image-manipulator', () => ({
 const fixture = (name: string) => new Uint8Array(readFileSync(join(__dirname, 'fixtures', name)));
 const manipulate = ImageManipulator.manipulate as jest.Mock;
 const FileMock = File as unknown as jest.Mock;
-const resize = jest.fn();
-const saveAsync = jest.fn();
 const bytes = jest.fn();
 const del = jest.fn();
+const release = jest.fn();
+const resize = jest.fn();
+let loaded: ReturnType<typeof makeImage>;
+let resized: ReturnType<typeof makeImage>;
 
-function image(width: number, height: number) {
-  return { width, height, saveAsync };
+function makeImage(width: number, height: number, uri: string) {
+  return {
+    width,
+    height,
+    release,
+    saveAsync: jest.fn(async () => ({ uri, width: width > 0 ? width : 0, height })),
+  };
 }
 
-function stage(source: { width: number; height: number }, resized = source) {
-  const renders = [image(source.width, source.height), image(resized.width, resized.height)];
-  manipulate.mockImplementation(() => ({
-    resize: resize.mockReturnThis(),
-    renderAsync: jest.fn(async () => renders.shift()),
+function stage(source: [number, number], target?: [number, number]) {
+  loaded = makeImage(source[0], source[1], 'file:///cache/loaded.jpg');
+  resized = makeImage(target?.[0] ?? 0, target?.[1] ?? 0, 'file:///cache/resized.jpg');
+  manipulate.mockImplementation((input: unknown) => ({
+    release,
+    resize: resize.mockImplementation(() => ({ release, renderAsync: async () => resized })),
+    renderAsync: async () => (typeof input === 'string' ? loaded : resized),
   }));
 }
 
 beforeEach(() => {
+  manipulate.mockReset();
   resize.mockReset();
-  saveAsync.mockReset().mockImplementation(async () => ({ uri: 'file:///cache/out.jpg', width: 10, height: 6 }));
+  release.mockReset();
   bytes.mockReset().mockResolvedValue(fixture('no-exif.jpg'));
   del.mockReset();
   FileMock.mockReset().mockImplementation(() => ({ bytes, delete: del }));
@@ -40,28 +50,60 @@ beforeEach(() => {
 
 describe('cleanPhoto', () => {
   it('re-encodes a small photo as JPEG at quality 0.85 without resizing', async () => {
-    stage({ width: 1600, height: 1200 });
+    stage([1600, 1200]);
     const out = await cleanPhoto('file:///in.jpg');
     expect(resize).not.toHaveBeenCalled();
-    expect(saveAsync).toHaveBeenCalledWith({ format: SaveFormat.JPEG, compress: 0.85 });
-    expect(out).toEqual({ uri: 'file:///cache/out.jpg', width: 10, height: 6, bytes: fixture('no-exif.jpg') });
+    expect(loaded.saveAsync).toHaveBeenCalledWith({ format: SaveFormat.JPEG, compress: 0.85 });
+    expect(out).toEqual({ uri: 'file:///cache/loaded.jpg', width: 1600, height: 1200, bytes: fixture('no-exif.jpg') });
   });
 
-  it('limits a landscape photo to 2400 px wide and a portrait one to 2400 px tall', async () => {
-    stage({ width: 4000, height: 3000 }, { width: 2400, height: 1800 });
-    await cleanPhoto('file:///in.jpg');
+  it('decodes the original once and saves the resized image, 2400 wide for landscape and tall for portrait', async () => {
+    stage([4000, 3000], [2400, 1800]);
+    const out = await cleanPhoto('file:///in.jpg');
     expect(resize).toHaveBeenLastCalledWith({ width: 2400 });
+    expect(manipulate.mock.calls[0][0]).toBe('file:///in.jpg');
+    expect(manipulate.mock.calls[1][0]).toBe(loaded);
+    expect(loaded.saveAsync).not.toHaveBeenCalled();
+    expect(resized.saveAsync).toHaveBeenCalledTimes(1);
+    expect(out.uri).toBe('file:///cache/resized.jpg');
 
-    resize.mockClear();
-    stage({ width: 3000, height: 4000 }, { width: 1800, height: 2400 });
+    stage([3000, 4000], [1800, 2400]);
     await cleanPhoto('file:///in.jpg');
     expect(resize).toHaveBeenLastCalledWith({ height: 2400 });
   });
 
-  it('throws ExifRemainsError and deletes the file when metadata survives', async () => {
-    stage({ width: 100, height: 100 });
+  it('releases every image and context, also after a failure', async () => {
+    stage([4000, 3000], [2400, 1800]);
+    await cleanPhoto('file:///in.jpg');
+    expect(release).toHaveBeenCalledTimes(4);
+
+    release.mockClear();
+    stage([100, 100]);
     bytes.mockResolvedValue(fixture('with-gps.jpg'));
     await expect(cleanPhoto('file:///in.jpg')).rejects.toBeInstanceOf(ExifRemainsError);
+    expect(release).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws ExifRemainsError and deletes the file when metadata survives', async () => {
+    stage([100, 100]);
+    bytes.mockResolvedValue(fixture('with-gps.jpg'));
+    await expect(cleanPhoto('file:///in.jpg')).rejects.toBeInstanceOf(ExifRemainsError);
+    expect(del).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses truncated output and non-JPEG output, deleting the file', async () => {
+    stage([100, 100]);
+    bytes.mockResolvedValue(fixture('no-exif.jpg').slice(0, 40));
+    await expect(cleanPhoto('file:///in.jpg')).rejects.toBeInstanceOf(UnreadableJpegError);
+    bytes.mockResolvedValue(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]));
+    await expect(cleanPhoto('file:///in.jpg')).rejects.toBeInstanceOf(UnreadableJpegError);
+    expect(del).toHaveBeenCalledTimes(2);
+  });
+
+  it('deletes the saved file when reading it fails', async () => {
+    stage([100, 100]);
+    bytes.mockRejectedValue(new Error('read failed'));
+    await expect(cleanPhoto('file:///in.jpg')).rejects.toThrow('read failed');
     expect(del).toHaveBeenCalledTimes(1);
   });
 });
