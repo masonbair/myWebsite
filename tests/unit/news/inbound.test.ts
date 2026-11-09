@@ -234,6 +234,7 @@ describe("handleInbound", () => {
   it("refuses redirects and sets a timeout on both Resend fetches", async () => {
     const { deps, calls } = setup();
     await handleInbound(signed(received), deps);
+    expect(calls[0].init?.redirect).toBe("error");
     expect(calls[1].init?.redirect).toBe("error");
     for (const call of calls) expect(call.init?.signal).toBeInstanceOf(AbortSignal);
   });

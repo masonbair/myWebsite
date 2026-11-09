@@ -68,6 +68,35 @@ describe("alignedDkimFrom", () => {
     expect(lookups).toBe(0);
   });
 
+  it("counts signatures whose header name is folded before the colon", async () => {
+    const signedOnce = Buffer.from(await signRaw(issue, "example-brew.test")).toString("latin1");
+    const [sigHeader] = signedOnce.split(/\r?\nFrom: /);
+    const folded = sigHeader.replace(/^DKIM-Signature:/, "DKIM-Signature\r\n :");
+    const raw = new TextEncoder().encode(`${`${folded}\r\n`.repeat(31)}${issue}`);
+    let lookups = 0;
+    const counting = async (name: string, rrtype: string) => {
+      lookups++;
+      return brewDns(name, rrtype);
+    };
+    expect(await alignedDkimFrom(raw, counting)).toBeNull();
+    expect(lookups).toBe(0);
+  });
+
+  it("gives up when key lookups hang past the deadline", async () => {
+    const raw = await signRaw(issue, "example-brew.test");
+    const never = () => new Promise<string[][]>(() => {});
+    const start = performance.now();
+    expect(await alignedDkimFrom(raw, never, { timeoutMs: 50 })).toBeNull();
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
+  it("rejects a signature by a public suffix", async () => {
+    const raw = await signRaw(withFrom("Brew <news@brew.co.uk>"), "co.uk");
+    const dns = testResolver(["co.uk"]);
+    expect(await alignedDkimFrom(raw, dns)).toBeNull();
+    expect(await alignedDkimFrom(await signRaw(withFrom("Brew <news@brew.co.uk>"), "brew.co.uk"), testResolver(["brew.co.uk"]))).toBe("news@brew.co.uk");
+  });
+
   it("rejects a signature that leaves body bytes unsigned (l=)", async () => {
     const signed = Buffer.from(await signRaw(issue, "example-brew.test", { maxBodyLength: 20 })).toString("utf8");
     expect(await alignedDkimFrom(new TextEncoder().encode(signed), brewDns)).toBeNull();

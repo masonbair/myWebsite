@@ -5,6 +5,8 @@ import { handleInbound } from "@/lib/news/resend";
 import { serviceClient } from "@/lib/supabase/server";
 
 const dns = new Resolver({ timeout: 3000, tries: 2 });
+// Two 15 s Resend fetches plus the 10 s DKIM deadline, with room for the database and blob writes.
+export const maxDuration = 60;
 
 // Outside /api/hub, so proxy.ts does not gate it; the svix signature check is the only gate.
 export async function POST(request: Request) {
