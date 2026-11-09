@@ -31,11 +31,12 @@ const upload = jest.fn();
 const NOW = 1_800_000_000_000;
 const BYTES = new Uint8Array([1, 2, 3]);
 
-const photo = (id: string, creationTime = 1_700_000_000_000, mediaType = 'photo') => ({
+const photo = (id: string, creationTime = 1_700_000_000_000, mediaType = 'photo', modificationTime = 0) => ({
   id,
   uri: `file:///album/${id}.jpg`,
   mediaType,
   creationTime,
+  modificationTime,
 });
 const page = (assets: unknown[], hasNextPage = false) => ({ assets, hasNextPage, endCursor: 'c1' });
 const stored = async (key: string) => JSON.parse((await AsyncStorage.getItem(key)) ?? 'null');
@@ -148,6 +149,18 @@ describe('runPhotoJob', () => {
     expect(await runPhotoJob(NOW)).toEqual({ uploaded: 0, skipped: 0, error: 'upload-failed' });
     expect(rpc).not.toHaveBeenCalled();
     expect(await stored('photos-uploaded')).toBeNull();
+  });
+
+  it('uses the modified time when the creation time is 0', async () => {
+    getAssets.mockResolvedValue(page([photo('nodate', 0, 'photo', 1_650_000_000_000)]));
+    expect(await runPhotoJob(NOW)).toEqual({ uploaded: 1, skipped: 0, error: null });
+    expect(rpc.mock.calls[0][1].p_taken_at).toBe(new Date(1_650_000_000_000).toISOString());
+  });
+
+  it('skips a photo with no usable time at all', async () => {
+    getAssets.mockResolvedValue(page([photo('none', 0, 'photo', 0), photo('nan', 0, 'photo', Number.NaN)]));
+    expect(await runPhotoJob(NOW)).toEqual({ uploaded: 0, skipped: 2, error: null });
+    expect(upload).not.toHaveBeenCalled();
   });
 
   it('stops after 3 failures in one run', async () => {

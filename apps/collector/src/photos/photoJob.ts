@@ -18,6 +18,12 @@ const PAGE_SIZE = 50;
 // Same pattern as the database check on collector_photo.asset_id.
 const ASSET_ID = /^[A-Za-z0-9_-]{1,200}$/;
 
+// Android reports creationTime 0 for files without an EXIF date (saved images, some screenshots).
+function takenAt(asset: { creationTime: number; modificationTime: number }): number | null {
+  const time = asset.creationTime > 0 ? asset.creationTime : asset.modificationTime;
+  return Number.isFinite(time) && time > 0 ? time : null;
+}
+
 type StorageError = { message?: string; statusCode?: string | number };
 
 function isDuplicate(error: StorageError): boolean {
@@ -62,7 +68,8 @@ export async function runPhotoJob(now = Date.now()): Promise<PhotoJobResult> {
     for (const asset of page.assets) {
       if (result.uploaded >= MAX_UPLOADS_PER_RUN || failures >= MAX_FAILURES_PER_RUN) break paging;
       if (asset.mediaType !== 'photo' || doneSet.has(asset.id)) continue;
-      if (!ASSET_ID.test(asset.id) || !Number.isFinite(asset.creationTime) || asset.creationTime <= 0) {
+      const taken = takenAt(asset);
+      if (!ASSET_ID.test(asset.id) || taken === null) {
         result.skipped += 1;
         continue;
       }
@@ -89,7 +96,7 @@ export async function runPhotoJob(now = Date.now()): Promise<PhotoJobResult> {
         const args: AddPhotoArgs = {
           p_path: path,
           p_asset_id: asset.id,
-          p_taken_at: new Date(asset.creationTime).toISOString(),
+          p_taken_at: new Date(taken).toISOString(),
           p_width: cleaned.width,
           p_height: cleaned.height,
         };
