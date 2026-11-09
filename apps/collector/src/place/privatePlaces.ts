@@ -6,8 +6,21 @@ export type PrivatePlace = { label: string; latitude: number; longitude: number;
 const KEY = 'private-places';
 const DEFAULT_RADIUS_KM = 25;
 
-export function loadPrivatePlaces(): Promise<PrivatePlace[]> {
-  return readJson<PrivatePlace[]>(KEY, []);
+function isValid(p: unknown): p is PrivatePlace {
+  if (typeof p !== 'object' || p === null) return false;
+  const { label, latitude, longitude, radiusKm } = p as Record<string, unknown>;
+  return (
+    typeof label === 'string' && label !== '' &&
+    typeof latitude === 'number' && Number.isFinite(latitude) &&
+    typeof longitude === 'number' && Number.isFinite(longitude) &&
+    typeof radiusKm === 'number' && Number.isFinite(radiusKm) && radiusKm > 0
+  );
+}
+
+/** Stored JSON is not trusted: malformed entries are dropped. */
+export async function loadPrivatePlaces(): Promise<PrivatePlace[]> {
+  const stored = await readJson<unknown>(KEY, []);
+  return Array.isArray(stored) ? stored.filter(isValid) : [];
 }
 
 /** Adds a place only the phone knows about; a place with the same label is replaced. */

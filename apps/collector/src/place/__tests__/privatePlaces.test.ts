@@ -40,4 +40,25 @@ describe('private places', () => {
     await addPrivatePlace('test-a', PARIS);
     expect(await AsyncStorage.getAllKeys()).toEqual(['private-places']);
   });
+
+  it('drops malformed stored entries', async () => {
+    const good = { label: 'test-a', ...PARIS, radiusKm: 25 };
+    await AsyncStorage.setItem('private-places', JSON.stringify([
+      good,
+      { ...good, latitude: null },
+      { ...good, longitude: 'x' },
+      { ...good, label: '' },
+      { ...good, label: undefined },
+      { ...good, radiusKm: 0 },
+      { ...good, radiusKm: -3 },
+      null,
+      'junk',
+    ]));
+    expect(await loadPrivatePlaces()).toEqual([good]);
+  });
+
+  it('treats a non-array stored value as empty', async () => {
+    await AsyncStorage.setItem('private-places', JSON.stringify({ label: 'test-a' }));
+    expect(await loadPrivatePlaces()).toEqual([]);
+  });
 });

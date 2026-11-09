@@ -57,6 +57,14 @@ describe('toReport', () => {
     expect(toReport(mid, [p], lookup)).toBeNull();
   });
 
+  it('checks private places before the lookup', () => {
+    const order: string[] = [];
+    const spyPlace = { get latitude() { order.push('private'); return PARIS_CENTER.latitude; }, longitude: PARIS_CENTER.longitude, label: 'test-a', radiusKm: 25 };
+    toReport(at(1), [spyPlace], (fix) => { order.push('lookup'); return lookup(fix); });
+    expect(order[0]).toBe('private');
+    expect(order).toContain('lookup');
+  });
+
   it('uses the bundled table by default', () => {
     const london = { latitude: 51.5074, longitude: -0.1278 };
     expect(toReport(london, [])).toMatchObject({ city: 'London', countryCode: 'GB', private: false });

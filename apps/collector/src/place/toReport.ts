@@ -7,9 +7,9 @@ export type PlaceReport = { city: string | null; region: string; countryCode: st
 
 /** Null when no bundled city is near the fix, so nothing is sent. */
 export function toReport(fix: Point, privatePlaces: PrivatePlace[], lookup: typeof nearestPlace = nearestPlace): PlaceReport | null {
+  const inside = privatePlaces.some((p) => kmBetween(fix, p) <= p.radiusKm);
   const found = lookup(fix);
   if (!found) return null;
-  const inside = privatePlaces.some((p) => kmBetween(fix, p) <= p.radiusKm);
   return { ...found, city: inside ? null : found.city, private: inside };
 }
 
