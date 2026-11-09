@@ -101,7 +101,7 @@ export default async function TrendsPage() {
                     <li key={`${m.kind}:${m.key}`}>
                       <Link
                         href={subjectHref(m)}
-                        className="flex flex-col rounded-lg py-2 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-night sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
+                        className="flex flex-col rounded-lg py-2 outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-night sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
                       >
                         <span className="min-w-0 truncate text-lg font-semibold underline-offset-4 hover:underline">
                           {m.label}

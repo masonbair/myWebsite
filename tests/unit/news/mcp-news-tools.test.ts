@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { describe, expect, it } from "vitest";
 import { handleMcpRequest } from "@/lib/hub/mcp-tools";
@@ -45,6 +46,9 @@ async function connect() {
       storeFor: (client) => createFakeStore({ kind: "agent", client }, rows),
       readNow: async () => ({ place: null, countriesVisited: 0, bake: null, photos: [] }),
       news: reader,
+      ideasClient: {} as SupabaseClient,
+      now: () => new Date(),
+      timelineFor: () => ({ logDay: async () => [] }),
     })) as typeof fetch;
   const transport = new StreamableHTTPClientTransport(new URL("https://hub.test/api/mcp/mcp"), {
     fetch: fetchFn,

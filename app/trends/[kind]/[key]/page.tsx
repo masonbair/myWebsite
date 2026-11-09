@@ -133,7 +133,7 @@ export default async function SubjectPage({ params }: Props) {
                         href={c.publicUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="group inline-flex items-center gap-1.5 rounded-full border-2 border-line bg-surface py-1 pr-3 pl-3.5 text-sm font-semibold text-ink shadow-sticker-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-night"
+                        className="group inline-flex items-center gap-1.5 rounded-full border-2 border-line bg-surface py-1 pr-3 pl-3.5 text-sm font-semibold text-ink shadow-sticker-sm outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-night"
                       >
                         {`${c.sourceName}, ${shortDate(c.day)}`}
                         <ArrowUpRight
