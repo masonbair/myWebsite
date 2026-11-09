@@ -156,7 +156,7 @@ export async function collectHealth(now = Date.now()): Promise<HealthInput> {
     readJson<number | null>(JOB_LAST_OK_KEY.place, null),
     readJson<number | null>(JOB_LAST_OK_KEY.photos, null),
     readJson<number | null>(JOB_LAST_OK_KEY.daylio, null),
-    readJson<boolean>(PLACE_TASK_WANTED_KEY, true),
+    readJson<boolean>(PLACE_TASK_WANTED_KEY, false),
   ]);
   return {
     signedIn: isSignedIn,

@@ -5,7 +5,7 @@ import { addPrivatePlace, loadPrivatePlaces, removePrivatePlace } from '../place
 import { Button } from './Button';
 import { ERROR } from './theme';
 
-export function PrivatePlaces() {
+export function PrivatePlaces({ reportingOn }: { reportingOn: boolean }) {
   const [labels, setLabels] = useState<string[]>([]);
   const [asking, setAsking] = useState(false);
   const [label, setLabel] = useState('');
@@ -56,6 +56,7 @@ export function PrivatePlaces() {
   return (
     <View style={styles.box}>
       <Text style={styles.heading}>Private places</Text>
+      {!reportingOn && labels.length === 0 && <Text>Mark home as private before you turn this on.</Text>}
       {labels.map((name) => (
         <View key={name} style={styles.row}>
           <Text>{name}</Text>

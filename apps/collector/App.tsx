@@ -21,14 +21,14 @@ import { ACCENT, BACKGROUND, ERROR } from './src/screen/theme';
 export default function App() {
   const { items, input, refresh } = useHealth();
   const [result, setResult] = useState<SignInResult | null>(null);
-  const [locationWanted, setLocationWanted] = useState(true);
+  const [locationWanted, setLocationWanted] = useState(false);
   const [running, setRunning] = useState(false);
 
   const isSignedIn = input === null ? null : input.signedIn;
   const canTrack = input?.backgroundLocation === 'granted';
 
   useEffect(() => {
-    readJson<boolean>(PLACE_TASK_WANTED_KEY, true).then(setLocationWanted);
+    readJson<boolean>(PLACE_TASK_WANTED_KEY, false).then(setLocationWanted);
   }, []);
 
   useEffect(() => {
@@ -123,7 +123,7 @@ export default function App() {
         <Switch value={canTrack && locationWanted} disabled={!canTrack} onValueChange={handleLocationSwitch} trackColor={{ true: ACCENT }} />
       </View>
 
-      <PrivatePlaces />
+      <PrivatePlaces reportingOn={canTrack && locationWanted} />
       <Button title="Choose Daylio folder" onPress={handlePickFolder} />
 
       <Text style={styles.heading}>Setup</Text>

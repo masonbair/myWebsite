@@ -152,6 +152,12 @@ describe('collectHealth', () => {
     });
   });
 
+  it('treats place reporting as off until it is switched on', async () => {
+    expect((await collectHealth(NOW)).placeWanted).toBe(false);
+    await AsyncStorage.setItem('place-task-wanted', 'true');
+    expect((await collectHealth(NOW)).placeWanted).toBe(true);
+  });
+
   it('maps denied and limited photo access', async () => {
     jest.mocked(MediaLibrary.getPermissionsAsync).mockResolvedValue({ granted: false, accessPrivileges: 'none' } as never);
     expect((await collectHealth(NOW)).photosAccess).toBe('none');

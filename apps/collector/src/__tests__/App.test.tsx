@@ -50,6 +50,7 @@ async function show(input: HealthInput = good) {
 
 beforeEach(async () => {
   await AsyncStorage.clear();
+  await AsyncStorage.setItem('place-task-wanted', 'true');
   (runFix as jest.Mock).mockResolvedValue(true);
   (runPeriodic as jest.Mock).mockResolvedValue(undefined);
   (registerPeriodic as jest.Mock).mockResolvedValue(undefined);
@@ -86,6 +87,37 @@ it('signs in from the signed-out screen and registers the periodic task', async 
   await fireEvent.press(await screen.findByText('Sign in with GitHub'));
   await waitFor(() => expect(screen.queryByText('Collector')).not.toBeNull());
   expect(registerPeriodic).toHaveBeenCalled();
+});
+
+it('first launch leaves place reporting off: the task never starts and nothing is sent', async () => {
+  await AsyncStorage.clear();
+  (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+  (Location.getCurrentPositionAsync as jest.Mock).mockResolvedValue({ coords: { latitude: 38.7223, longitude: -9.1393 } });
+  await show();
+  await waitFor(() => expect(syncPlaceTask).toHaveBeenCalledWith('off'));
+  expect(screen.getByRole('switch').props.value).toBe(false);
+  await fireEvent.press(screen.getByText('Run now'));
+  await waitFor(() => expect(runPeriodic).toHaveBeenCalled());
+  expect(syncPlaceTask).not.toHaveBeenCalledWith('on');
+  expect(runPlaceTask).not.toHaveBeenCalled();
+  expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
+});
+
+it('hints to mark home private while reporting is off and no private place exists', async () => {
+  const hint = 'Mark home as private before you turn this on.';
+  await AsyncStorage.clear();
+  await show();
+  expect(await screen.findByText(hint)).toBeTruthy();
+  await fireEvent(screen.getByRole('switch'), 'valueChange', true);
+  await waitFor(() => expect(screen.queryByText(hint)).toBeNull());
+});
+
+it('shows no hint once a private place exists', async () => {
+  await AsyncStorage.clear();
+  await AsyncStorage.setItem('private-places', JSON.stringify([{ label: 'test-a', latitude: 1, longitude: 1, radiusKm: 25 }]));
+  await show();
+  await screen.findByText('test-a');
+  expect(screen.queryByText(/Mark home as private/)).toBeNull();
 });
 
 it('a signed-out reading does not stop the place task; only Sign out does', async () => {
