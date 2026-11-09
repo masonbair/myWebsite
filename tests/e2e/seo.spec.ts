@@ -150,6 +150,8 @@ test.describe("coffee page", () => {
     const email = page.getByRole("link", { name: "Email Mason to request a coffee chat" });
     await expect(email).toHaveAttribute("href", /^mailto:bair\.s\.mason@gmail\.com\?subject=Coffee%20chat%20request&body=/);
     await expect(page.getByRole("link", { name: "Book by email" })).toHaveAttribute("href", "#book-by-email");
+    await expect(page.getByTestId("faq").getByText("Is it free?", { exact: true })).toBeVisible();
+    await expect(page.getByText("Free", { exact: true })).toBeVisible();
     await expect(page.getByRole("main").getByText(/^Last updated/).locator("time")).toHaveAttribute("datetime", /^\d{4}-\d{2}-\d{2}$/);
   });
 
