@@ -96,6 +96,38 @@ claude mcp add --transport http hub-local http://localhost:3000/api/mcp/mcp --he
 - Migration `0008_ideas_lab.sql` adds the Ideas Lab tables, guards, the review claim, the Google token helpers (Vault secret `ideas_google_refresh_token`) and the `hub-ideas` cron job (every 15 minutes, `POST /api/hub/events/ideas`). Not applied live yet; Mason runs `supabase db push` after review.
 - Local testing: `scripts/ideas-local-stack.sh` starts a private stack (project `ideas-lab`, every port +100) from a copy of `supabase/` under `$TMPDIR/ideas-lab-supabase`, then `supabase db reset --workdir <that dir> && supabase test db --workdir <that dir>`.
 
+### Google Calendar connect
+
+The Ideas Lab adds idea returns to its own Google calendar named Ideas. It asks Google for one permission only, `https://www.googleapis.com/auth/calendar.app.created`: make its own calendars and manage events on them. It cannot see your other calendars or events.
+
+Google Cloud (once, at console.cloud.google.com, signed in as the Google account whose calendar you want):
+
+1. Project picker at the top, **New project**. Name it `masonbair hub`, **Create**, then select it.
+2. **APIs & Services**, **Library**. Search **Google Calendar API**, open it, **Enable**.
+3. **Google Auth Platform** (older consoles: **APIs & Services**, **OAuth consent screen**), **Get started**. App name `masonbair hub`, your email as support and contact email. Audience **External**. **Create**.
+4. **Data Access**, **Add or remove scopes**. Paste `https://www.googleapis.com/auth/calendar.app.created` under **Manually add scopes**, **Add to table**, tick it, **Update**, **Save**.
+5. **Audience**, **Publish app**, confirm, so the status reads **In production**. Do not leave it in Testing: Google expires a Testing app's tokens after 7 days.
+6. **Clients**, **Create client**. Type **Web application**, name `hub`. Under **Authorized redirect URIs** add both:
+   - `https://masonbair.com/hub/ideas/google/callback`
+   - `http://localhost:3000/hub/ideas/google/callback` (local dev)
+
+   A preview deploy uses its own address (`https://<preview host>/hub/ideas/google/callback`); add it here only if you want to connect from that preview. **Create**, then copy the client ID and secret from the dialog.
+
+Vercel (myWebsite, Production). Type each value at the prompt so it never lands in shell history, then redeploy:
+
+```sh
+vercel env add GOOGLE_OAUTH_CLIENT_ID production
+vercel env add GOOGLE_OAUTH_CLIENT_SECRET production
+```
+
+Connect: open `/hub/ideas/settings`, **Connect Google Calendar**. Google shows an "unverified app" warning once; choose **Advanced**, then **Go to masonbair hub**, then allow. The hub stores the lasting token in Supabase Vault (`ideas_google_refresh_token`) and makes the Ideas calendar. Then on your phone open Google Calendar, Settings, and turn on sync for Ideas; a new calendar can start hidden on Android.
+
+- If the settings page says Google did not give a lasting token, remove `masonbair hub` at myaccount.google.com/permissions and connect again.
+- **Disconnect** on the settings page revokes the token at Google and blanks it in Vault. The Ideas calendar and its events stay in your account, and connecting again reuses that calendar.
+- Removing the app at myaccount.google.com/permissions also works; the job's next calendar call notices and marks Google disconnected.
+
+Does `calendar.app.created` need Google verification? Not for this use. Google lists `calendar.app.created` among the Calendar scopes (https://developers.google.com/workspace/calendar/api/auth) but that page does not say whether it is sensitive, and its tier could not be confirmed from Google's own docs. Either way, Google's verification page (https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification) says verification is not needed for personal use, "if you are the only user of your app", where you click past the unverified app screen. That is this setup: only your account connects. If the Data Access page in step 4 lists the scope under "Your sensitive scopes", that confirms it is sensitive, and the answer stays the same. Verification would matter only if other people were to connect their calendars.
+
 ### HiNote recording intake (read-only, Mac)
 
 Until HiNote memos move to the hub, ideas spoken in Mac HiNote recordings reach the Ideas Lab through a small read-only job. The HiNote flow itself (hinote-sync, then todo-hub, then Todoist) is not touched.

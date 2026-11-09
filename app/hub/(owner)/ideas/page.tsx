@@ -1,3 +1,4 @@
+import { GearSix } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { IdeaRow } from "@/components/hub/ideas/IdeaRow";
 import { focusRing } from "@/components/hub/styles";
@@ -30,7 +31,16 @@ export default async function IdeasPage({ searchParams }: PageProps<"/hub/ideas"
 
   return (
     <main>
-      <h1 className="text-3xl font-semibold tracking-tight">Ideas Lab</h1>
+      <div className="flex items-baseline justify-between gap-4">
+        <h1 className="text-3xl font-semibold tracking-tight">Ideas Lab</h1>
+        <Link
+          href="/hub/ideas/settings"
+          className={`inline-flex items-center gap-1.5 text-sm font-medium text-mute transition-colors hover:text-ink ${focusRing}`}
+        >
+          <GearSix size={16} weight="bold" aria-hidden />
+          Settings
+        </Link>
+      </div>
       <p className="mt-2 max-w-[60ch] text-sm text-mute">Each idea gets an honest review, then comes back on your calendar.</p>
 
       {failed.length > 0 && <FailedSources sources={failed} />}

@@ -6,6 +6,7 @@ import { isItemId } from "@/lib/hub/format";
 import { masonStore } from "@/lib/hub/mason-store";
 import type { HubStore, Item } from "@/lib/hub/types";
 import { MEMO_FILE } from "@/lib/hub/memo";
+import { disconnectFromGoogle, SETTINGS_PATH } from "@/lib/ideas/google";
 import { IDEA_LABEL, isIdea } from "@/lib/ideas/read";
 import { MAX_REVIEW_NOTE, recordingFile } from "@/lib/ideas/types";
 import { serviceClient, sessionClient } from "@/lib/supabase/server";
@@ -136,4 +137,11 @@ export async function retryDetection(ref: string): Promise<void> {
   if (error) throw error;
   if ((data ?? []).length === 0) throw new Error("only a failed detection can be tried again");
   refreshHub();
+}
+
+/** Revokes the Google token, blanks it in Vault and marks Google disconnected; the Ideas calendar stays in Mason's account. */
+export async function disconnectGoogle(): Promise<void> {
+  await requireOwner();
+  await disconnectFromGoogle(serviceClient(), (input, init) => fetch(input, init));
+  revalidatePath(SETTINGS_PATH);
 }

@@ -283,3 +283,12 @@ export async function getIdeaPage(client: SupabaseClient, id: string): Promise<I
     comments,
   };
 }
+
+/** This UTC month's review versions and what they cost together, matching how monthSpend counts months. */
+export async function reviewCostThisMonth(client: SupabaseClient, now: Date): Promise<{ reviews: number; costUsd: number }> {
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const { data, error } = await client.from("idea_reviews").select("cost_usd").gte("created_at", monthStart);
+  if (error) throw error;
+  const rows = (data ?? []) as { cost_usd: number | string | null }[];
+  return { reviews: rows.length, costUsd: rows.reduce((sum, row) => sum + Number(row.cost_usd ?? 0), 0) };
+}

@@ -3,7 +3,7 @@ export const RETURN_COOKIE = "hub_return";
 export const RETURN_COOKIE_PATH = "/hub/auth/callback";
 const TEN_MINUTES = 600;
 
-function isLocalHost(host: string): boolean {
+export function isLocalHost(host: string): boolean {
   return /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host);
 }
 
