@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, Check, Microphone, Stop } from "@phosphor-icons/react";
+import { ArrowUp, Check, Lightbulb, Microphone, Stop } from "@phosphor-icons/react";
 import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { splitCapture } from "@/lib/hub/capture";
@@ -13,6 +13,7 @@ export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
   const field = useRef<HTMLTextAreaElement>(null);
   const status = useSyncExternalStore(subscribeOutbox, outboxSnapshot, () => null);
   const [savedCount, setSavedCount] = useState(0);
+  const [savedAsIdea, setSavedAsIdea] = useState(false);
   const [saveTooLong, setSaveTooLong] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
 
@@ -30,7 +31,7 @@ export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
   });
 
   // Reads and clears the field straight from the DOM, so a second click in the same frame finds it empty.
-  function save() {
+  function save(asIdea = false) {
     const box = field.current;
     if (!box) return;
     const { title, description } = splitCapture(box.value);
@@ -40,13 +41,14 @@ export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
       return;
     }
     setSaveTooLong(false);
-    if (!saveToOutbox({ title, description })) {
+    if (!saveToOutbox({ title, description, asIdea })) {
       setSaveFailed(true);
       return;
     }
     setSaveFailed(false);
     box.value = "";
     box.focus();
+    setSavedAsIdea(asIdea);
     setSavedCount((count) => count + 1);
   }
 
@@ -76,7 +78,7 @@ export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
               onKeyDown={(event) => {
                 if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
                   event.preventDefault();
-                  save();
+                  save(event.shiftKey);
                 }
               }}
               className="block min-h-[38dvh] w-full resize-none rounded-[calc(2rem-0.375rem)] border-0 bg-transparent px-5 pt-5 pb-2 text-lg leading-relaxed text-ink outline-none placeholder:text-mute"
@@ -97,15 +99,25 @@ export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
               ) : (
                 <span />
               )}
-              <button
-                type="submit"
-                className={`group inline-flex h-12 items-center gap-3 rounded-full bg-accent pr-1.5 pl-6 text-base font-semibold text-night transition-[opacity,transform] duration-300 ease-spring hover:opacity-90 active:scale-[0.98] ${focusRing}`}
-              >
-                Save
-                <span className="inline-flex size-9 items-center justify-center rounded-full bg-night/10 transition-transform duration-300 ease-spring group-hover:-translate-y-px">
-                  <ArrowUp size={16} weight="bold" aria-hidden />
-                </span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => save(true)}
+                  className={`inline-flex h-12 items-center gap-2 rounded-full bg-ink/5 px-4 text-sm font-medium text-ink transition-[background-color,transform] duration-300 ease-spring hover:bg-ink/10 active:scale-[0.98] ${focusRing}`}
+                >
+                  <Lightbulb size={18} aria-hidden />
+                  Save as idea
+                </button>
+                <button
+                  type="submit"
+                  className={`group inline-flex h-12 items-center gap-3 rounded-full bg-accent pr-1.5 pl-6 text-base font-semibold text-night transition-[opacity,transform] duration-300 ease-spring hover:opacity-90 active:scale-[0.98] ${focusRing}`}
+                >
+                  Save
+                  <span className="inline-flex size-9 items-center justify-center rounded-full bg-night/10 transition-transform duration-300 ease-spring group-hover:-translate-y-px">
+                    <ArrowUp size={16} weight="bold" aria-hidden />
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -117,7 +129,7 @@ export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
         {savedCount > 0 && (
           <span key={savedCount} className="inline-flex items-center gap-1.5 font-medium text-accent-ink motion-safe:animate-[fade-up_400ms_cubic-bezier(0.16,1,0.3,1)_both]">
             <Check size={14} weight="bold" aria-hidden />
-            Saved
+            {savedAsIdea ? "Saved to Ideas" : "Saved"}
           </span>
         )}
         {emptyShare && savedCount === 0 && (

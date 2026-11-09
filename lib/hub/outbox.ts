@@ -2,6 +2,8 @@ export type OutboxEntry = {
   clientKey: string;
   title: string;
   description?: string;
+  /** Absent in entries stored before Save as idea existed; those count as false. */
+  asIdea?: boolean;
   createdAt: string;
   /** Set when the server refused the entry outright; it stays here, unsent, until Mason retries it. */
   failedStatus?: number;

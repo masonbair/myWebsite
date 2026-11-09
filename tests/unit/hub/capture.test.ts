@@ -9,11 +9,16 @@ describe("parseCapture", () => {
       title: "Buy flour",
       description: "the good one",
       clientKey: KEY,
+      asIdea: false,
     });
   });
 
+  it("keeps asIdea when it is true", () => {
+    expect(parseCapture({ title: "x", clientKey: KEY, asIdea: true }).asIdea).toBe(true);
+  });
+
   it("allows a missing description", () => {
-    expect(parseCapture({ title: "x", clientKey: KEY })).toEqual({ title: "x", description: "", clientKey: KEY });
+    expect(parseCapture({ title: "x", clientKey: KEY })).toEqual({ title: "x", description: "", clientKey: KEY, asIdea: false });
   });
 
   it.each([
@@ -23,6 +28,7 @@ describe("parseCapture", () => {
     ["description too long", { title: "x", description: "a".repeat(10_001), clientKey: KEY }],
     ["description not text", { title: "x", description: 5, clientKey: KEY }],
     ["missing key", { title: "x" }],
+    ["asIdea not a boolean", { title: "x", clientKey: KEY, asIdea: "yes" }],
     ["key not a uuid", { title: "x", clientKey: "abc" }],
   ])("refuses %s", (_name, raw) => {
     expect(() => parseCapture(raw)).toThrow(/bad capture/);

@@ -1,6 +1,6 @@
 import { MAX_DESCRIPTION, MAX_TITLE } from "./input";
 
-export type Capture = { title: string; description: string; clientKey: string };
+export type Capture = { title: string; description: string; clientKey: string; asIdea: boolean };
 export type CaptureText = { title: string; description: string };
 export type SharedFields = { title?: string; text?: string; url?: string };
 
@@ -19,7 +19,9 @@ export function parseCapture(raw: unknown): Capture {
   const description = input.description ?? "";
   if (typeof description !== "string" || description.length > MAX_DESCRIPTION) fail("description");
   if (typeof input.clientKey !== "string" || !UUID.test(input.clientKey)) fail("clientKey");
-  return { title, description, clientKey: input.clientKey };
+  const asIdea = input.asIdea ?? false;
+  if (typeof asIdea !== "boolean") fail("asIdea");
+  return { title, description, clientKey: input.clientKey, asIdea };
 }
 
 /** First line becomes the title; when it is too long, the title is cut and the full text goes in the description. */

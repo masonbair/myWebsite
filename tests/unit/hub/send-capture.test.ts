@@ -24,6 +24,14 @@ describe("sendCapture", () => {
     expect(await sendCapture(entry, answer('{"id":"abc"}', { status: 201 }))).toBe(201);
   });
 
+  it("posts asIdea, false when the entry has none", async () => {
+    const post = vi.fn<typeof fetch>(async () => new Response('{"id":"abc"}', { status: 201 }));
+    await sendCapture({ ...entry, asIdea: true }, post);
+    await sendCapture(entry, post);
+    const bodies = post.mock.calls.map((c) => JSON.parse(c[1]?.body as string));
+    expect(bodies.map((b) => b.asIdea)).toEqual([true, false]);
+  });
+
   it("returns a refusal status as is", async () => {
     expect(await sendCapture(entry, answer('{"error":"unauthorized"}', { status: 401 }))).toBe(401);
   });

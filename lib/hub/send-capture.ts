@@ -5,7 +5,7 @@ export async function sendCapture(entry: OutboxEntry, fetchImpl: typeof fetch = 
   const response = await fetchImpl("/api/hub/capture", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title: entry.title, description: entry.description, clientKey: entry.clientKey }),
+    body: JSON.stringify({ title: entry.title, description: entry.description, asIdea: entry.asIdea ?? false, clientKey: entry.clientKey }),
   });
   if (!response.ok) return response.status;
   // A login page or a captive portal can answer 200 too, so only a real id counts as saved.

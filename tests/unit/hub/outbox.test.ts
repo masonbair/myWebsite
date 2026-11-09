@@ -32,6 +32,11 @@ describe("outbox", () => {
     expect(outbox.status()).toMatchObject({ waiting: 1, failed: [] });
   });
 
+  it("keeps asIdea across a reload", () => {
+    createOutbox(storage).enqueue({ ...entry(1), asIdea: true });
+    expect(createOutbox(storage).entries()[0].asIdea).toBe(true);
+  });
+
   it("removes an entry after a 2xx", async () => {
     const outbox = createOutbox(storage);
     outbox.enqueue(entry(1));

@@ -45,7 +45,7 @@ export async function seededOwner(): Promise<Credentials> {
   const owner = await ownerUser();
   // Local Supabase has no GitHub OAuth, so the identity is written straight into auth.identities.
   execSync(
-    `docker exec -i supabase_db_masonbair psql -U postgres -v ON_ERROR_STOP=1 -c "insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at, last_sign_in_at) values ('${OWNER_GITHUB_ID}', '${owner.id}', '{\\"sub\\":\\"${OWNER_GITHUB_ID}\\"}', 'github', now(), now(), now()) on conflict (provider_id, provider) do update set user_id = excluded.user_id, updated_at = now(), last_sign_in_at = now()"`,
+    `docker exec -i ${process.env.SUPABASE_DB_CONTAINER ?? "supabase_db_masonbair"} psql -U postgres -v ON_ERROR_STOP=1 -c "insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at, last_sign_in_at) values ('${OWNER_GITHUB_ID}', '${owner.id}', '{\\"sub\\":\\"${OWNER_GITHUB_ID}\\"}', 'github', now(), now(), now()) on conflict (provider_id, provider) do update set user_id = excluded.user_id, updated_at = now(), last_sign_in_at = now()"`,
     { stdio: "ignore" },
   );
   const { error } = await serviceClient()
