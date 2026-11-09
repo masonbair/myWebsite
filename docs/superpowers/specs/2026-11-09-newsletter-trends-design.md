@@ -431,3 +431,21 @@ These need a live look at vendor pages. This sandbox cannot confirm current numb
 - Resend webhook carries metadata only, not the email. Fetch the raw message from `GET /emails/receiving/{id}` using `raw.download_url`.
 - Vercel Blob storage limit on Hobby and Pro: about 250 MB a year is needed. Confirm the plan's included storage on vercel.com/docs.
 - Function `maxDuration`: default 300 s. Inbound routes set 60 s. Job deadlines are 180 s and 240 s.
+
+### Model comparison (2026-11-09)
+
+Run on 20 real issues, the 5 newest from each of Mindstream, Superhuman, The Hustle and Tech Brew, with the 30 provisional topics. Opus 5.5 at medium effort is the reference. Measured spend for the whole run: $5.95.
+
+| Model | Stories | Opus stories found | Topic agreement | Ticker agreement | Cost per issue |
+|---|---|---|---|---|---|
+| Haiku 5.5, low effort | 305 | 69% (79% of news stories) | 98% | 75% | $0.005 |
+| Sonnet 5.5, low effort | 258 | 73% (83% of news stories) | 100% | 83% | $0.089 |
+| Opus 5.5, medium effort | 285 | reference | reference | reference | $0.204 |
+
+Most misses are short items Opus labelled "other"; the models split them differently. On news stories, the ones trends count, Sonnet clears the 80% bar and Haiku falls just short.
+
+Choice: **Sonnet 5.5 at low effort stays the daily model.** Haiku is the cheaper option to revisit after Mason looks at the side-by-side page (kept locally, not in git).
+
+Measured costs replace the earlier estimate table. They run about twice the old Sonnet estimate because real issues are longer:
+- Daily, about 180 issues a month on Sonnet: about $16, plus a little for dedupe. Inside the $25 cap, with less room than first planned.
+- 12-month import, about 2,000 issues through the Batch API at half price: about $90 on Sonnet, or about $5 on Haiku. The import script shows its own estimate and waits for Mason's yes.
