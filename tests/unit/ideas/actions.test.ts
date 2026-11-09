@@ -38,6 +38,34 @@ function fakeSessionClient() {
   };
 }
 
+let sources: Map<string, Row>;
+
+/** Just the guarded idea_sources update retryDetection makes through the service client. */
+function fakeServiceClient() {
+  return {
+    from(table: string) {
+      if (table !== "idea_sources") throw new Error(`unexpected table ${table}`);
+      return {
+        update: (cols: Row) => {
+          const filters: [string, unknown][] = [];
+          const chain = {
+            eq(column: string, value: unknown) {
+              filters.push([column, value]);
+              return chain;
+            },
+            async select() {
+              const hits = [...sources.values()].filter((row) => filters.every(([c, v]) => row[c] === v));
+              for (const row of hits) Object.assign(row, cols);
+              return { data: hits.map((row) => ({ source_item_id: row.source_item_id })), error: null };
+            },
+          };
+          return chain;
+        },
+      };
+    },
+  };
+}
+
 const requireOwner = vi.fn(async () => ({ userId: "owner" }));
 
 vi.mock("server-only", () => ({}));
@@ -45,9 +73,9 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/auth/require-owner", () => ({ requireOwner: () => requireOwner() }));
 vi.mock("@/lib/hub/mason-store", () => ({ masonStore: async () => store }));
-vi.mock("@/lib/supabase/server", () => ({ sessionClient: async () => fakeSessionClient() }));
+vi.mock("@/lib/supabase/server", () => ({ sessionClient: async () => fakeSessionClient(), serviceClient: () => fakeServiceClient() }));
 
-const { backToInbox, promoteIdea, requestReview, setNoWebSearch, stopReminders } = await import("@/app/hub/ideas-actions");
+const { backToInbox, promoteIdea, requestReview, retryDetection, setNoWebSearch, stopReminders } = await import("@/app/hub/ideas-actions");
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -61,6 +89,7 @@ describe("ideas actions", () => {
   beforeEach(() => {
     store = createFakeStore({ kind: "mason" });
     settings = new Map();
+    sources = new Map();
     updateError = null;
     requireOwner.mockReset();
     requireOwner.mockImplementation(async () => ({ userId: "owner" }));
@@ -77,6 +106,7 @@ describe("ideas actions", () => {
       () => stopReminders(idea.id),
       () => setNoWebSearch(idea.id, true),
       () => backToInbox(idea.id),
+      () => retryDetection(idea.id),
     ]) {
       await expect(act()).rejects.toThrow("not the owner");
     }
@@ -199,5 +229,36 @@ describe("ideas actions", () => {
     const idea = await newIdea({ enrolled: true, moved_from_inbox: false });
     await expect(backToInbox(idea.id)).rejects.toThrow("inbox");
     expect((await store.getItem(idea.id))?.list).toBe("ideas");
+  });
+
+  describe("retryDetection", () => {
+    const ID = "10000000-0000-4000-8000-0000000000aa";
+    const saved = [{ title: "t", quote: "q", whole_item: false, sure: false, outcome: null }];
+    const seedSource = (status: string) => sources.set(ID, { source_item_id: ID, status, attempts: 3, last_error: "schema", quotes: saved });
+
+    it("puts a failed source back in line, keeping its saved detection", async () => {
+      seedSource("failed");
+      await retryDetection(ID);
+      expect(sources.get(ID)).toEqual({ source_item_id: ID, status: "pending", attempts: 0, last_error: null, quotes: saved });
+    });
+
+    it("refuses a non-owner and changes nothing", async () => {
+      seedSource("failed");
+      requireOwner.mockImplementation(async () => {
+        throw new Error("not the owner");
+      });
+      await expect(retryDetection(ID)).rejects.toThrow("not the owner");
+      expect(sources.get(ID)?.status).toBe("failed");
+    });
+
+    it("refuses a bad id", async () => {
+      await expect(retryDetection("not-an-id; drop table")).rejects.toThrow("bad item id");
+    });
+
+    it.each(["pending", "done"])("refuses a %s source and leaves it as it is", async (status) => {
+      seedSource(status);
+      await expect(retryDetection(ID)).rejects.toThrow("only a failed detection");
+      expect(sources.get(ID)).toMatchObject({ status, attempts: 3, last_error: "schema" });
+    });
   });
 });

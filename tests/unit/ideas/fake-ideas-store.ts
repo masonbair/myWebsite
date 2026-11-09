@@ -178,7 +178,9 @@ export function createFakeIdeasStore() {
       return item.id;
     },
     async mentionAgain(ideaId, sourceUrl, date, quote) {
-      rows.comments.push({ id: `c${rows.comments.length}`, itemId: ideaId, body: `Mentioned again in ${sourceUrl} on ${date}\n\n> ${quote}`, author: "worker", createdAt: date });
+      const body = `Mentioned again in ${sourceUrl} on ${date}\n\n> ${quote}`;
+      if (rows.comments.some((c) => c.itemId === ideaId && c.body === body)) return;
+      rows.comments.push({ id: `c${rows.comments.length}`, itemId: ideaId, body, author: "worker", createdAt: date });
       rows.mentions.set(ideaId, (rows.mentions.get(ideaId) ?? 1) + 1);
     },
   };

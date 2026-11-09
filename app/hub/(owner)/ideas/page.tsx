@@ -2,7 +2,8 @@ import Link from "next/link";
 import { IdeaRow } from "@/components/hub/ideas/IdeaRow";
 import { focusRing } from "@/components/hub/styles";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { IDEA_FILTERS, listIdeas, type IdeaFilter } from "@/lib/ideas/read";
+import { FailedSources } from "@/components/hub/ideas/FailedSources";
+import { IDEA_FILTERS, listFailedSources, listIdeas, type IdeaFilter } from "@/lib/ideas/read";
 import { sessionClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Ideas Lab" };
@@ -24,12 +25,15 @@ export default async function IdeasPage({ searchParams }: PageProps<"/hub/ideas"
   await requireOwner("/hub/ideas");
   const { show } = await searchParams;
   const filter: IdeaFilter = isFilter(show) ? show : "active";
-  const { ideas, total } = await listIdeas(await sessionClient(), filter);
+  const client = await sessionClient();
+  const [{ ideas, total }, failed] = await Promise.all([listIdeas(client, filter), listFailedSources(client)]);
 
   return (
     <main>
       <h1 className="text-3xl font-semibold tracking-tight">Ideas Lab</h1>
       <p className="mt-2 max-w-[60ch] text-sm text-mute">Each idea gets an honest review, then comes back on your calendar.</p>
+
+      {failed.length > 0 && <FailedSources sources={failed} />}
 
       <nav aria-label="Idea filters" className="mt-6 -mx-1 overflow-x-auto px-1">
         <ul className="inline-flex rounded-full bg-ink/5 p-1">

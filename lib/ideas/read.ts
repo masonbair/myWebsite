@@ -139,6 +139,26 @@ function listQuery(client: SupabaseClient, filter: IdeaFilter) {
 
 export type IdeaList = { ideas: IdeaListRow[]; total: number };
 
+/** A capture or memo the job could not read after three tries. */
+export type FailedSource = { itemId: string; title: string; kind: "capture" | "memo" };
+
+/** Sources whose detection failed, newest first, for the Ideas Lab's retry list; read with the owner session. */
+export async function listFailedSources(client: SupabaseClient): Promise<FailedSource[]> {
+  const { data, error } = await client
+    .from("idea_sources")
+    .select("source_item_id, kind")
+    .eq("status", "failed")
+    .order("updated_at", { ascending: false })
+    .limit(LIST_LIMIT);
+  if (error) throw error;
+  const rows = (data ?? []) as { source_item_id: string; kind: FailedSource["kind"] }[];
+  if (rows.length === 0) return [];
+  const { data: items, error: itemsError } = await client.from("items").select("id, title").in("id", rows.map((r) => r.source_item_id));
+  if (itemsError) throw itemsError;
+  const titles = new Map(((items ?? []) as { id: string; title: string }[]).map((i) => [i.id, i.title]));
+  return rows.map((r) => ({ itemId: r.source_item_id, kind: r.kind, title: titles.get(r.source_item_id) ?? "Untitled" }));
+}
+
 /** Up to 200 ideas for one filter of the Ideas Lab list, newest first, plus how many match in all; works with the owner session or the service client. */
 export async function listIdeas(client: SupabaseClient, filter: IdeaFilter): Promise<IdeaList> {
   const { data, error, count } = await listQuery(client, filter);
@@ -159,9 +179,16 @@ export async function listIdeas(client: SupabaseClient, filter: IdeaFilter): Pro
   return { ideas, total: count ?? ideas.length };
 }
 
-// Quotes are stored per source either as plain strings in idea order or as { ideaId, quote } objects.
+type QuoteEntry = { quote?: unknown; ideaId?: unknown; outcome?: { kind?: unknown; id?: unknown } | null };
+
+// Detection saves { quote, outcome: { kind, id } } per idea; older rows hold plain strings in idea order or { ideaId, quote }.
 function quoteFor(quotes: unknown, ideaIds: string[], id: string): string | null {
   if (!Array.isArray(quotes)) return null;
+  const entries = (quotes as QuoteEntry[]).filter(
+    (q) => typeof q === "object" && q !== null && q.outcome?.id === id && typeof q.quote === "string",
+  );
+  const saved = entries.find((q) => q.outcome?.kind !== "mention") ?? entries[0];
+  if (saved) return saved.quote as string;
   const byObject = quotes.find(
     (q): q is { quote: string } =>
       typeof q === "object" && q !== null && (q as { ideaId?: unknown }).ideaId === id && typeof (q as { quote?: unknown }).quote === "string",

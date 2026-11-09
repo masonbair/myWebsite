@@ -15,7 +15,6 @@ export type IdeasJobDeps = {
   now: () => Date;
   budgetUsd: number;
   webSearchOff: boolean;
-  memoDetection: boolean;
   ntfy: (msg: Message) => Promise<void>;
   deadlineMs: number;
   /** This month's ideas spend in USD, read fresh before every review. */
@@ -263,7 +262,8 @@ async function detectOne(
 async function detectStep(deps: IdeasJobDeps, startedAt: number): Promise<number> {
   const anthropic = deps.anthropic;
   if (!anthropic) return 0;
-  const kinds: SourceKind[] = deps.memoDetection ? ["capture", "memo"] : ["capture"];
+  // IDEAS_MEMO_DETECTION only gates queueing in the relay; a memo already queued is always read, or its ideas would be stranded.
+  const kinds: SourceKind[] = ["capture", "memo"];
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(0, startedAt + DETECT_ABORT_MS - deps.now().getTime()));
   let found = 0;

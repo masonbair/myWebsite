@@ -372,7 +372,10 @@ export function createIdeasJobStore(client: SupabaseClient, sourceLeaseMs = SOUR
     },
 
     async mentionAgain(ideaId, sourceUrl, date, quote) {
-      await hub.addComment(ideaId, `Mentioned again in ${sourceUrl} on ${date}\n\n${quoted(quote)}`);
+      const body = `Mentioned again in ${sourceUrl} on ${date}\n\n${quoted(quote)}`;
+      // A retry after a run died between this comment and saving its outcome must not post or count it twice.
+      if ((await hub.listComments(ideaId)).some((c) => c.body === body)) return;
+      await hub.addComment(ideaId, body);
       // PostgREST has no increment, so compare-and-set, retried when another write got there first.
       for (let tries = 0; tries < 5; tries += 1) {
         const { data, error } = await client.from("idea_settings").select("mention_count").eq("item_id", ideaId).maybeSingle();

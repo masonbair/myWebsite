@@ -29,7 +29,6 @@ function harness(replies: FakeReply[] = [], overrides: Partial<IdeasJobDeps> & {
     now: () => new Date(clock),
     budgetUsd: 20,
     webSearchOff: true,
-    memoDetection: false,
     ntfy: async () => {},
     deadlineMs: 0,
     spend: async () => baseSpend + fake.rows.usage.reduce((sum, u) => sum + u.cost, 0),
@@ -276,7 +275,7 @@ describe("detection on memos", () => {
   }
 
   it("still reads a memo whose split archived it while its detection waited", async () => {
-    const h = harness([found({ title: "Sourdough timer" })], { memoDetection: true });
+    const h = harness([found({ title: "Sourdough timer" })]);
     const memo = seedMemo(h, "An idea: a sourdough timer.");
     h.rows.items.set(memo.id, { ...h.rows.items.get(memo.id)!, state: "archived" });
     await runIdeasJob(h.deps);
@@ -284,17 +283,17 @@ describe("detection on memos", () => {
     expect([...h.rows.items.values()].filter((i) => i.source === "ideas-lab").map((i) => i.title)).toEqual(["Sourdough timer"]);
   });
 
-  it("is not read while IDEAS_MEMO_DETECTION is off", async () => {
+  it("still reads a memo queued before IDEAS_MEMO_DETECTION was turned off, so its ideas are not stranded", async () => {
+    // The job has no switch at all: the relay alone stops queueing new memos.
     const h = harness([found()]);
     const memo = seedMemo(h, "An idea: a sourdough timer.");
     await runIdeasJob(h.deps);
-    expect(h.anthropic.sent).toEqual([]);
-    expect(h.rows.sources.get(memo.id)?.status).toBe("pending");
+    expect(h.anthropic.sent).toHaveLength(1);
+    expect(h.rows.sources.get(memo.id)?.status).toBe("done");
   });
 
   it("files two ideas from one memo as two items and leaves the memo untouched", async () => {
     const h = harness([found({ title: "Sourdough timer", whole_item: true, sure: true }, { title: "Bakery map", quote: "a map of bakeries" })], {
-      memoDetection: true,
     });
     const memo = seedMemo(h, "Call the bank. An idea: a timer for sourdough. Also a map of bakeries.");
     const before = { ...h.rows.items.get(memo.id)! };

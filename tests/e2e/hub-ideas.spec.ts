@@ -99,6 +99,33 @@ test.describe("ideas lab", () => {
     await expect(page.getByRole("link", { name: promoted.title })).toBeVisible();
   });
 
+  test("a failed detection shows under Could not read, and Try again puts it back in line", async ({ page }) => {
+    const title = `e2e capture ${randomUUID().slice(0, 8)}`;
+    const { data, error } = await (await ownerDbClient())
+      .from("items")
+      .insert({ title, description: "", list: "inbox", source: "e2e" })
+      .select("id")
+      .single();
+    if (error) throw error;
+    const id = (data as { id: string }).id;
+    const saved = [{ title: "Bakery map", quote: "a map of bakeries", whole_item: false, sure: false, outcome: null }];
+    const { error: sourceError } = await serviceClient()
+      .from("idea_sources")
+      .insert({ source_item_id: id, kind: "capture", status: "failed", attempts: 3, last_error: "schema", quotes: saved });
+    if (sourceError) throw sourceError;
+
+    await page.goto("/hub/ideas");
+    const section = page.getByRole("region", { name: /Could not read \d+ captures? or memos?/ });
+    await expect(section).toBeVisible();
+    const row = section.getByRole("listitem").filter({ hasText: title });
+    await expect(row.getByRole("link", { name: title })).toHaveAttribute("href", `/hub/item/${id}`);
+    await row.getByRole("button", { name: "Try again" }).click();
+    await expect(page.getByRole("link", { name: title })).toHaveCount(0);
+    const { data: row2, error: readError } = await serviceClient().from("idea_sources").select("status, attempts, last_error, quotes").eq("source_item_id", id).single();
+    if (readError) throw readError;
+    expect(row2).toEqual({ status: "pending", attempts: 0, last_error: null, quotes: saved });
+  });
+
   test("the idea page shows the review, folds earlier versions and keeps links safe", async ({ page }) => {
     const idea = await seedIdea({ reviews: [review("weak"), review("promising"), { broken: true }] });
     await page.goto(`/hub/ideas/${idea.id}`);

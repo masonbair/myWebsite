@@ -233,6 +233,8 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
     expect(await store.ideaQuote(idea)).toBe("a map of bakeries");
 
     await store.mentionAgain(idea, "https://masonbair.com/hub/item/x", "2026-11-09", "bakery map again");
+    // A retry of the same mention posts and counts nothing more.
+    await store.mentionAgain(idea, "https://masonbair.com/hub/item/x", "2026-11-09", "bakery map again");
     expect((await settingsRow(idea))?.mention_count).toBe(2);
     expect((await hub().listComments(idea)).map((c) => c.body)).toEqual([
       "Mentioned again in https://masonbair.com/hub/item/x on 2026-11-09\n\n> bakery map again",

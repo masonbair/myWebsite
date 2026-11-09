@@ -7,7 +7,7 @@ import { masonStore } from "@/lib/hub/mason-store";
 import type { HubStore, Item } from "@/lib/hub/types";
 import { IDEA_LABEL, isIdea } from "@/lib/ideas/read";
 import { MAX_REVIEW_NOTE } from "@/lib/ideas/types";
-import { sessionClient } from "@/lib/supabase/server";
+import { serviceClient, sessionClient } from "@/lib/supabase/server";
 
 const REVIEW_RUNNING = "A review is running. Try again in a few minutes.";
 
@@ -113,5 +113,21 @@ export async function backToInbox(id: string): Promise<void> {
   }
   await writeSettings(item.id, stopColumns());
   await store.updateItem(item.id, { list: "inbox", labels: item.labels.filter((label) => label !== IDEA_LABEL) });
+  refreshHub();
+}
+
+/** Puts a failed detection back in line; the saved detection is kept, so the retry files from it without a second Claude call. */
+export async function retryDetection(sourceItemId: string): Promise<void> {
+  await requireOwner();
+  if (!isItemId(sourceItemId)) throw new Error("bad item id");
+  // The owner has no write grant on idea_sources; the service client may, and only a failed row changes.
+  const { data, error } = await serviceClient()
+    .from("idea_sources")
+    .update({ status: "pending", attempts: 0, last_error: null })
+    .eq("source_item_id", sourceItemId)
+    .eq("status", "failed")
+    .select("source_item_id");
+  if (error) throw error;
+  if ((data ?? []).length === 0) throw new Error("only a failed detection can be tried again");
   refreshHub();
 }

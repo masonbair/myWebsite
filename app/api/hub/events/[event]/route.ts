@@ -22,7 +22,6 @@ function ideasRunner() {
       now: () => new Date(),
       budgetUsd: budgetFromEnv(process.env.IDEAS_MONTHLY_BUDGET_USD),
       webSearchOff: process.env.IDEAS_WEB_SEARCH === "off",
-      memoDetection: process.env.IDEAS_MEMO_DETECTION === "on",
       ntfy: async (msg) => {
         if (!topic) throw new Error("NTFY_TOPIC is not set");
         await notify(topic, msg);

@@ -22,7 +22,6 @@ function harness(replies: FakeReply[] = [], overrides: Partial<IdeasJobDeps> & {
     now: () => new Date(clock),
     budgetUsd: 20,
     webSearchOff: true,
-    memoDetection: false,
     ntfy: async (msg) => {
       sent.push(msg);
     },
