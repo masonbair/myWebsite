@@ -65,7 +65,7 @@ export function assertStatusLabel(status: string): asserts status is StatusLabel
 
 // The worker's own bookkeeping only: the Granola sweep mark, per-item reminder flags and the Ideas Lab's once-only ntfy flags.
 const HUB_STATE_KEYS =
-  /^(granola-swept-until|reminded:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|ideas-cap-notified:\d{4}-\d{2}|ideas-failures-notified:\d{4}-\d{2}-\d{2})$/;
+  /^(granola-swept-until|reminded:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|ideas-cap-notified:\d{4}-\d{2}|ideas-failures-notified:\d{4}-\d{2}-\d{2}|ideas-google-revoked:\d{4}-\d{2}-\d{2})$/;
 
 export function assertHubStateKey(key: string): void {
   if (!HUB_STATE_KEYS.test(key)) throw new ForbiddenError(`hub state key ${key} is not allowed`);

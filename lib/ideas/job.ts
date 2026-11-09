@@ -20,7 +20,7 @@ export type IdeasJobDeps = {
   deadlineMs: number;
   /** This month's ideas spend in USD, read fresh before every review. */
   spend: () => Promise<number>;
-  /** Task 8 fills this in; returns how many calendar returns it handled. */
+  /** Brings ideas back on the calendar; returns how many returns it sent, closed or skipped. */
   resurface?: () => Promise<number>;
 };
 
@@ -370,7 +370,14 @@ export async function runIdeasJob(deps: IdeasJobDeps): Promise<IdeasRunResult> {
   const result: IdeasRunResult = { detected: 0, reviewed: [], failed: [], paused: false, resurfaced: 0 };
   result.detected = await detectStep(deps, startedAt);
   await reviewStep(deps, startedAt, result);
-  if (deps.resurface) result.resurfaced = await deps.resurface();
+  if (deps.resurface) {
+    // A calendar or database failure here must not stop the daily failure message.
+    try {
+      result.resurfaced = await deps.resurface();
+    } catch (e) {
+      console.error(`ideas resurface failed: ${(e as { code?: string }).code ?? (e as Error).name}`);
+    }
+  }
   await notifyFailures(deps);
   return result;
 }
