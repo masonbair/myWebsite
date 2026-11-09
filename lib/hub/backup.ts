@@ -35,6 +35,84 @@ export type BackupNowPlacePrivacy = {
 export type BackupNowBake = { id: number; name: string; photo: string | null; bakedAt: string };
 export type BackupAuditEntry = { id: number; actor: string; action: string; itemId: string | null; detail: unknown; at: string };
 
+export type BackupAiUsage = {
+  id: number;
+  feature: string;
+  model: string;
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  webSearches: number;
+  costUsd: number;
+  itemId: string | null;
+  purpose: string;
+  at: string;
+};
+export type BackupIdeaSettings = {
+  itemId: string;
+  enrolled: boolean;
+  scheduleFrom: string | null;
+  remindersStoppedAt: string | null;
+  noWebSearch: boolean;
+  reviewStatus: string;
+  reviewRequestedAt: string | null;
+  reviewNote: string | null;
+  reviewAttempts: number;
+  reviewClaimedAt: string | null;
+  lastError: string | null;
+  movedFromInbox: boolean;
+  mentionCount: number;
+  updatedAt: string;
+};
+export type BackupIdeaReview = {
+  id: number;
+  itemId: string;
+  version: number;
+  review: unknown;
+  model: string;
+  promptVersion: string;
+  note: string | null;
+  costUsd: number;
+  createdAt: string;
+};
+export type BackupIdeaSource = {
+  sourceItemId: string;
+  kind: string;
+  status: string;
+  ideaItemIds: string[];
+  quotes: unknown;
+  attempts: number;
+  model: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+export type BackupIdeaResurface = {
+  id: number;
+  itemId: string;
+  step: number;
+  dueDate: string;
+  eventDate: string | null;
+  googleEventId: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+export type BackupIdeaRecording = {
+  file: string;
+  recorded: string;
+  transcript: string;
+  status: string;
+  attempts: number;
+  ideaItemIds: string[];
+  quotes: unknown;
+  model: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Snapshot = {
   items: BackupItem[];
   comments: Comment[];
@@ -45,6 +123,12 @@ export type Snapshot = {
   nowBake: BackupNowBake[];
   itemsHistory: ItemVersion[];
   auditLog: BackupAuditEntry[];
+  aiUsage: BackupAiUsage[];
+  ideaSettings: BackupIdeaSettings[];
+  ideaReviews: BackupIdeaReview[];
+  ideaSources: BackupIdeaSource[];
+  ideaResurface: BackupIdeaResurface[];
+  ideaRecordings: BackupIdeaRecording[];
   takenAt: string;
 };
 
@@ -58,6 +142,12 @@ export interface SnapshotSource {
   nowBake(): Promise<BackupNowBake[]>;
   itemsHistory(): Promise<ItemVersion[]>;
   auditLog(): Promise<BackupAuditEntry[]>;
+  aiUsage(): Promise<BackupAiUsage[]>;
+  ideaSettings(): Promise<BackupIdeaSettings[]>;
+  ideaReviews(): Promise<BackupIdeaReview[]>;
+  ideaSources(): Promise<BackupIdeaSource[]>;
+  ideaResurface(): Promise<BackupIdeaResurface[]>;
+  ideaRecordings(): Promise<BackupIdeaRecording[]>;
 }
 
 /** The blob calls a backup needs, so tests can swap in memory. */
@@ -83,6 +173,12 @@ export async function snapshot(source: SnapshotSource, now: Date = new Date()): 
   const comments = await source.comments();
   const itemsHistory = await source.itemsHistory();
   const auditLog = await source.auditLog();
+  const aiUsage = await source.aiUsage();
+  const ideaSettings = await source.ideaSettings();
+  const ideaReviews = await source.ideaReviews();
+  const ideaSources = await source.ideaSources();
+  const ideaResurface = await source.ideaResurface();
+  const ideaRecordings = await source.ideaRecordings();
   const items = await source.items();
   return {
     items,
@@ -94,6 +190,12 @@ export async function snapshot(source: SnapshotSource, now: Date = new Date()): 
     nowBake,
     itemsHistory,
     auditLog,
+    aiUsage,
+    ideaSettings,
+    ideaReviews,
+    ideaSources,
+    ideaResurface,
+    ideaRecordings,
     takenAt: now.toISOString(),
   };
 }
@@ -248,6 +350,172 @@ export function createSnapshotSource(client: SupabaseClient): SnapshotSource {
         "id",
       );
       return rows.map((r) => ({ id: r.id, actor: r.actor, action: r.action, itemId: r.item_id, detail: r.detail, at: r.at }));
+    },
+    async aiUsage() {
+      const rows = await all<{
+        id: number;
+        feature: string;
+        model: string;
+        input_tokens: number;
+        cache_read_tokens: number;
+        cache_write_tokens: number;
+        output_tokens: number;
+        web_searches: number;
+        cost_usd: number;
+        item_id: string | null;
+        purpose: string;
+        at: string;
+      }>("ai_usage", "id");
+      return rows.map((r) => ({
+        id: r.id,
+        feature: r.feature,
+        model: r.model,
+        inputTokens: r.input_tokens,
+        cacheReadTokens: r.cache_read_tokens,
+        cacheWriteTokens: r.cache_write_tokens,
+        outputTokens: r.output_tokens,
+        webSearches: r.web_searches,
+        costUsd: r.cost_usd,
+        itemId: r.item_id,
+        purpose: r.purpose,
+        at: r.at,
+      }));
+    },
+    async ideaSettings() {
+      const rows = await all<{
+        item_id: string;
+        enrolled: boolean;
+        schedule_from: string | null;
+        reminders_stopped_at: string | null;
+        no_web_search: boolean;
+        review_status: string;
+        review_requested_at: string | null;
+        review_note: string | null;
+        review_attempts: number;
+        review_claimed_at: string | null;
+        last_error: string | null;
+        moved_from_inbox: boolean;
+        mention_count: number;
+        updated_at: string;
+      }>("idea_settings", "item_id");
+      return rows.map((r) => ({
+        itemId: r.item_id,
+        enrolled: r.enrolled,
+        scheduleFrom: r.schedule_from,
+        remindersStoppedAt: r.reminders_stopped_at,
+        noWebSearch: r.no_web_search,
+        reviewStatus: r.review_status,
+        reviewRequestedAt: r.review_requested_at,
+        reviewNote: r.review_note,
+        reviewAttempts: r.review_attempts,
+        reviewClaimedAt: r.review_claimed_at,
+        lastError: r.last_error,
+        movedFromInbox: r.moved_from_inbox,
+        mentionCount: r.mention_count,
+        updatedAt: r.updated_at,
+      }));
+    },
+    async ideaReviews() {
+      const rows = await all<{
+        id: number;
+        item_id: string;
+        version: number;
+        review: unknown;
+        model: string;
+        prompt_version: string;
+        note: string | null;
+        cost_usd: number;
+        created_at: string;
+      }>("idea_reviews", "id");
+      return rows.map((r) => ({
+        id: r.id,
+        itemId: r.item_id,
+        version: r.version,
+        review: r.review,
+        model: r.model,
+        promptVersion: r.prompt_version,
+        note: r.note,
+        costUsd: r.cost_usd,
+        createdAt: r.created_at,
+      }));
+    },
+    async ideaSources() {
+      const rows = await all<{
+        source_item_id: string;
+        kind: string;
+        status: string;
+        idea_item_ids: string[];
+        quotes: unknown;
+        attempts: number;
+        model: string | null;
+        last_error: string | null;
+        created_at: string;
+        updated_at: string;
+      }>("idea_sources", "source_item_id");
+      return rows.map((r) => ({
+        sourceItemId: r.source_item_id,
+        kind: r.kind,
+        status: r.status,
+        ideaItemIds: r.idea_item_ids,
+        quotes: r.quotes,
+        attempts: r.attempts,
+        model: r.model,
+        lastError: r.last_error,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      }));
+    },
+    async ideaResurface() {
+      const rows = await all<{
+        id: number;
+        item_id: string;
+        step: number;
+        due_date: string;
+        event_date: string | null;
+        google_event_id: string | null;
+        status: string;
+        created_at: string;
+        updated_at: string;
+      }>("idea_resurface", "id");
+      return rows.map((r) => ({
+        id: r.id,
+        itemId: r.item_id,
+        step: r.step,
+        dueDate: r.due_date,
+        eventDate: r.event_date,
+        googleEventId: r.google_event_id,
+        status: r.status,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      }));
+    },
+    async ideaRecordings() {
+      const rows = await all<{
+        file: string;
+        recorded: string;
+        transcript: string;
+        status: string;
+        attempts: number;
+        idea_item_ids: string[];
+        quotes: unknown;
+        model: string | null;
+        last_error: string | null;
+        created_at: string;
+        updated_at: string;
+      }>("idea_recordings", "file");
+      return rows.map((r) => ({
+        file: r.file,
+        recorded: r.recorded,
+        transcript: r.transcript,
+        status: r.status,
+        attempts: r.attempts,
+        ideaItemIds: r.idea_item_ids,
+        quotes: r.quotes,
+        model: r.model,
+        lastError: r.last_error,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      }));
     },
   };
 }
