@@ -5,7 +5,7 @@ import { buttonBubble, stickerButton } from "@/components/ui/sticker";
 import { Tile } from "../board/Tile";
 import { sectionShell } from "./Section";
 
-const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink";
+const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-accent-ink";
 const linkClass = `inline-flex items-center gap-1 rounded-sm font-medium text-ink underline decoration-ink/25 underline-offset-4 hover:decoration-ink ${focusRing}`;
 
 export function Resume() {

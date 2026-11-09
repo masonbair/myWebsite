@@ -14,7 +14,7 @@ import {
 import type { Icon } from "@phosphor-icons/react";
 import { Reveal } from "@/components/board/Reveal";
 import { Prompt, Tile } from "@/components/board/Tile";
-import { focusRing, stickerButtonShape, tag } from "@/components/ui/sticker";
+import { focusRing, focusRingOnColor, stickerButtonShape, tag } from "@/components/ui/sticker";
 import { JsonLd } from "@/components/JsonLd";
 import { bookingMailto, bookingUrl, coffee, coffeeUpdated, type TopicIcon } from "@/content/coffee";
 import { contact } from "@/content/site";
@@ -70,7 +70,7 @@ export default function CoffeePage() {
               target="_blank"
               rel="noopener noreferrer"
               aria-label={coffee.bookLabel}
-              className={`${stickerButtonShape} mt-8 self-start border-night bg-night text-snow`}
+              className={`${stickerButtonShape} ${focusRingOnColor} mt-8 self-start border-night bg-night text-snow`}
             >
               Book a time
               <span className="flex size-9 items-center justify-center rounded-full bg-snow text-night">
@@ -79,7 +79,7 @@ export default function CoffeePage() {
             </a>
             <p className="mt-4 text-sm font-medium">
               No calendar access?{" "}
-              <a href="#book-by-email" className={`font-bold underline underline-offset-4 ${focusRing}`}>
+              <a href="#book-by-email" className={`font-bold underline underline-offset-4 ${focusRingOnColor}`}>
                 Book by email
               </a>
             </p>
