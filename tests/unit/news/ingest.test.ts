@@ -35,7 +35,7 @@ function fakeDeps() {
   return { deps, rows, putRaw };
 }
 
-const webhook = (forwardedOk = true, dkimPass = true) => ({ kind: "webhook" as const, forwardedOk, dkimPass });
+const webhook = (forwardedOk = true, dkimFrom: string | null = "news@example-brew.test") => ({ kind: "webhook" as const, forwardedOk, dkimFrom });
 
 describe("ingestEmail", () => {
   it("creates then reports a duplicate, storing raw once", async () => {
@@ -67,8 +67,9 @@ describe("ingestEmail", () => {
   });
 
   it("quarantines when DKIM or forwarding checks fail", async () => {
-    expect((await ingestEmail(load("issue.eml"), fakeDeps().deps, webhook(true, false))).issueStatus).toBe("quarantined");
-    expect((await ingestEmail(load("issue.eml"), fakeDeps().deps, webhook(false, true))).issueStatus).toBe("quarantined");
+    expect((await ingestEmail(load("issue.eml"), fakeDeps().deps, webhook(true, null))).issueStatus).toBe("quarantined");
+    expect((await ingestEmail(load("issue.eml"), fakeDeps().deps, webhook(true, "news@other-brew.test"))).issueStatus).toBe("quarantined");
+    expect((await ingestEmail(load("issue.eml"), fakeDeps().deps, webhook(false))).issueStatus).toBe("quarantined");
     expect((await ingestEmail(load("issue.eml"), fakeDeps().deps, webhook())).issueStatus).toBe("pending");
   });
 

@@ -10,7 +10,8 @@ export type IngestDeps = {
   timeZone: string;
 };
 
-export type IngestVia = { kind: "webhook"; forwardedOk: boolean; dkimPass: boolean } | { kind: "backfill" };
+/** `dkimFrom` is the From address an aligned DKIM pass proved; it must equal the From this parser reads. */
+export type IngestVia = { kind: "webhook"; forwardedOk: boolean; dkimFrom: string | null } | { kind: "backfill" };
 
 export type IngestResult = { status: "created" | "duplicate"; id: string; issueStatus: IssueStatus };
 
@@ -105,7 +106,7 @@ export async function ingestEmail(raw: Uint8Array, deps: IngestDeps, via: Ingest
   const source = email ? matchSource(email.from, await deps.sources()) : null;
   let issueStatus: IssueStatus;
   if (!email) issueStatus = "quarantined";
-  else if (via.kind === "webhook") issueStatus = via.forwardedOk && via.dkimPass && source ? "pending" : "quarantined";
+  else if (via.kind === "webhook") issueStatus = via.forwardedOk && via.dkimFrom === email.from && source ? "pending" : "quarantined";
   else issueStatus = source ? "backfill" : "quarantined";
 
   const existing = await deps.findIssueId(messageId);
