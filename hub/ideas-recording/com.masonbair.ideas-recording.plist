@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Read-only HiNote intake for the Ideas Lab. Fill the ABSOLUTE_ placeholders (see docs/hub-setup.md); the token stays in ~/.config/hub/ideas-recording-token, never here. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.masonbair.ideas-recording</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>ABSOLUTE_NODE_24_PATH</string>
+    <string>ABSOLUTE_HOME_PATH/.config/hub/ideas-recording-sync.ts</string>
+    <string>ABSOLUTE_HOME_PATH/HiNotes/transcripts</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HUB_URL</key>
+    <string>https://masonbair.com</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>900</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>ABSOLUTE_HOME_PATH/Library/Logs/ideas-recording.log</string>
+  <key>StandardErrorPath</key>
+  <string>ABSOLUTE_HOME_PATH/Library/Logs/ideas-recording.log</string>
+</dict>
+</plist>

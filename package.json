@@ -14,6 +14,7 @@
     "indexnow": "node scripts/indexnow.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.7.0",
     "@modelcontextprotocol/server": "^2.4.0",
     "@phosphor-icons/react": "^2.1.10",
     "@supabase/ssr": "^0.12.7",

@@ -80,6 +80,7 @@ Behavior change: the old skill finished a laptop task by setting `claude-done`. 
 3. Stop the old fire path: unset `ROUTINE_FIRE_URL` and `ROUTINE_FIRE_TOKEN` in the todo-hub Vercel project (or remove its Todoist webhook), so Todoist approvals stop starting runs.
 4. Run `hub memo-seed <list-file>` with every HiDock file name todo-hub already filed, so a re-upload doesn't file a memo twice.
 5. Point the phone and Mac memo uploaders at `https://masonbair.com/api/memo` with `MEMO_UPLOAD_TOKEN`.
+   - Then switch on Ideas Lab memo detection as in "Ideas Lab: memo detection" below.
 6. Update the routine (repos, prompt, environment) as above.
 7. In Vercel set `ROUTINE_FIRE_URL`, `ROUTINE_FIRE_TOKEN` and `HUB_WORKER_LIVE=true`, then redeploy. Steps 6 and 7 go together: the fire text and the prompt must match.
 8. Laptop: `claude mcp add`, swap the skill, write `~/.config/hub/env`.
@@ -88,5 +89,24 @@ Behavior change: the old skill finished a laptop task by setting `claude-done`. 
    - "Run now" on the routine for a scheduled run. Watch for `hub alert` pings; check the inbox got sorted and nothing is `done`.
    - Say "add that to my list" in Claude Code and see the item in the hub inbox.
 10. Run both side by side for a short while, then stop writing to Todoist.
+
+## Ideas Lab: memo detection
+
+Setting up the Ideas Lab itself (deploy order, keys, Google, checks) is under "Ideas Lab" in `docs/hub-setup.md`.
+
+Memo detection ships off. While it is off, the memo relay files memos exactly as before and queues none for the Ideas Lab, so it reads only phone and web captures. Switch it on only after step 5 above, once the uploaders send memos to the hub:
+
+1. Stop the read-only HiNote recording intake first, before the switch, if it is installed on the Mac (full steps under "Mac recording intake" in `docs/hub-setup.md`):
+   ```sh
+   launchctl bootout gui/$(id -u)/com.masonbair.ideas-recording
+   rm ~/Library/LaunchAgents/com.masonbair.ideas-recording.plist
+   ```
+   Check it is gone: `launchctl print gui/$(id -u)/com.masonbair.ideas-recording` should say it cannot find the service. If it kept running after the switch, a new recording could be read twice: once as a recording and once as a memo.
+2. In Vercel (myWebsite, Production) set `IDEAS_MEMO_DETECTION=on` and redeploy. From then on each new memo the relay files also gets an `idea_sources` row (kind `memo`, pending), and the Ideas Lab job reads it. Memos filed before the switch are not read.
+   Recordings the intake already sent are not read again: a memo whose device file name (or its stem, which is how hinote-sync names transcripts) is already in `idea_recordings` finishes detection with no Claude call. Its source row still exists, so the memo split treats its ideas as owned by the Ideas Lab and files none of its own.
+3. Nothing to change in the worker: the memo split already skips ideas the Ideas Lab owns. `hub memos` gives each memo `ideasOwnedByIdeasLab` (true whenever the memo was queued for the Ideas Lab, even if its reading failed; false only when it was never queued) and `ideasFiled` (idea item ids filed so far). When owned, the worker leaves its `ideas` list empty for that memo, and `hub memo-split` drops the pieces file's ideas anyway. To-dos and notes, including notes for no known project, are still the memo split's. A memo the split archives is still read for ideas.
+4. Check: upload a test memo that holds one idea. Within 15 minutes it should appear in the Ideas list with the quote and a link back to the memo, and the memo should stay open in the inbox.
+
+The switch gates only the relay's queueing. The Ideas Lab job always reads every queued memo, so switching it off never strands a memo whose ideas the worker already left to the Ideas Lab. To switch it off again, unset `IDEAS_MEMO_DETECTION` and redeploy: memos already queued are still read; new ones are not queued, and the worker files their ideas itself. A memo the Ideas Lab could not read after three tries shows on the Ideas Lab page under "Could not read" with a Try again button. Its ideas wait for that retry; the worker never files them, so a retry cannot file them twice.
 
 Before switching, run the dry run locally (`npm run e2e:hub`): it plays one worker run with canned decisions against local Supabase and checks nothing is deleted or completed.

@@ -45,6 +45,10 @@ test("the same file from the phone and then the Mac gives one item", async () =>
   expect(second.status).toBe(200);
   expect(await second.json()).toEqual({ status: "duplicate", duplicate: true, id, taskId: id });
   expect(await memoItems(file)).toEqual([{ id, state: "open", archived_reason: null, labels: ["hidock-memo"] }]);
+  // IDEAS_MEMO_DETECTION is unset here, so the relay queues nothing for the Ideas Lab.
+  const { data: sources, error } = await serviceClient().from("idea_sources").select("source_item_id").eq("source_item_id", id);
+  if (error) throw error;
+  expect(sources).toEqual([]);
 });
 
 test("two uploads of one file at the same moment still give one item", async () => {
@@ -64,7 +68,7 @@ test("bin/hub memo-split files the pieces and leaves the memo archived, never do
   const file = newFile();
   const { id } = (await (await upload(file, "phone")).json()) as { id: string };
   const memos = JSON.parse(hub(["memos"]).stdout) as { id: string; file: string; transcript: string }[];
-  expect(memos).toContainEqual({ id, file, recorded: "2026-10-22T18:35:04", transcript: "Call the dentist tomorrow. Idea: a costume app." });
+  expect(memos).toContainEqual({ id, file, recorded: "2026-10-22T18:35:04", transcript: "Call the dentist tomorrow. Idea: a costume app.", ideasOwnedByIdeasLab: false, ideasFiled: [] });
 
   const pieces = join(mkdtempSync(join(tmpdir(), "hub-memo-")), "pieces.json");
   writeFileSync(pieces, JSON.stringify({
@@ -85,4 +89,34 @@ test("bin/hub memo-split files the pieces and leaves the memo archived, never do
     { title: "Call the dentist", state: "open", labels: ["hidock", "to-schedule"], list: "inbox" },
     { title: "Costume app", state: "open", labels: ["hidock"], list: "inbox" },
   ]);
+});
+
+test("bin/hub memo-split files no ideas while the Ideas Lab owns the memo's ideas", async () => {
+  const file = newFile();
+  const { id } = (await (await upload(file, "phone")).json()) as { id: string };
+  const { data: idea, error: ideaError } = await serviceClient()
+    .from("items")
+    .insert({ title: "Costume app", list: "ideas", labels: ["idea"], source: "ideas-lab", client_key: `idea:${id}#0` })
+    .select("id")
+    .single();
+  if (ideaError) throw ideaError;
+  const { error } = await serviceClient()
+    .from("idea_sources")
+    .insert({ source_item_id: id, kind: "memo", status: "done", idea_item_ids: [idea.id], quotes: ["Idea: a costume app."] });
+  if (error) throw error;
+
+  const memos = JSON.parse(hub(["memos"]).stdout) as { id: string; ideasOwnedByIdeasLab: boolean; ideasFiled: string[] }[];
+  expect(memos.find((m) => m.id === id)).toMatchObject({ ideasOwnedByIdeasLab: true, ideasFiled: [idea.id] });
+  const pieces = join(mkdtempSync(join(tmpdir(), "hub-memo-")), "pieces.json");
+  writeFileSync(pieces, JSON.stringify({
+    todos: [{ text: "Call the dentist", source: "Call the dentist tomorrow.", date: "2026-10-23", time: null, project: null }],
+    notes: [],
+    ideas: [{ text: "Costume app", source: "Idea: a costume app." }],
+  }));
+  const split = hub(["memo-split", id, "--pieces", pieces]);
+  expect(split.stderr).toBe("");
+  expect(split.stdout.trim()).toBe("filed 1 pieces");
+  const { data, error: piecesError } = await serviceClient().from("items").select("title").like("client_key", `hidock:${file}#%`);
+  if (piecesError) throw piecesError;
+  expect(data).toEqual([{ title: "Call the dentist" }]);
 });

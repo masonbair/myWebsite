@@ -6,9 +6,9 @@ import { newUser, seededOwner, serviceClient, signInAs, supabase } from "./hub-s
 // Runs only in the "hub" project against local Supabase. Rows can never be deleted, so titles are unique per run.
 
 async function itemsTitled(title: string) {
-  const { data, error } = await serviceClient().from("items").select("id, title, description, source, list").eq("title", title);
+  const { data, error } = await serviceClient().from("items").select("id, title, description, source, list, labels").eq("title", title);
   if (error) throw error;
-  return data as { id: string; title: string; description: string; source: string; list: string }[];
+  return data as { id: string; title: string; description: string; source: string; list: string; labels: string[] }[];
 }
 
 test.describe("quick capture", () => {
@@ -29,7 +29,7 @@ test.describe("quick capture", () => {
 
       await context.setOffline(true);
       await field.fill(title);
-      await page.getByRole("button", { name: "Save" }).click();
+      await page.getByRole("button", { name: "Save", exact: true }).click();
       await expect(page.getByText("1 waiting")).toBeVisible();
       await expect(field).toHaveValue("");
       expect(await itemsTitled(title)).toHaveLength(0);
@@ -49,7 +49,7 @@ test.describe("quick capture", () => {
       await page.goto("/hub/capture");
       await context.setOffline(true);
       await page.getByRole("textbox", { name: "Capture" }).fill(title);
-      await page.getByRole("button", { name: "Save" }).click();
+      await page.getByRole("button", { name: "Save", exact: true }).click();
       await expect(page.getByText("1 waiting")).toBeVisible();
       await page.close();
       await context.setOffline(false);
@@ -64,7 +64,7 @@ test.describe("quick capture", () => {
       const title = `double ${randomUUID().slice(0, 8)}`;
       await page.goto("/hub/capture");
       await page.getByRole("textbox", { name: "Capture" }).fill(`${title}\nwith a second line`);
-      await page.getByRole("button", { name: "Save" }).dblclick();
+      await page.getByRole("button", { name: "Save", exact: true }).dblclick();
       await expect(page.getByText("Saved")).toBeVisible();
       await expect.poll(async () => (await itemsTitled(title)).length).toBe(1);
       // Give any second request time to land before checking there is still only one.
@@ -83,6 +83,46 @@ test.describe("quick capture", () => {
       expect(second.status()).toBe(200);
       expect((await second.json()).id).toBe((await first.json()).id);
       expect(await itemsTitled(title)).toHaveLength(1);
+    });
+
+    test("Save as idea files the item under Ideas and the database enrolls it", async ({ page }) => {
+      const title = `idea ${randomUUID().slice(0, 8)}`;
+      await page.goto("/hub/capture");
+      await page.getByRole("textbox", { name: "Capture" }).fill(title);
+      await page.getByRole("button", { name: "Save as idea" }).click();
+      await expect(page.getByText("Saved to Ideas")).toBeVisible();
+      await expect.poll(async () => (await itemsTitled(title)).length).toBe(1);
+      const [item] = await itemsTitled(title);
+      expect(item).toMatchObject({ source: "capture", list: "ideas", labels: ["idea"] });
+      const db = serviceClient();
+      const settings = await db.from("idea_settings").select("enrolled, review_status").eq("item_id", item.id);
+      expect(settings.data).toEqual([{ enrolled: true, review_status: "waiting" }]);
+      const sources = await db.from("idea_sources").select("source_item_id").eq("source_item_id", item.id);
+      expect(sources.data).toEqual([]);
+    });
+
+    test("Cmd+Shift+Enter saves as idea, and plain Save adds an intake row instead", async ({ page }) => {
+      const idea = `shortcut ${randomUUID().slice(0, 8)}`;
+      const plain = `plain ${randomUUID().slice(0, 8)}`;
+      await page.goto("/hub/capture");
+      const field = page.getByRole("textbox", { name: "Capture" });
+      await field.fill(idea);
+      await field.press("ControlOrMeta+Shift+Enter");
+      await expect(page.getByText("Saved to Ideas")).toBeVisible();
+      await field.fill(plain);
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+      await expect.poll(async () => (await itemsTitled(idea)).length + (await itemsTitled(plain)).length).toBe(2);
+      expect((await itemsTitled(idea))[0]).toMatchObject({ list: "ideas", labels: ["idea"] });
+      const [inboxItem] = await itemsTitled(plain);
+      expect(inboxItem).toMatchObject({ list: "inbox", labels: [] });
+      const sources = await serviceClient().from("idea_sources").select("kind, status").eq("source_item_id", inboxItem.id);
+      expect(sources.data).toEqual([{ kind: "capture", status: "pending" }]);
+    });
+
+    test("a bad asIdea value is refused", async ({ page }) => {
+      const res = await page.request.post("/api/hub/capture", { data: { title: "x", clientKey: randomUUID(), asIdea: "yes" } });
+      expect(res.status()).toBe(400);
     });
 
     test("bad input is refused", async ({ page }) => {
@@ -202,7 +242,7 @@ test.describe("quick capture", () => {
       await page.goto("/hub/capture");
       const field = page.getByRole("textbox", { name: "Capture" });
       await field.fill(title);
-      await page.getByRole("button", { name: "Save" }).click();
+      await page.getByRole("button", { name: "Save", exact: true }).click();
       await expect(page.getByText("Could not save on this phone. Copy your text.")).toBeVisible();
       await expect(field).toHaveValue(title);
       await expect(page.getByText("Saved", { exact: true })).toHaveCount(0);
@@ -220,7 +260,7 @@ test.describe("quick capture", () => {
       await page.goto("/hub/capture");
       await expect(page.getByText("Captures last only while this tab is open.", { exact: false })).toBeVisible();
       await page.getByRole("textbox", { name: "Capture" }).fill(title);
-      await page.getByRole("button", { name: "Save" }).click();
+      await page.getByRole("button", { name: "Save", exact: true }).click();
       await expect.poll(async () => (await itemsTitled(title)).length).toBe(1);
     });
 

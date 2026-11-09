@@ -19,7 +19,8 @@ test.describe("hub agent connector", () => {
     await client.connect(transport);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ["add_comment", "add_item", "find_items", "get_item", "get_now", "list_comments", "merge_duplicate", "update_item"],
+      // Kept literal: importing MCP_TOOL_NAMES would load the server's MCP handler into Playwright.
+      ["add_comment", "add_item", "ai_costs", "find_items", "get_item", "get_now", "idea_get", "ideas_list", "list_comments", "log_day", "merge_duplicate", "update_item"],
     );
     const title = `e2e mcp ${randomUUID().slice(0, 8)}`;
     const result = await client.callTool({ name: "add_item", arguments: { title } });
@@ -34,6 +35,26 @@ test.describe("hub agent connector", () => {
     await signInAs(context, await seededOwner());
     await page.goto("/hub");
     await expect(page.getByRole("region", { name: "Unsorted" }).getByRole("link", { name: title })).toBeVisible();
+  });
+
+  test("an agent logs today's work and Mason sees it on the timeline", async ({ context, page }) => {
+    const transport = new StreamableHTTPClientTransport(new URL(MCP_URL), {
+      requestInit: { headers: { authorization: `Bearer ${HUB_E2E_AGENT_TOKEN}`, "x-client-name": "daily-log" } },
+    });
+    const client = new Client({ name: "e2e", version: "1.0.0" });
+    await client.connect(transport);
+    const project = `e2e-${randomUUID().slice(0, 8)}`;
+    const day = new Date().toISOString().slice(0, 10);
+    const summary = "Added a timeline to the hub. Each day lists what got done, project by project.";
+    const result = await client.callTool({ name: "log_day", arguments: { day, projects: [{ project, summary, commits: 4, branches: ["hub-timeline"] }] } });
+    expect(result.isError).toBeFalsy();
+    await client.close();
+
+    await signInAs(context, await seededOwner());
+    await page.goto("/hub/timeline");
+    const entry = page.getByRole("listitem").filter({ has: page.getByRole("heading", { level: 3, name: project }) }).last();
+    await expect(entry).toContainText(summary);
+    await expect(entry).toContainText("4 commits");
   });
 
   test("refuses a request without the agent token", async ({ request }) => {

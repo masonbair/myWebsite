@@ -3,6 +3,7 @@ import { tokenMatches } from "./bearer";
 import { CLAUDE_LABEL } from "./rules";
 import { notify } from "./notify";
 import { offsetMinutesAt } from "./schedule";
+import type { IdeasRunResult } from "@/lib/ideas/job";
 import type { BackupResult } from "./backup";
 import type { HubStore, Item } from "./types";
 
@@ -25,6 +26,8 @@ export type EventDeps = {
   fetchFn: typeof fetch;
   /** Null when no blob store is connected. */
   backup: (() => Promise<BackupResult>) | null;
+  /** One Ideas Lab run; null only in tests that leave it out. */
+  ideas?: (() => Promise<IdeasRunResult>) | null;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -98,6 +101,26 @@ export async function readLatestPlaceZone(client: SupabaseClient): Promise<Place
     .maybeSingle<{ time_zone: string | null; updated_at: string }>();
   if (error) throw error;
   return data ? { timeZone: data.time_zone, updatedAt: data.updated_at } : null;
+}
+
+const DEFAULT_TIME_ZONE = "America/Denver";
+
+/** Mason's zone now: the latest place ping's, else HUB_TIME_ZONE, else America/Denver; a failed read falls back too. */
+export async function masonTimeZone(client: SupabaseClient, now = new Date()): Promise<string> {
+  const fallback = process.env.HUB_TIME_ZONE || DEFAULT_TIME_ZONE;
+  try {
+    return reminderTimeZone(await readLatestPlaceZone(client), fallback, now);
+  } catch (e) {
+    console.error(`place zone not read: ${errorName(e)}`);
+    return fallback;
+  }
+}
+
+/** An error's code or class name, which never holds item text or secrets. */
+export function errorName(e: unknown): string {
+  const code = (e as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && code) return code;
+  return e instanceof Error ? e.name : "error";
 }
 
 /** Starts the routine through its API trigger, with the same headers todo-hub's relay sends. */
@@ -208,9 +231,13 @@ export async function handleEventRequest(request: Request, event: string, deps: 
     if (event === "reminders") return await sendReminders(deps);
     if (event === "approved") return await fireApproved(request, deps);
     if (event === "backup") return await backup(deps);
+    if (event === "ideas") {
+      if (!deps.ideas) return json({ error: "ideas are not configured" }, 503);
+      return json(await deps.ideas());
+    }
     return json({ error: "not found" }, 404);
   } catch (e) {
-    console.error("hub event", event, e);
+    console.error(`hub event ${event} failed: ${errorName(e)}`);
     return json({ error: "server error" }, 500);
   }
 }

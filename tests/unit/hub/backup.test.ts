@@ -46,7 +46,15 @@ const emptySource: SnapshotSource = {
   collectorDaylioExport: async () => [],
   itemsHistory: async () => [],
   auditLog: async () => [],
+  aiUsage: async () => [],
+  ideaSettings: async () => [],
+  ideaReviews: async () => [],
+  ideaSources: async () => [],
+  ideaResurface: async () => [],
+  ideaRecordings: async () => [],
 };
+
+const IDEA_KEYS = ["aiUsage", "ideaSettings", "ideaReviews", "ideaSources", "ideaResurface", "ideaRecordings"] as const;
 
 function fakeBlobs(initial: string[]) {
   const files = new Map<string, string>(initial.map((p) => [p, "{}"]));
@@ -108,7 +116,39 @@ describe("snapshot", () => {
       collectorDaylioExport: [daylio],
       itemsHistory: [version],
       auditLog: [audit],
+      aiUsage: [],
+      ideaSettings: [],
+      ideaReviews: [],
+      ideaSources: [],
+      ideaResurface: [],
+      ideaRecordings: [],
       takenAt: "2026-11-05T03:00:00.000Z",
+    });
+  });
+
+  it("holds the six Ideas Lab tables", async () => {
+    const usage = { id: 1, feature: "ideas", model: "m", inputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 5, webSearches: 1, costUsd: 0.25, itemId: "i1", purpose: "review", at: "2026-11-03T00:00:00Z" };
+    const settings = { itemId: "i1", enrolled: true, scheduleFrom: "2026-11-03", remindersStoppedAt: null, noWebSearch: false, reviewStatus: "done", reviewRequestedAt: null, reviewNote: null, reviewAttempts: 1, reviewClaimedAt: null, lastError: null, movedFromInbox: false, mentionCount: 1, updatedAt: "2026-11-03T00:00:00Z" };
+    const review = { id: 2, itemId: "i1", version: 1, review: { summary: "s" }, model: "m", promptVersion: "v1", note: null, costUsd: 0.25, createdAt: "2026-11-03T00:00:00Z" };
+    const source = { sourceItemId: "i0", kind: "capture", status: "done", ideaItemIds: ["i1"], quotes: [], attempts: 1, model: "m", lastError: null, createdAt: "2026-11-03T00:00:00Z", updatedAt: "2026-11-03T00:00:00Z" };
+    const resurface = { id: 3, itemId: "i1", step: 1, dueDate: "2026-11-10", eventDate: null, googleEventId: null, status: "planned", createdAt: "2026-11-03T00:00:00Z", updatedAt: "2026-11-03T00:00:00Z" };
+    const recording = { file: "memo.txt", recorded: "2026-11-02T00:00:00Z", transcript: "hi", status: "pending", attempts: 0, ideaItemIds: [], quotes: [], model: null, lastError: null, createdAt: "2026-11-03T00:00:00Z", updatedAt: "2026-11-03T00:00:00Z" };
+    const shot = await snapshot({
+      ...emptySource,
+      aiUsage: async () => [usage],
+      ideaSettings: async () => [settings],
+      ideaReviews: async () => [review],
+      ideaSources: async () => [source],
+      ideaResurface: async () => [resurface],
+      ideaRecordings: async () => [recording],
+    });
+    expect(shot).toMatchObject({
+      aiUsage: [usage],
+      ideaSettings: [settings],
+      ideaReviews: [review],
+      ideaSources: [source],
+      ideaResurface: [resurface],
+      ideaRecordings: [recording],
     });
   });
 });
@@ -162,17 +202,22 @@ describe("hub-restore guards", () => {
   });
 });
 
-// Run with: HUB_TEST_DB_URL=1 HUB_TEST_SUPABASE_URL=http://127.0.0.1:54321 HUB_TEST_SERVICE_KEY=<SERVICE_ROLE_KEY> (from `supabase status -o env`).
-// HUB_TEST_PG_URL (no database name) points the scratch database at a stack on other ports.
+// Run with: HUB_TEST_DB_URL=1 HUB_TEST_SUPABASE_URL=<API_URL> HUB_TEST_SERVICE_KEY=<SERVICE_ROLE_KEY> (from `supabase status -o env`)
+// HUB_TEST_PG_URL=postgresql://postgres:postgres@127.0.0.1:<db port> (the same stack's Postgres; a full postgres HUB_TEST_DB_URL also works).
 // The round trip restores into a scratch database it creates and drops in the local Postgres, never the shared one.
-const enabled = Boolean(process.env.HUB_TEST_DB_URL);
 const apiUrl = process.env.HUB_TEST_SUPABASE_URL ?? "";
 const serviceKey = process.env.HUB_TEST_SERVICE_KEY ?? "";
-const LOCAL_DB = process.env.HUB_TEST_PG_URL || "postgresql://postgres:postgres@127.0.0.1:54322";
-if (enabled && !/^(127\.0\.0\.1|localhost)$/.test(new URL(apiUrl || "http://invalid").hostname)) {
+const dbUrlVar = process.env.HUB_TEST_DB_URL ?? "";
+// No default port: a guessed 54322 once reached another worktree's stack.
+const pgUrl = (process.env.HUB_TEST_PG_URL || (/^postgres(ql)?:\/\//.test(dbUrlVar) ? dbUrlVar : "")).replace(/\/+$/, "");
+const enabled = Boolean(dbUrlVar) && Boolean(pgUrl);
+// The scratch database name is appended, so any database already in the URL is dropped.
+const LOCAL_DB = pgUrl ? pgUrl.replace(/^(postgres(?:ql)?:\/\/[^/]+).*$/, "$1") : "";
+const isLocal = (url: string) => /^(127\.0\.0\.1|localhost)$/.test(new URL(url || "http://invalid").hostname);
+if (enabled && !isLocal(apiUrl)) {
   throw new Error("HUB_TEST_SUPABASE_URL must be a local Supabase (127.0.0.1 or localhost)");
 }
-if (enabled && !/^(127\.0\.0\.1|localhost)$/.test(new URL(LOCAL_DB).hostname)) {
+if (enabled && !isLocal(pgUrl)) {
   throw new Error("HUB_TEST_PG_URL must be a local Postgres (127.0.0.1 or localhost)");
 }
 
@@ -189,6 +234,7 @@ const AUTH_STUB = `
 describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
   const scratch = `hub_restore_${randomUUID().replace(/-/g, "")}`;
   const scratchUrl = `${LOCAL_DB}/${scratch}`;
+  const oldScratch = `${scratch}_old`;
   let file = "";
   let shot: Snapshot;
 
@@ -200,6 +246,23 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
     } finally {
       await db.end();
     }
+  }
+
+  async function createScratch(name: string): Promise<void> {
+    await withDb(`${LOCAL_DB}/postgres`, (db) => db.query(`create database ${name}`));
+    const migrations = await Promise.all(
+      ["0002_hub.sql", "0003_hub_memo.sql", "0005_now.sql", "0006_hub_history.sql", "0007_collector.sql", "0008_ideas_lab.sql"].map((m) =>
+        readFile(join(__dirname, "../../../supabase/migrations", m), "utf8"),
+      ),
+    );
+    await withDb(`${LOCAL_DB}/${name}`, async (db) => {
+      await db.query(AUTH_STUB);
+      // Public buckets made before 0007 runs, so the test below proves 0007 turns them private.
+      await db.query("insert into storage.buckets (id, name, public) values ('photos', 'photos', true), ('daylio', 'daylio', true)");
+      // A bare database has no pg_cron or Vault, so skip the job schedule and the body checks of the Vault functions.
+      await db.query("set check_function_bodies = off");
+      for (const sql of migrations) await db.query(sql.replace(/^select cron\.schedule\(.*$/m, ""));
+    });
   }
 
   beforeAll(async () => {
@@ -229,24 +292,30 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
     });
     if (photo.error || daylio.error) throw photo.error ?? daylio.error;
 
+    // A capture filed straight to Ideas fires the live intake trigger; a restore that fired it again would hit a duplicate key.
+    const idea = await store.addItem({ title: "backup idea", source: "capture", list: "ideas" });
+    const recordingFile = `backup-${randomUUID()}.txt`;
+    const ideaWrites = await Promise.all([
+      client.from("idea_reviews").insert({ item_id: idea.id, version: 1, review: { summary: "backup" }, model: "test", prompt_version: "v1", cost_usd: 0.25 }),
+      client.from("ai_usage").insert({ feature: "ideas", model: "test", input_tokens: 100, cost_usd: 0.25, item_id: idea.id, purpose: "review" }),
+      client.from("idea_sources").insert({ source_item_id: older.id, kind: "memo", status: "done", idea_item_ids: [idea.id], quotes: [{ text: "backup" }] }),
+      client.from("idea_resurface").insert({ item_id: idea.id, step: 1, due_date: "2026-12-01", event_date: "2026-12-01", google_event_id: "evt-backup", status: "sent" }),
+      client.from("idea_recordings").insert({ file: recordingFile, recorded: "2026-11-05T09:30:00Z", transcript: "backup memo" }),
+    ]);
+    const failed = ideaWrites.find((w) => w.error);
+    if (failed) throw failed.error;
+
     shot = await snapshot(createSnapshotSource(client));
     file = join(await mkdtemp(join(tmpdir(), "hub-backup-")), "snapshot.json");
     await writeFile(file, JSON.stringify(shot));
 
-    await withDb(`${LOCAL_DB}/postgres`, (db) => db.query(`create database ${scratch}`));
-    const migrations = await Promise.all(
-      ["0002_hub.sql", "0003_hub_memo.sql", "0005_now.sql", "0006_hub_history.sql", "0007_collector.sql"].map((name) => readFile(join(__dirname, "../../../supabase/migrations", name), "utf8")),
-    );
-    await withDb(scratchUrl, async (db) => {
-      await db.query(AUTH_STUB);
-      // Public buckets made before 0007 runs, so the test below proves 0007 turns them private.
-      await db.query("insert into storage.buckets (id, name, public) values ('photos', 'photos', true), ('daylio', 'daylio', true)");
-      for (const sql of migrations) await db.query(sql);
-    });
+    for (const name of [scratch, oldScratch]) await createScratch(name);
   }, 60_000);
 
   afterAll(async () => {
-    await withDb(`${LOCAL_DB}/postgres`, (db) => db.query(`drop database if exists ${scratch} with (force)`));
+    for (const name of [scratch, oldScratch]) {
+      await withDb(`${LOCAL_DB}/postgres`, (db) => db.query(`drop database if exists ${name} with (force)`));
+    }
   });
 
   it("restores a snapshot into an empty database with equal row counts and ids", async () => {
@@ -303,6 +372,51 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
 
       const merged = shot.items.find((i) => i.title === "backup duplicate" && i.state === "archived")!;
       expect(items.find((r) => r.id === merged.id)).toMatchObject({ merged_into: merged.mergedInto, archived_reason: "merged" });
+
+      for (const key of IDEA_KEYS) expect(shot[key].length, key).toBeGreaterThan(0);
+      const numericIds = async (table: string) => (await db.query(`select id::int from public.${table} order by id`)).rows.map((r) => r.id);
+      expect(await numericIds("ai_usage")).toEqual(shot.aiUsage.map((u) => Number(u.id)));
+      expect(await numericIds("idea_reviews")).toEqual(shot.ideaReviews.map((r) => Number(r.id)));
+      expect(await numericIds("idea_resurface")).toEqual(shot.ideaResurface.map((r) => Number(r.id)));
+      const keys = async (sql: string) => (await db.query(sql)).rows.map((r) => r.k).sort();
+      expect(await keys("select item_id as k from public.idea_settings")).toEqual(shot.ideaSettings.map((s) => s.itemId).sort());
+      expect(await keys("select source_item_id as k from public.idea_sources")).toEqual(shot.ideaSources.map((s) => s.sourceItemId).sort());
+      expect(await keys("select file as k from public.idea_recordings")).toEqual(shot.ideaRecordings.map((r) => r.file).sort());
+
+      const review = shot.ideaReviews.find((r) => r.model === "test")!;
+      const restoredReview = (await db.query("select version, review, cost_usd::float as cost from public.idea_reviews where id = $1", [review.id])).rows[0];
+      expect(restoredReview).toEqual({ version: review.version, review: review.review, cost: Number(review.costUsd) });
+      const source = shot.ideaSources.find((s) => s.kind === "memo" && s.quotes && JSON.stringify(s.quotes).includes("backup"))!;
+      const restoredSource = (await db.query("select idea_item_ids, quotes from public.idea_sources where source_item_id = $1", [source.sourceItemId])).rows[0];
+      expect(restoredSource).toEqual({ idea_item_ids: source.ideaItemIds, quotes: source.quotes });
+      const recording = shot.ideaRecordings.find((r) => r.transcript === "backup memo")!;
+      const restoredRecording = (await db.query("select recorded, transcript from public.idea_recordings where file = $1", [recording.file])).rows[0];
+      expect(restoredRecording.recorded.toISOString()).toBe(new Date(recording.recorded).toISOString());
+      expect(restoredRecording.transcript).toBe("backup memo");
+
+      const freshRow: Record<string, string> = {
+        ai_usage: "insert into public.ai_usage (feature, model, cost_usd, purpose) values ('ideas', 'after', 0, 'test') returning id::int",
+        idea_reviews: `insert into public.idea_reviews (item_id, version, review, model, prompt_version, cost_usd) values ('${review.itemId}', 99, '{}', 'after', 'v1', 0) returning id::int`,
+        idea_resurface: `insert into public.idea_resurface (item_id, step, due_date) values ('${review.itemId}', 3, '2027-01-01') returning id::int`,
+      };
+      for (const [table, sql] of Object.entries(freshRow)) {
+        const restored = await numericIds(table);
+        expect((await db.query(sql)).rows[0].id, table).toBeGreaterThan(Math.max(...restored));
+      }
+    });
+  }, 60_000);
+
+  it("restores an older snapshot that has no Ideas Lab tables", async () => {
+    const old: Record<string, unknown> = { ...shot };
+    for (const key of IDEA_KEYS) delete old[key];
+    const oldFile = join(await mkdtemp(join(tmpdir(), "hub-backup-old-")), "snapshot.json");
+    await writeFile(oldFile, JSON.stringify(old));
+    const result = await restore([oldFile, "--target", `${LOCAL_DB}/${oldScratch}`]);
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    await withDb(`${LOCAL_DB}/${oldScratch}`, async (db) => {
+      expect((await db.query("select count(*)::int as n from public.items")).rows[0].n).toBe(shot.items.length);
+      expect((await db.query("select count(*)::int as n from public.idea_settings")).rows[0].n).toBe(0);
     });
   }, 60_000);
 

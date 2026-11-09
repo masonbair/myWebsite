@@ -43,7 +43,13 @@ function assertSnapshot(value: unknown): asserts value is Snapshot {
     (s.collectorPhoto === undefined || Array.isArray(s.collectorPhoto)) &&
     (s.collectorDaylioExport === undefined || Array.isArray(s.collectorDaylioExport)) &&
     (s.itemsHistory === undefined || Array.isArray(s.itemsHistory)) &&
-    (s.auditLog === undefined || Array.isArray(s.auditLog));
+    (s.auditLog === undefined || Array.isArray(s.auditLog)) &&
+    (s.aiUsage === undefined || Array.isArray(s.aiUsage)) &&
+    (s.ideaSettings === undefined || Array.isArray(s.ideaSettings)) &&
+    (s.ideaReviews === undefined || Array.isArray(s.ideaReviews)) &&
+    (s.ideaSources === undefined || Array.isArray(s.ideaSources)) &&
+    (s.ideaResurface === undefined || Array.isArray(s.ideaResurface)) &&
+    (s.ideaRecordings === undefined || Array.isArray(s.ideaRecordings));
   if (!ok) throw new RestoreError("the file is not a hub snapshot");
 }
 
@@ -110,6 +116,53 @@ const AUDIT_LOG_SQL = `
   select id, actor, action, item_id, detail, at
   from jsonb_to_recordset($1::jsonb) as r(id bigint, actor text, action text, item_id uuid, detail jsonb, at timestamptz)`;
 
+const AI_USAGE_SQL = `
+  insert into public.ai_usage (id, feature, model, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens,
+                               web_searches, cost_usd, item_id, purpose, at) overriding system value
+  select id, feature, model, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens,
+         web_searches, cost_usd, item_id, purpose, at
+  from jsonb_to_recordset($1::jsonb) as r(id bigint, feature text, model text, input_tokens int, cache_read_tokens int,
+       cache_write_tokens int, output_tokens int, web_searches int, cost_usd numeric, item_id uuid, purpose text, at timestamptz)`;
+
+const IDEA_SETTINGS_SQL = `
+  insert into public.idea_settings (item_id, enrolled, schedule_from, reminders_stopped_at, no_web_search, review_status,
+                                    review_requested_at, review_note, review_attempts, review_claimed_at, last_error,
+                                    moved_from_inbox, mention_count, updated_at)
+  select item_id, enrolled, schedule_from, reminders_stopped_at, no_web_search, review_status,
+         review_requested_at, review_note, review_attempts, review_claimed_at, last_error,
+         moved_from_inbox, mention_count, updated_at
+  from jsonb_to_recordset($1::jsonb) as r(item_id uuid, enrolled boolean, schedule_from date, reminders_stopped_at timestamptz,
+       no_web_search boolean, review_status text, review_requested_at timestamptz, review_note text, review_attempts int,
+       review_claimed_at timestamptz, last_error text, moved_from_inbox boolean, mention_count int, updated_at timestamptz)`;
+
+const IDEA_REVIEWS_SQL = `
+  insert into public.idea_reviews (id, item_id, version, review, model, prompt_version, note, cost_usd, created_at)
+  overriding system value
+  select id, item_id, version, review, model, prompt_version, note, cost_usd, created_at
+  from jsonb_to_recordset($1::jsonb) as r(id bigint, item_id uuid, version int, review jsonb, model text, prompt_version text,
+       note text, cost_usd numeric, created_at timestamptz)`;
+
+const IDEA_SOURCES_SQL = `
+  insert into public.idea_sources (source_item_id, kind, status, idea_item_ids, quotes, attempts, model, last_error,
+                                   created_at, updated_at)
+  select source_item_id, kind, status, idea_item_ids, quotes, attempts, model, last_error, created_at, updated_at
+  from jsonb_to_recordset($1::jsonb) as r(source_item_id uuid, kind text, status text, idea_item_ids uuid[], quotes jsonb,
+       attempts int, model text, last_error text, created_at timestamptz, updated_at timestamptz)`;
+
+const IDEA_RESURFACE_SQL = `
+  insert into public.idea_resurface (id, item_id, step, due_date, event_date, google_event_id, status, created_at, updated_at)
+  overriding system value
+  select id, item_id, step, due_date, event_date, google_event_id, status, created_at, updated_at
+  from jsonb_to_recordset($1::jsonb) as r(id bigint, item_id uuid, step int, due_date date, event_date date,
+       google_event_id text, status text, created_at timestamptz, updated_at timestamptz)`;
+
+const IDEA_RECORDINGS_SQL = `
+  insert into public.idea_recordings (file, recorded, transcript, status, attempts, idea_item_ids, quotes, model, last_error,
+                                      created_at, updated_at)
+  select file, recorded, transcript, status, attempts, idea_item_ids, quotes, model, last_error, created_at, updated_at
+  from jsonb_to_recordset($1::jsonb) as r(file text, recorded timestamptz, transcript text, status text, attempts int,
+       idea_item_ids uuid[], quotes jsonb, model text, last_error text, created_at timestamptz, updated_at timestamptz)`;
+
 const syncIdentity = (table: string) =>
   `select setval(pg_get_serial_sequence('public.${table}', 'id'), coalesce((select max(id) from public.${table}), 0) + 1, false)`;
 
@@ -118,7 +171,7 @@ async function restore(snapshot: Snapshot, target: string): Promise<Record<strin
   await db.connect();
   try {
     await db.query("begin");
-    // Replica mode skips the 0002 guard triggers, which would refuse done items, claude labels and Mason's comments.
+    // Replica mode skips the guard triggers: 0002's would refuse done items, claude labels and Mason's comments, and 0008's intake would queue restored items again.
     await db.query("set local session_replication_role = replica");
     await db.query("lock table public.items in exclusive mode");
     const { rows } = await db.query<{ n: number }>("select count(*)::int as n from public.items");
@@ -225,6 +278,92 @@ async function restore(snapshot: Snapshot, target: string): Promise<Record<strin
     await db.query(AUDIT_LOG_SQL, [JSON.stringify(auditLog)]);
     await db.query(syncIdentity("items_history"));
     await db.query(syncIdentity("audit_log"));
+    const aiUsage = (snapshot.aiUsage ?? []).map((u) => ({
+      id: u.id,
+      feature: u.feature,
+      model: u.model,
+      input_tokens: u.inputTokens,
+      cache_read_tokens: u.cacheReadTokens,
+      cache_write_tokens: u.cacheWriteTokens,
+      output_tokens: u.outputTokens,
+      web_searches: u.webSearches,
+      cost_usd: u.costUsd,
+      item_id: u.itemId,
+      purpose: u.purpose,
+      at: u.at,
+    }));
+    const ideaSettings = (snapshot.ideaSettings ?? []).map((s) => ({
+      item_id: s.itemId,
+      enrolled: s.enrolled,
+      schedule_from: s.scheduleFrom,
+      reminders_stopped_at: s.remindersStoppedAt,
+      no_web_search: s.noWebSearch,
+      review_status: s.reviewStatus,
+      review_requested_at: s.reviewRequestedAt,
+      review_note: s.reviewNote,
+      review_attempts: s.reviewAttempts,
+      review_claimed_at: s.reviewClaimedAt,
+      last_error: s.lastError,
+      moved_from_inbox: s.movedFromInbox,
+      mention_count: s.mentionCount,
+      updated_at: s.updatedAt,
+    }));
+    const ideaReviews = (snapshot.ideaReviews ?? []).map((r) => ({
+      id: r.id,
+      item_id: r.itemId,
+      version: r.version,
+      review: r.review,
+      model: r.model,
+      prompt_version: r.promptVersion,
+      note: r.note,
+      cost_usd: r.costUsd,
+      created_at: r.createdAt,
+    }));
+    const ideaSources = (snapshot.ideaSources ?? []).map((s) => ({
+      source_item_id: s.sourceItemId,
+      kind: s.kind,
+      status: s.status,
+      idea_item_ids: s.ideaItemIds,
+      quotes: s.quotes,
+      attempts: s.attempts,
+      model: s.model,
+      last_error: s.lastError,
+      created_at: s.createdAt,
+      updated_at: s.updatedAt,
+    }));
+    const ideaResurface = (snapshot.ideaResurface ?? []).map((r) => ({
+      id: r.id,
+      item_id: r.itemId,
+      step: r.step,
+      due_date: r.dueDate,
+      event_date: r.eventDate,
+      google_event_id: r.googleEventId,
+      status: r.status,
+      created_at: r.createdAt,
+      updated_at: r.updatedAt,
+    }));
+    const ideaRecordings = (snapshot.ideaRecordings ?? []).map((r) => ({
+      file: r.file,
+      recorded: r.recorded,
+      transcript: r.transcript,
+      status: r.status,
+      attempts: r.attempts,
+      idea_item_ids: r.ideaItemIds,
+      quotes: r.quotes,
+      model: r.model,
+      last_error: r.lastError,
+      created_at: r.createdAt,
+      updated_at: r.updatedAt,
+    }));
+    await db.query(AI_USAGE_SQL, [JSON.stringify(aiUsage)]);
+    await db.query(IDEA_SETTINGS_SQL, [JSON.stringify(ideaSettings)]);
+    await db.query(IDEA_REVIEWS_SQL, [JSON.stringify(ideaReviews)]);
+    await db.query(IDEA_SOURCES_SQL, [JSON.stringify(ideaSources)]);
+    await db.query(IDEA_RESURFACE_SQL, [JSON.stringify(ideaResurface)]);
+    await db.query(IDEA_RECORDINGS_SQL, [JSON.stringify(ideaRecordings)]);
+    await db.query(syncIdentity("ai_usage"));
+    await db.query(syncIdentity("idea_reviews"));
+    await db.query(syncIdentity("idea_resurface"));
     await db.query("commit");
     return {
       items: items.length,
@@ -238,6 +377,12 @@ async function restore(snapshot: Snapshot, target: string): Promise<Record<strin
       collectorDaylioExport: collectorDaylioExport.length,
       itemsHistory: itemsHistory.length,
       auditLog: auditLog.length,
+      aiUsage: aiUsage.length,
+      ideaSettings: ideaSettings.length,
+      ideaReviews: ideaReviews.length,
+      ideaSources: ideaSources.length,
+      ideaResurface: ideaResurface.length,
+      ideaRecordings: ideaRecordings.length,
     };
   } catch (e) {
     await db.query("rollback");

@@ -18,6 +18,6 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }
-  const { item, created } = await saveCapture(capture, "capture");
+  const { item, created } = await saveCapture(capture, "capture", { asIdea: capture.asIdea });
   return NextResponse.json({ id: item.id }, { status: created ? 201 : 200 });
 }

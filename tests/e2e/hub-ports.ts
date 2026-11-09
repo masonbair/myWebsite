@@ -1,6 +1,7 @@
-export const HUB_PORT = 3110;
+// HUB_E2E_PORT lets a second worktree run e2e beside the default one.
+export const HUB_PORT = Number(process.env.HUB_E2E_PORT ?? 3110);
 // A second hub server with HUB_WORKER_LIVE=true, so both states of the Approve button are tested for real.
-export const HUB_LIVE_PORT = 3111;
+export const HUB_LIVE_PORT = HUB_PORT + 1;
 // Only the local hub servers in playwright.config.ts accept this; it is not a secret.
 export const HUB_E2E_WORKER_TOKEN = "hub-e2e-worker-token-local-only";
 // Only the local hub servers accept this memo upload token; it is not a secret.

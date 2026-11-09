@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { formatDue, isItemId, listHref, needsYouReason } from "@/lib/hub/format";
+import { formatDue, formatInstantIn, isItemId, listHref, needsYouReason } from "@/lib/hub/format";
 
 describe("hub format", () => {
   it("prints a due date without shifting the day", () => {
     expect(formatDue({ date: "2026-11-20", time: null })).toBe("Due Fri, Nov 20");
     expect(formatDue({ date: "2026-11-20", time: "09:30:00" })).toBe("Due Fri, Nov 20, 9:30 AM");
     expect(formatDue(null)).toBeNull();
+  });
+
+  it("prints an instant in Mason's zone with the zone's short name", () => {
+    expect(formatInstantIn("2026-11-09T21:25:00Z", "America/New_York")).toBe("2026-11-09 16:25 EST");
+    expect(formatInstantIn("2026-07-01T00:05:00Z", "America/Denver")).toBe("2026-06-30 18:05 MDT");
+    expect(formatInstantIn("2026-11-09T21:25:00Z", "UTC")).toBe("2026-11-09 21:25 UTC");
+    expect(formatInstantIn("not a time", "UTC")).toBeNull();
   });
 
   it("accepts only uuids as item ids", () => {
@@ -16,7 +23,7 @@ describe("hub format", () => {
 
   it("links the inbox to /hub and other lists to their page", () => {
     expect(listHref("inbox")).toBe("/hub");
-    expect(listHref("ideas")).toBe("/hub/list/ideas");
+    expect(listHref("ideas")).toBe("/hub/ideas");
   });
 
   it("names why an item needs Mason, question first", () => {

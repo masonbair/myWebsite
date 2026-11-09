@@ -6,8 +6,9 @@ export type LocalSupabase = { url: string; anonKey: string; serviceKey: string; 
 // stack gives empty values, which beat .env.local, so e2e can never reach the live project.
 export function localSupabaseEnv(): LocalSupabase {
   const empty = { url: "", anonKey: "", serviceKey: "", dbUrl: "" };
+  const workdir = process.env.SUPABASE_WORKDIR ? ` --workdir "${process.env.SUPABASE_WORKDIR}"` : "";
   try {
-    const out = execSync("supabase status -o env", { stdio: ["ignore", "pipe", "ignore"] }).toString();
+    const out = execSync(`supabase status -o env${workdir}`, { stdio: ["ignore", "pipe", "ignore"] }).toString();
     const vars = Object.fromEntries([...out.matchAll(/^(\w+)="?([^"\n]*)"?$/gm)].map((m) => [m[1], m[2]]));
     const local = (v = "") => URL.canParse(v) && ["127.0.0.1", "localhost"].includes(new URL(v).hostname);
     if (!local(vars.API_URL) || !local(vars.DB_URL)) {

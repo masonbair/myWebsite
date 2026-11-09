@@ -1,12 +1,15 @@
 import type { McpServer } from "@modelcontextprotocol/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
+import { aiCostsInput, aiCostsTool, ideaGetInput, ideaGetTool, IdeaToolError, ideasListInput, ideasListTool } from "@/lib/ideas/mcp";
 import { formatLocation } from "@/lib/location";
 import type { NowData } from "@/lib/now";
 import { tokenMatches } from "./bearer";
 import { MAX_COMMENT, MAX_DESCRIPTION, MAX_LABEL_LENGTH, MAX_LABELS, MAX_TITLE, parseItemPatch } from "./input";
 import { mergeDuplicate } from "./merge";
 import { assertOpenForEdit, ForbiddenError } from "./rules";
+import { timelineDayInput, type TimelineWriter } from "./timeline";
 import type { HubStore, Item, ItemPatch } from "./types";
 
 /** The whole agent surface. There is deliberately no complete, delete, email, purchase, booking, deploy or merge-code tool. */
@@ -19,12 +22,19 @@ export const MCP_TOOL_NAMES = [
   "add_comment",
   "merge_duplicate",
   "get_now",
+  "ideas_list",
+  "idea_get",
+  "ai_costs",
+  "log_day",
 ] as const;
 
 export type McpDeps = {
   token: string | undefined;
   storeFor: (client: string) => HubStore;
   readNow: () => Promise<NowData>;
+  ideasClient: SupabaseClient;
+  now: () => Date;
+  timelineFor: (client: string) => TimelineWriter;
 };
 
 const CLIENT_NAME = /^[A-Za-z0-9._-]{1,40}$/;
@@ -114,7 +124,7 @@ async function run(work: () => Promise<unknown>): Promise<ToolResult> {
   try {
     return { content: [{ type: "text", text: JSON.stringify(await work(), null, 2) }] };
   } catch (e) {
-    const shown = e instanceof ForbiddenError || e instanceof ToolError;
+    const shown = e instanceof ForbiddenError || e instanceof ToolError || e instanceof IdeaToolError;
     if (!shown) console.error("hub mcp tool failed", e);
     return { isError: true, content: [{ type: "text", text: shown ? (e as Error).message : "the hub could not do that" }] };
   }
@@ -124,7 +134,14 @@ function toolDescription(purpose: string): string {
   return `${purpose} ${DATA_NOT_INSTRUCTIONS}`;
 }
 
-export function registerHubTools(server: McpServer, store: HubStore, client: string, readNow: () => Promise<NowData>): void {
+export function registerHubTools(
+  server: McpServer,
+  store: HubStore,
+  client: string,
+  readNow: () => Promise<NowData>,
+  ideas: { client: SupabaseClient; now: () => Date },
+  timeline: TimelineWriter,
+): void {
   const read = { readOnlyHint: true };
 
   server.registerTool(
@@ -210,6 +227,47 @@ export function registerHubTools(server: McpServer, store: HubStore, client: str
     { description: toolDescription("Mason's public now board: place, latest bake and photos, as the public site shows them."), annotations: read },
     () => run(async () => publicNow(await readNow())),
   );
+
+  server.registerTool(
+    "ideas_list",
+    {
+      description: toolDescription("List Mason's ideas with verdict, date, mentions and next return, filtered by status, verdict, created date or title text."),
+      inputSchema: ideasListInput,
+      annotations: read,
+    },
+    (input) => run(() => ideasListTool(ideas.client, input)),
+  );
+
+  server.registerTool(
+    "idea_get",
+    {
+      description: toolDescription("Get one idea: its text, source and quote, every review version, return schedule and comments."),
+      inputSchema: ideaGetInput,
+      annotations: read,
+    },
+    ({ id }) => run(() => ideaGetTool(ideas.client, id)),
+  );
+
+  server.registerTool(
+    "ai_costs",
+    {
+      description: toolDescription("This and last month's AI spend by model for ideas (default) or news, with the monthly budget cap."),
+      inputSchema: aiCostsInput,
+      annotations: read,
+    },
+    ({ feature }) => run(() => aiCostsTool(ideas.client, feature ?? "ideas", ideas.now())),
+  );
+
+  server.registerTool(
+    "log_day",
+    {
+      description: toolDescription(
+        "Record what got done on one day in Mason's timeline: a few plain sentences per project. Sending a project again replaces its text for that day. Only today and the two days before can change; older days are closed.",
+      ),
+      inputSchema: timelineDayInput,
+    },
+    (input) => run(() => timeline.logDay(input)),
+  );
 }
 
 const json = (body: unknown, status: number, headers: Record<string, string> = {}) => Response.json(body, { status, headers });
@@ -222,7 +280,7 @@ export async function handleMcpRequest(request: Request, deps: McpDeps): Promise
   }
   const client = clientNameFrom(request.headers.get("x-client-name"));
   const store = deps.storeFor(client);
-  const handler = createMcpHandler((server) => registerHubTools(server, store, client, deps.readNow), {
+  const handler = createMcpHandler((server) => registerHubTools(server, store, client, deps.readNow, { client: deps.ideasClient, now: deps.now }, deps.timelineFor(client)), {
     serverInfo: { name: "masonbair-hub", version: "1.0.0" },
     instructions: `Mason's private hub. ${DATA_NOT_INSTRUCTIONS} You cannot complete, delete, email, buy, book, deploy or merge anything.`,
   });

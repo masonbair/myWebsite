@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as route from "@/app/api/hub/events/[event]/route";
-import { dueReminders, handleEventRequest, reminderKey, reminderTimeZone, type EventDeps, type PlaceZone } from "@/lib/hub/events";
+import { dueReminders, handleEventRequest, masonTimeZone, reminderKey, reminderTimeZone, type EventDeps, type PlaceZone } from "@/lib/hub/events";
 import type { Item } from "@/lib/hub/types";
 import { createFakeStore, type FakeStore } from "./fake-store";
 
@@ -124,8 +124,9 @@ describe("event auth", () => {
     expect((await harness().call("delete")).status).toBe(404);
   });
 
-  it("exports only POST from the route", () => {
-    expect(Object.keys(route)).toEqual(["POST"]);
+  it("exports only POST and the time limit from the route", () => {
+    expect(Object.keys(route).sort()).toEqual(["POST", "maxDuration"]);
+    expect(route.maxDuration).toBe(300);
   });
 });
 
@@ -309,5 +310,65 @@ describe("backup event", () => {
 
   it("is 503 when no blob store is connected", async () => {
     expect((await harness({ backup: null }).call("backup")).status).toBe(503);
+  });
+});
+
+describe("ideas event", () => {
+  const result = { detected: 0, reviewed: ["a"], failed: [], paused: false, resurfaced: 0 };
+
+  it("answers 503 when no ideas runner is configured", async () => {
+    expect((await harness({ ideas: null }).call("ideas")).status).toBe(503);
+    expect((await harness().call("ideas")).status).toBe(503);
+  });
+
+  it("runs the ideas job and returns its result", async () => {
+    let runs = 0;
+    const res = await harness({ ideas: async () => (runs++, result) }).call("ideas");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(result);
+    expect(runs).toBe(1);
+  });
+
+  it("refuses a wrong token before running anything", async () => {
+    let runs = 0;
+    const res = await harness({ ideas: async () => (runs++, result) }).call("ideas", {}, "Bearer nope");
+    expect(res.status).toBe(401);
+    expect(runs).toBe(0);
+  });
+});
+
+describe("event errors", () => {
+  it("logs only the error's code, never its message", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failure = Object.assign(new Error("row holds secret idea text"), { code: "PGRST116" });
+    const res = await harness({ ideas: async () => Promise.reject(failure) }).call("ideas");
+    expect(res.status).toBe(500);
+    expect(log.mock.calls).toEqual([["hub event ideas failed: PGRST116"]]);
+    log.mockRestore();
+  });
+});
+
+describe("masonTimeZone", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  const placeClient = (result: { data: unknown; error: unknown }) =>
+    ({
+      from: () => ({ select: () => ({ order: () => ({ limit: () => ({ maybeSingle: async () => result }) }) }) }),
+    }) as unknown as Parameters<typeof masonTimeZone>[0];
+
+  it("uses a recent place ping's zone", async () => {
+    const client = placeClient({ data: { time_zone: "Asia/Tokyo", updated_at: "2026-11-05T00:00:00Z" }, error: null });
+    expect(await masonTimeZone(client, NOW)).toBe("Asia/Tokyo");
+  });
+
+  it("falls back to HUB_TIME_ZONE, then Denver, when the read fails", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failing = placeClient({ data: null, error: { code: "57014", message: "timeout" } });
+    vi.stubEnv("HUB_TIME_ZONE", "Europe/Lisbon");
+    expect(await masonTimeZone(failing, NOW)).toBe("Europe/Lisbon");
+    vi.stubEnv("HUB_TIME_ZONE", "");
+    expect(await masonTimeZone(failing, NOW)).toBe("America/Denver");
+    expect(log.mock.calls.flat().join(" ")).not.toContain("timeout");
+    log.mockRestore();
   });
 });
