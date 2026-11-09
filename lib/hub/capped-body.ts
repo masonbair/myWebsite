@@ -1,5 +1,5 @@
 /** The request body as bytes, or null once it passes `maxBytes`; reads the stream so a chunked body without a length is capped too. */
-export async function readCappedBody(request: Request, maxBytes: number): Promise<Uint8Array | null> {
+export async function readCappedBody(request: { body: ReadableStream<Uint8Array> | null }, maxBytes: number): Promise<Uint8Array | null> {
   const chunks: Uint8Array[] = [];
   let size = 0;
   const reader = request.body?.getReader();
