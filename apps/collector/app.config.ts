@@ -21,8 +21,16 @@ const config: ExpoConfig = {
       'READ_MEDIA_IMAGES',
       'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
     ],
-    // Fine location is blocked on purpose: the collector only ever needs city-level accuracy.
-    blockedPermissions: ['android.permission.ACCESS_FINE_LOCATION'],
+    // Fine location is blocked on purpose (city-level is enough); the rest are added by libraries and never used.
+    blockedPermissions: [
+      'android.permission.ACCESS_FINE_LOCATION',
+      'android.permission.SYSTEM_ALERT_WINDOW',
+      'android.permission.READ_MEDIA_AUDIO',
+      'android.permission.READ_MEDIA_VIDEO',
+      'android.permission.WRITE_EXTERNAL_STORAGE',
+    ],
+    // Private places live only on the phone; a cloud backup would copy them off it.
+    allowBackup: false,
   },
   plugins: [
     [

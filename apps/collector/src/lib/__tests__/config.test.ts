@@ -8,8 +8,26 @@ describe('app config', () => {
     expect(config.android?.package).toBe('com.masonbair.collector');
   });
 
-  it('blocks fine location', () => {
-    expect(config.android?.blockedPermissions).toContain('android.permission.ACCESS_FINE_LOCATION');
+  it('blocks fine location and the permissions libraries add that the collector never uses', () => {
+    expect(config.android?.blockedPermissions).toEqual(
+      expect.arrayContaining([
+        'android.permission.ACCESS_FINE_LOCATION',
+        'android.permission.SYSTEM_ALERT_WINDOW',
+        'android.permission.READ_MEDIA_AUDIO',
+        'android.permission.READ_MEDIA_VIDEO',
+        'android.permission.WRITE_EXTERNAL_STORAGE',
+      ]),
+    );
+  });
+
+  it('keeps the permissions the collector needs out of the block list', () => {
+    for (const kept of ['READ_MEDIA_IMAGES', 'READ_MEDIA_VISUAL_USER_SELECTED', 'FOREGROUND_SERVICE', 'ACCESS_COARSE_LOCATION', 'ACCESS_BACKGROUND_LOCATION']) {
+      expect(config.android?.blockedPermissions).not.toContain(`android.permission.${kept}`);
+    }
+  });
+
+  it('turns off Android backup, so private places never leave the phone', () => {
+    expect(config.android?.allowBackup).toBe(false);
   });
 
   it('declares the permissions the collector needs', () => {
