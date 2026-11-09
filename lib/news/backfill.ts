@@ -242,7 +242,14 @@ function chunkRequests(requests: BatchRequest[]): BatchRequest[][] {
 export async function runEstimate(
   store: BackfillStore,
   client: Anthropic,
-  opts: { scope: Scope; model: ModelId; ask: (question: string) => Promise<string>; log: Log },
+  opts: {
+    scope: Scope;
+    model: ModelId;
+    ask: (question: string) => Promise<string>;
+    log: Log;
+    /** Pause between save retries; tests pass a no-op. */
+    wait?: (ms: number) => Promise<void>;
+  },
 ): Promise<"sent" | "cancelled" | "empty"> {
   const state = await store.getBatches();
   if (openSubmission(state)) throw new Error("an earlier submission is not collected yet; run collect first");
@@ -275,24 +282,26 @@ export async function runEstimate(
     opts.log(`Sent batch ${batch.id} with ${fmt(chunk.length)} requests.`);
     submission.batchIds.push(batch.id);
     // Saved after each batch so a crash part way still leaves every sent batch collectable.
-    await saveWithRetry(store, next, submission.batchIds, opts.log);
+    await saveWithRetry(store, next, opts.log, opts.wait ?? ((ms) => new Promise((r) => setTimeout(r, ms))));
   }
   return "sent";
 }
 
-const SAVE_TRIES = 3;
+const SAVE_DELAYS_MS = [1000, 2000];
 
-async function saveWithRetry(store: BackfillStore, state: BatchState, sent: string[], log: Log): Promise<void> {
-  for (let attempt = 1; ; attempt++) {
+async function saveWithRetry(store: BackfillStore, state: BatchState, log: Log, wait: (ms: number) => Promise<void>): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
     try {
       await store.setBatches(state);
       return;
     } catch (e) {
-      if (attempt >= SAVE_TRIES) {
-        log(`Could not save the batch ids (${e instanceof Error ? e.message : String(e)}). Batches already sent: ${sent.join(", ")}.`);
-        log(`Add them by hand to hub_state "${BATCH_STATE_KEY}" (submissions[-1].batchIds) before running estimate again, or they are paid for and never collected.`);
+      if (attempt >= SAVE_DELAYS_MS.length) {
+        log(`Could not save the sent batch ids: ${e instanceof Error ? e.message : String(e)}`);
+        log(`Before running collect or estimate, store exactly this JSON as hub_state "${BATCH_STATE_KEY}" (it includes the new submission), or the sent batches are paid for and never collected:`);
+        log(JSON.stringify(state));
         throw e;
       }
+      await wait(SAVE_DELAYS_MS[attempt]);
     }
   }
 }

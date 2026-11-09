@@ -199,8 +199,11 @@ describe("runEstimate", () => {
     expect(calls.create.mock.calls[0][0].requests.map((r) => r.custom_id)).toEqual(["issue-1"]);
   });
 
-  it("logs each batch id at once and, when saving keeps failing, says how to add it by hand", async () => {
+  it("logs each batch id at once and, when saving keeps failing, prints the full state to store by hand", async () => {
     const mem = memoryStore([issue(1)]);
+    mem.state.batches = {
+      submissions: [{ kind: "rerun", model: "claude-opus-5-5", promptVersion: "v0", batchIds: ["old"], collected: ["old"], runId: 9, submittedAt: SUBMITTED }],
+    };
     let saves = 0;
     mem.store.setBatches = async () => {
       saves += 1;
@@ -208,12 +211,24 @@ describe("runEstimate", () => {
     };
     const { client } = stubClient();
     const lines: string[] = [];
+    const waits: number[] = [];
     await expect(
-      runEstimate(mem.store, client, { scope: { kind: "backfill" }, model: "claude-sonnet-5-5", ask: yes, log: (l) => lines.push(l) }),
+      runEstimate(mem.store, client, {
+        scope: { kind: "backfill" },
+        model: "claude-sonnet-5-5",
+        ask: yes,
+        log: (l) => lines.push(l),
+        wait: async (ms) => void waits.push(ms),
+      }),
     ).rejects.toThrow("db down");
     expect(saves).toBe(3);
+    expect(waits).toEqual([1000, 2000]);
     expect(lines.findIndex((l) => l.includes("Sent batch batch-1"))).toBeGreaterThanOrEqual(0);
-    expect(lines.join("\n")).toMatch(/Batches already sent: batch-1[\s\S]*news:batches/);
+    expect(lines.join("\n")).toContain('hub_state "news:batches"');
+    const printed = JSON.parse(lines[lines.length - 1]) as BatchState;
+    expect(printed.submissions).toHaveLength(2);
+    expect(printed.submissions[0]).toMatchObject({ batchIds: ["old"], runId: 9 });
+    expect(printed.submissions[1]).toMatchObject({ kind: "backfill", model: "claude-sonnet-5-5", batchIds: ["batch-1"], collected: [], runId: null });
   });
 
   it("retries a failed save of the batch ids", async () => {
@@ -225,7 +240,7 @@ describe("runEstimate", () => {
       await realSave(value);
     };
     const { client } = stubClient();
-    await runEstimate(mem.store, client, { scope: { kind: "backfill" }, model: "claude-sonnet-5-5", ask: yes, log: quiet });
+    await runEstimate(mem.store, client, { scope: { kind: "backfill" }, model: "claude-sonnet-5-5", ask: yes, log: quiet, wait: async () => {} });
     expect(mem.state.batches?.submissions[0].batchIds).toEqual(["batch-1"]);
   });
 
