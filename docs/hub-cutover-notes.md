@@ -92,9 +92,11 @@ Behavior change: the old skill finished a laptop task by setting `claude-done`. 
 
 ## Ideas Lab: memo detection
 
+Setting up the Ideas Lab itself (deploy order, keys, Google, checks) is under "Ideas Lab" in `docs/hub-setup.md`.
+
 Memo detection ships off. While it is off, the memo relay files memos exactly as before and queues none for the Ideas Lab, so it reads only phone and web captures. Switch it on only after step 5 above, once the uploaders send memos to the hub:
 
-1. Stop the read-only HiNote recording intake first, before the switch, if it is installed on the Mac (full steps under "HiNote recording intake" in `docs/hub-setup.md`):
+1. Stop the read-only HiNote recording intake first, before the switch, if it is installed on the Mac (full steps under "Mac recording intake" in `docs/hub-setup.md`):
    ```sh
    launchctl bootout gui/$(id -u)/com.masonbair.ideas-recording
    rm ~/Library/LaunchAgents/com.masonbair.ideas-recording.plist
