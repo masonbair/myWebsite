@@ -22,4 +22,5 @@ export type NewIssue = {
   cleanText: string;
   publicUrl: string | null;
   status: IssueStatus;
+  lastError?: string | null;
 };

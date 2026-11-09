@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseEmail, type ParsedEmail } from "@/lib/news/email";
 import { ingestEmail, publicIssueUrl, type IngestDeps } from "@/lib/news/ingest";
 import type { NewIssue, NewsSource } from "@/lib/news/types";
@@ -78,7 +78,71 @@ describe("ingestEmail", () => {
   });
 });
 
+describe("ingestEmail resilience", () => {
+  it("stores garbage bytes as a quarantined row with raw saved", async () => {
+    const { deps, rows, putRaw } = fakeDeps();
+    vi.spyOn(await import("@/lib/news/email"), "parseEmail").mockRejectedValueOnce(new Error("boom"));
+    const result = await ingestEmail(new Uint8Array([0, 1, 2, 255]), deps, webhook());
+    const row = [...rows.values()][0];
+    expect(result).toMatchObject({ status: "created", issueStatus: "quarantined" });
+    expect(row.messageId).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(row).toMatchObject({ subject: "", fromAddress: "", cleanText: "", sourceId: null });
+    expect(row.lastError).toContain("boom");
+    expect(putRaw).toHaveLength(1);
+  });
+
+  it("stores the row when cleanText or the url step throws", async () => {
+    const mod = await import("@/lib/news/email");
+    vi.spyOn(mod, "cleanText").mockImplementationOnce(() => {
+      throw new Error("bad html");
+    });
+    const { deps, rows } = fakeDeps();
+    const result = await ingestEmail(load("issue.eml"), deps, webhook());
+    const row = [...rows.values()][0];
+    expect(result.issueStatus).toBe("pending");
+    expect(row.cleanText).toBe("");
+    expect(row.lastError).toContain("clean: bad html");
+  });
+
+  it("hashes a Message-ID over 1000 chars", async () => {
+    const { deps, rows } = fakeDeps();
+    const raw = new TextEncoder().encode(
+      `Message-ID: <${"a".repeat(1500)}@x.test>\r\nFrom: a@b.test\r\nSubject: s\r\nDate: Mon, 09 Nov 2026 02:30:00 +0000\r\n\r\nhi`,
+    );
+    await ingestEmail(raw, deps, webhook());
+    expect([...rows.values()][0].messageId).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+
+  it("uses a time-independent path when there is no Date header", async () => {
+    const a = fakeDeps();
+    const b = fakeDeps();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    await ingestEmail(load("plain-undated.eml"), a.deps, webhook());
+    vi.setSystemTime(new Date("2027-06-01T00:00:00Z"));
+    await ingestEmail(load("plain-undated.eml"), b.deps, webhook());
+    vi.useRealTimers();
+    expect(a.putRaw[0]).toMatch(/^news\/raw\/undated\/[0-9a-f]{64}\.eml$/);
+    expect(a.putRaw[0]).toBe(b.putRaw[0]);
+  });
+
+  it("handles the insert race by returning the winner as duplicate", async () => {
+    const { deps } = fakeDeps();
+    let calls = 0;
+    deps.findIssueId = async () => (calls++ === 0 ? null : "winner");
+    deps.insertIssue = async () => null;
+    const result = await ingestEmail(load("issue.eml"), deps, webhook());
+    expect(result).toMatchObject({ status: "duplicate", id: "winner" });
+  });
+});
+
 describe("publicIssueUrl", () => {
+  it("rejects a slug the database would refuse", () => {
+    const e = { messageId: "m", from: "", subject: "", date: null, forwardedFor: null, html: null, text: null,
+      listPost: "<https://www.example-brew.test/archive/it's-here>" };
+    expect(publicIssueUrl(brew, e, null)).toBe("https://www.example-brew.test/");
+  });
+
   const email = (over: Partial<ParsedEmail> = {}): ParsedEmail => ({
     messageId: "m", from: "", subject: "", date: null, forwardedFor: null, listPost: null, html: null, text: null, ...over,
   });

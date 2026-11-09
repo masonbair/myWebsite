@@ -3,6 +3,7 @@ import type { IssueStatus, NewIssue, NewsSource } from "./types";
 
 export type IngestDeps = {
   sources(): Promise<NewsSource[]>;
+  /** Must be overwrite-safe: the same path can be written again on a retry. */
   putRaw(path: string, raw: Uint8Array): Promise<void>;
   insertIssue(row: NewIssue): Promise<{ id: string } | null>;
   findIssueId(messageId: string): Promise<string | null>;
@@ -27,8 +28,13 @@ function httpsUrl(value: string | null): URL | null {
   }
 }
 
+const DB_PUBLIC_URL = /^https:\/\/[^\s?#"'<>]+$/;
+const MAX_MESSAGE_ID = 1000;
+const MAX_SUBJECT = 1000;
+const MAX_FROM = 320;
+
 function plainUrl(url: URL): string | null {
-  return url.search || url.hash ? null : url.href;
+  return DB_PUBLIC_URL.test(url.href) ? url.href : null;
 }
 
 function candidateLinks(email: ParsedEmail): string[] {
@@ -80,42 +86,75 @@ export function publicIssueUrl(source: NewsSource, email: ParsedEmail, published
   return (url && plainUrl(url)) ?? fallback;
 }
 
-export async function ingestEmail(raw: Uint8Array, deps: IngestDeps, via: IngestVia): Promise<IngestResult> {
-  const email = await parseEmail(raw);
+function reason(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error)).slice(0, 200);
+}
 
-  const source = matchSource(email.from, await deps.sources());
-  let issueStatus: IssueStatus;
-  if (via.kind === "webhook") {
-    issueStatus = via.forwardedOk && via.dkimPass && source ? "pending" : "quarantined";
-  } else {
-    issueStatus = source ? "backfill" : "quarantined";
+export async function ingestEmail(raw: Uint8Array, deps: IngestDeps, via: IngestVia): Promise<IngestResult> {
+  const errors: string[] = [];
+  let email: ParsedEmail | null = null;
+  try {
+    email = await parseEmail(raw);
+  } catch (error) {
+    errors.push(`parse: ${reason(error)}`);
   }
 
-  const existing = await deps.findIssueId(email.messageId);
+  let messageId = email?.messageId ?? `sha256:${sha256Hex(raw)}`;
+  if (messageId.length > MAX_MESSAGE_ID) messageId = `sha256:${sha256Hex(messageId)}`;
+
+  const source = email ? matchSource(email.from, await deps.sources()) : null;
+  let issueStatus: IssueStatus;
+  if (!email) issueStatus = "quarantined";
+  else if (via.kind === "webhook") issueStatus = via.forwardedOk && via.dkimPass && source ? "pending" : "quarantined";
+  else issueStatus = source ? "backfill" : "quarantined";
+
+  const existing = await deps.findIssueId(messageId);
   if (existing) return { status: "duplicate", id: existing, issueStatus };
 
-  const when = email.date ?? new Date();
-  const [year, month] = dayIn(when, "UTC").split("-");
-  const rawPath = `news/raw/${year}/${month}/${sha256Hex(email.messageId)}.eml`;
-  const publishedOn = email.date ? dayIn(email.date, deps.timeZone) : null;
-
+  const date = email?.date ?? null;
+  const rawPath = date
+    ? `news/raw/${dayIn(date, "UTC").slice(0, 4)}/${dayIn(date, "UTC").slice(5, 7)}/${sha256Hex(messageId)}.eml`
+    : `news/raw/undated/${sha256Hex(messageId)}.eml`;
   await deps.putRaw(rawPath, raw);
+
+  let publishedOn: string | null = null;
+  let clean = "";
+  let publicUrl: string | null = null;
+  if (email) {
+    try {
+      publishedOn = date ? dayIn(date, deps.timeZone) : null;
+    } catch (error) {
+      errors.push(`date: ${reason(error)}`);
+    }
+    try {
+      clean = cleanText(email);
+    } catch (error) {
+      errors.push(`clean: ${reason(error)}`);
+    }
+    try {
+      publicUrl = source ? publicIssueUrl(source, email, publishedOn) : null;
+    } catch (error) {
+      errors.push(`url: ${reason(error)}`);
+    }
+  }
+
   const row: NewIssue = {
     sourceId: source?.id ?? null,
-    messageId: email.messageId,
-    subject: email.subject,
-    fromAddress: email.from,
-    receivedAt: when.toISOString(),
+    messageId,
+    subject: (email?.subject ?? "").slice(0, MAX_SUBJECT),
+    fromAddress: (email?.from ?? "").slice(0, MAX_FROM),
+    receivedAt: (date ?? new Date()).toISOString(),
     publishedOn,
     rawPath,
-    cleanText: cleanText(email),
-    publicUrl: source ? publicIssueUrl(source, email, publishedOn) : null,
+    cleanText: clean,
+    publicUrl,
     status: issueStatus,
+    lastError: errors.length ? errors.join("; ").slice(0, 500) : null,
   };
   const inserted = await deps.insertIssue(row);
   if (inserted) return { status: "created", id: inserted.id, issueStatus };
 
-  const winner = await deps.findIssueId(email.messageId);
+  const winner = await deps.findIssueId(messageId);
   if (!winner) throw new Error("issue insert conflicted but no row found");
   return { status: "duplicate", id: winner, issueStatus };
 }

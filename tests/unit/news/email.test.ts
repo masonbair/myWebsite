@@ -43,8 +43,16 @@ describe("cleanText", () => {
     expect(text).not.toMatch(/unsubscribe/i);
     expect(text).not.toMatch(/view in browser/i);
     expect(text).not.toContain("Footer junk");
-    expect(text).not.toContain("pixel");
+    expect(text).not.toContain("tracking");
     expect(text).not.toContain("<");
+  });
+
+  it("drops preferences and referral lines", () => {
+    const html = "<p>Story.</p><p><a href='https://x.test/p'>Manage your preferences</a></p><p>Refer a friend and earn swag</p><p>Keep me.</p>";
+    const text = cleanText({
+      messageId: "x", from: "", subject: "", date: null, forwardedFor: null, listPost: null, html, text: null,
+    });
+    expect(text).toBe("Story.\n\nKeep me.");
   });
 
   it("handles plain text", async () => {

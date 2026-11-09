@@ -1,0 +1,10 @@
+From: Plain Letter <hello@plain-letter.test>
+To: reader@example.test
+Subject: A plain issue
+Content-Type: text/plain; charset=utf-8
+
+Hello there.
+
+Story one: a thing happened.
+
+Unsubscribe here: https://plain-letter.test/u
