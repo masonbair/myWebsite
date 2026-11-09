@@ -25,7 +25,7 @@ const STOPWORDS = new Set(
   "a an and are as at be by for from has have in into is it its new of on or over says said that the this to up was will with after amid".split(" "),
 );
 
-function headlineWords(headline: string): Set<string> {
+export function headlineWords(headline: string): Set<string> {
   return new Set(
     headline
       .toLowerCase()
@@ -35,7 +35,7 @@ function headlineWords(headline: string): Set<string> {
   );
 }
 
-function jaccard(a: Set<string>, b: Set<string>): number {
+export function jaccard(a: Set<string>, b: Set<string>): number {
   let shared = 0;
   for (const w of a) if (b.has(w)) shared += 1;
   const union = a.size + b.size - shared;
