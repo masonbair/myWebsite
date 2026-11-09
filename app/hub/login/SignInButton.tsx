@@ -2,6 +2,7 @@
 
 import { GithubLogo } from "@phosphor-icons/react";
 import { useState } from "react";
+import { primaryButton } from "@/components/hub/styles";
 import { browserClient } from "@/lib/supabase/browser";
 
 export function SignInButton() {
@@ -22,7 +23,7 @@ export function SignInButton() {
       type="button"
       onClick={signIn}
       disabled={busy}
-      className="mt-6 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-3 text-sm font-semibold text-night transition-opacity duration-300 ease-spring hover:opacity-90 disabled:opacity-60 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink"
+      className={`${primaryButton} mt-6`}
     >
       <GithubLogo weight="bold" size={18} aria-hidden />
       Sign in with GitHub
