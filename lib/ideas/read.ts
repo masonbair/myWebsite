@@ -9,6 +9,11 @@ export type IdeaFilter = (typeof IDEA_FILTERS)[number];
 
 const LIST_LIMIT = 200;
 
+/** An idea is anything on the Ideas list or carrying the idea label (a promoted idea keeps it). */
+export function isIdea(item: Pick<Item, "list" | "labels">): boolean {
+  return item.list === "ideas" || item.labels.includes(IDEA_LABEL);
+}
+
 export type IdeaListRow = {
   id: string;
   title: string;
@@ -87,85 +92,71 @@ function readStore(client: SupabaseClient): HubStore {
   return createHubStore(client, { kind: "mason" });
 }
 
-async function settingsFor(client: SupabaseClient, ids: string[]): Promise<Map<string, SettingsRow>> {
-  if (ids.length === 0) return new Map();
-  const { data, error } = await client.from("idea_settings").select("*").in("item_id", ids);
-  if (error) throw error;
-  return new Map((data as SettingsRow[]).map((row) => [row.item_id, row]));
+type ListRow = {
+  id: string;
+  title: string;
+  created_at: string;
+  settings: { mention_count: number; review_status: ReviewStatus } | { mention_count: number; review_status: ReviewStatus }[] | null;
+  latest: { review: unknown }[];
+  next: { due_date: string }[];
+};
+
+function one<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
-async function latestVerdicts(client: SupabaseClient, ids: string[]): Promise<Map<string, IdeaReview["verdict"] | null>> {
-  if (ids.length === 0) return new Map();
-  const { data, error } = await client
-    .from("idea_reviews")
-    .select("item_id, version, review->>verdict")
-    .in("item_id", ids)
-    .order("version", { ascending: false });
-  if (error) throw error;
-  const verdicts = new Map<string, IdeaReview["verdict"] | null>();
-  const allowed = REVIEW_SCHEMA.shape.verdict;
-  for (const row of data as { item_id: string; verdict: unknown }[]) {
-    if (verdicts.has(row.item_id)) continue;
-    const verdict = allowed.safeParse(row.verdict);
-    verdicts.set(row.item_id, verdict.success ? verdict.data : null);
-  }
-  return verdicts;
-}
+// Typed as plain string so supabase-js skips parsing the select, which is too deep for tsc here.
+const LIST_SELECT: string =
+  "id, title, created_at, settings:idea_settings(mention_count, review_status), stopped:idea_settings(item_id), latest:idea_reviews(version, review), next:idea_resurface(due_date)";
 
-async function nextReturns(client: SupabaseClient, ids: string[]): Promise<Map<string, string>> {
-  if (ids.length === 0) return new Map();
-  const { data, error } = await client
-    .from("idea_resurface")
-    .select("item_id, due_date")
-    .in("item_id", ids)
-    .eq("status", "planned")
-    .order("due_date", { ascending: true });
-  if (error) throw error;
-  const next = new Map<string, string>();
-  for (const row of data as { item_id: string; due_date: string }[]) {
-    if (!next.has(row.item_id)) next.set(row.item_id, row.due_date);
-  }
-  return next;
-}
-
-async function itemsFor(store: HubStore, filter: IdeaFilter): Promise<Item[]> {
+// One query per filter: the stopped filter runs in the database and each embed keeps only the row the list needs, so no cap drops data silently.
+function listQuery(client: SupabaseClient, filter: IdeaFilter) {
+  let query = client
+    .from("items")
+    .select(LIST_SELECT, { count: "exact" })
+    .order("version", { referencedTable: "latest", ascending: false })
+    .limit(1, { referencedTable: "latest" })
+    .eq("next.status", "planned")
+    .order("due_date", { referencedTable: "next", ascending: true })
+    .limit(1, { referencedTable: "next" })
+    .not("stopped.reminders_stopped_at", "is", null);
   switch (filter) {
     case "active":
+      query = query.eq("list", "ideas").eq("state", "open").filter("stopped", "is", null);
+      break;
     case "stopped":
-      return store.listItems({ list: "ideas", state: "open", limit: LIST_LIMIT });
+      query = query.eq("list", "ideas").eq("state", "open").filter("stopped", "not.is", null);
+      break;
     case "promoted":
-      return store.listItems({ list: "todo", state: "open", withLabels: [IDEA_LABEL], limit: LIST_LIMIT });
-    case "done": {
-      const [inIdeas, labelled] = await Promise.all([
-        store.listItems({ list: "ideas", state: "done", limit: LIST_LIMIT }),
-        store.listItems({ state: "done", withLabels: [IDEA_LABEL], limit: LIST_LIMIT }),
-      ]);
-      const byId = new Map([...inIdeas, ...labelled].map((item) => [item.id, item]));
-      return [...byId.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, LIST_LIMIT);
-    }
+      query = query.eq("list", "todo").eq("state", "open").contains("labels", [IDEA_LABEL]);
+      break;
+    case "done":
+      query = query.eq("state", "done").or(`list.eq.ideas,labels.cs.{${IDEA_LABEL}}`);
+      break;
   }
+  return query.order("created_at", { ascending: false }).limit(LIST_LIMIT);
 }
 
-/** Ideas for one filter of the Ideas Lab list, newest first; works with the owner session or the service client. */
-export async function listIdeas(client: SupabaseClient, filter: IdeaFilter): Promise<IdeaListRow[]> {
-  let items = await itemsFor(readStore(client), filter);
-  const settings = await settingsFor(client, items.map((i) => i.id));
-  if (filter === "active") items = items.filter((i) => !settings.get(i.id)?.reminders_stopped_at);
-  if (filter === "stopped") items = items.filter((i) => Boolean(settings.get(i.id)?.reminders_stopped_at));
-  const ids = items.map((i) => i.id);
-  const [verdicts, returns] = await Promise.all([latestVerdicts(client, ids), nextReturns(client, ids)]);
-  return items.map((item) => {
-    const row = settings.get(item.id);
+export type IdeaList = { ideas: IdeaListRow[]; total: number };
+
+/** Up to 200 ideas for one filter of the Ideas Lab list, newest first, plus how many match in all; works with the owner session or the service client. */
+export async function listIdeas(client: SupabaseClient, filter: IdeaFilter): Promise<IdeaList> {
+  const { data, error, count } = await listQuery(client, filter);
+  if (error) throw error;
+  const rows = data as unknown as ListRow[];
+  const ideas = rows.map((row) => {
+    const settings = one(row.settings);
     return {
-      id: item.id,
-      title: item.title,
-      verdict: verdicts.get(item.id) ?? null,
-      createdAt: item.createdAt,
-      mentions: row?.mention_count ?? 1,
-      nextReturn: returns.get(item.id) ?? null,
-      reviewStatus: row?.review_status ?? "none",
+      id: row.id,
+      title: row.title,
+      verdict: parseReview(row.latest[0]?.review)?.verdict ?? null,
+      createdAt: row.created_at,
+      mentions: settings?.mention_count ?? 1,
+      nextReturn: row.next[0]?.due_date ?? null,
+      reviewStatus: settings?.review_status ?? "none",
     };
   });
+  return { ideas, total: count ?? ideas.length };
 }
 
 // Quotes are stored per source either as plain strings in idea order or as { ideaId, quote } objects.
@@ -205,7 +196,7 @@ async function sourceFor(client: SupabaseClient, store: HubStore, id: string): P
 export async function getIdeaPage(client: SupabaseClient, id: string): Promise<IdeaPage | null> {
   const store = readStore(client);
   const item = await store.getItem(id);
-  if (!item) return null;
+  if (!item || !isIdea(item)) return null;
   const [settings, reviews, schedule, source, comments] = await Promise.all([
     client.from("idea_settings").select("*").eq("item_id", id).maybeSingle(),
     client.from("idea_reviews").select("item_id, version, created_at, note, review").eq("item_id", id).order("version", { ascending: false }),

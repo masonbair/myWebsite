@@ -80,6 +80,7 @@ export default async function IdeaPage({ params }: PageProps<"/hub/ideas/[id]">)
           <IdeaButtons
             id={item.id}
             open={open}
+            isTask={item.list === "todo"}
             noWebSearch={settings?.noWebSearch ?? false}
             remindersStopped={Boolean(settings?.remindersStoppedAt)}
             movedFromInbox={Boolean(settings?.movedFromInbox)}

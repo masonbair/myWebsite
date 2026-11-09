@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { approveItem, completeItem, reopenItem } from "@/app/hub/actions";
 import { formatDue, LIST_NAMES, listHref, needsYouReason } from "@/lib/hub/format";
 import { CLAUDE_LABEL } from "@/lib/hub/rules";
-import { IDEA_LABEL } from "@/lib/ideas/read";
+import { isIdea } from "@/lib/ideas/read";
 import type { Comment, Item, ItemVersion } from "@/lib/hub/types";
 import { timeAgo } from "@/lib/time";
 import { CommentForm } from "./CommentForm";
@@ -53,7 +53,7 @@ export function ItemDetail({ item, comments, mergedFrom, mergedInto, history, wo
         <span>Added {timeAgo(item.createdAt)}</span>
       </p>
 
-      {(item.list === "ideas" || item.labels.includes(IDEA_LABEL)) && (
+      {isIdea(item) && (
         <Link
           href={`/hub/ideas/${item.id}`}
           className={`mt-4 inline-flex items-center gap-1.5 rounded-full text-sm font-semibold text-accent-ink underline-offset-4 hover:underline ${focusRing}`}

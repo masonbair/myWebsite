@@ -11,13 +11,14 @@ import { focusRing, primaryButton, quietButton } from "../styles";
 type ButtonsProps = {
   id: string;
   open: boolean;
+  isTask: boolean;
   noWebSearch: boolean;
   remindersStopped: boolean;
   movedFromInbox: boolean;
 };
 
 /** Done, Promote, Stop reminders, Back to inbox and the web search switch for one idea. */
-export function IdeaButtons({ id, open, noWebSearch, remindersStopped, movedFromInbox }: ButtonsProps) {
+export function IdeaButtons({ id, open, isTask, noWebSearch, remindersStopped, movedFromInbox }: ButtonsProps) {
   if (!open) {
     return (
       <form action={reopenItem.bind(null, id)} className="mt-6">
@@ -34,12 +35,14 @@ export function IdeaButtons({ id, open, noWebSearch, remindersStopped, movedFrom
             Done
           </SubmitButton>
         </form>
-        <form action={promoteIdea.bind(null, id)}>
-          <SubmitButton className={quietButton} title="Move it to the Todo list and stop reminders">
-            <ArrowRight size={16} weight="bold" aria-hidden />
-            Promote to task
-          </SubmitButton>
-        </form>
+        {!isTask && (
+          <form action={promoteIdea.bind(null, id)}>
+            <SubmitButton className={quietButton} title="Move it to the Todo list and stop reminders">
+              <ArrowRight size={16} weight="bold" aria-hidden />
+              Promote to task
+            </SubmitButton>
+          </form>
+        )}
         {!remindersStopped && (
           <form action={stopReminders.bind(null, id)}>
             <SubmitButton className={quietButton}>

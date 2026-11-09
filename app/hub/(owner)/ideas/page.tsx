@@ -24,7 +24,7 @@ export default async function IdeasPage({ searchParams }: PageProps<"/hub/ideas"
   await requireOwner("/hub/ideas");
   const { show } = await searchParams;
   const filter: IdeaFilter = isFilter(show) ? show : "active";
-  const ideas = await listIdeas(await sessionClient(), filter);
+  const { ideas, total } = await listIdeas(await sessionClient(), filter);
 
   return (
     <main>
@@ -55,8 +55,13 @@ export default async function IdeasPage({ searchParams }: PageProps<"/hub/ideas"
       <section aria-labelledby="ideas-list" className="mt-6">
         <h2 id="ideas-list" className="mb-3 flex items-baseline gap-2 px-1 text-sm font-semibold text-ink">
           {FILTER_NAMES[filter]}
-          <span className="font-normal text-mute">{ideas.length}</span>
+          <span className="font-normal text-mute">{total}</span>
         </h2>
+        {total > ideas.length && (
+          <p className="mb-3 px-1 text-sm text-mute">
+            Showing {ideas.length} of {total}, newest first.
+          </p>
+        )}
         {ideas.length > 0 ? (
           <ul className="divide-y divide-ink/[0.06] overflow-hidden rounded-tile bg-surface shadow-tile ring-1 ring-ink/5">
             {ideas.map((idea) => (

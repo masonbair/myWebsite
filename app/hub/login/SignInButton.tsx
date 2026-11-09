@@ -3,23 +3,23 @@
 import { GithubLogo } from "@phosphor-icons/react";
 import { useState } from "react";
 import { browserClient } from "@/lib/supabase/browser";
+import { rememberReturn } from "./actions";
 
-function callbackUrl(origin: string, next: string): string {
-  const url = new URL("/hub/auth/callback", origin);
-  if (next !== "/hub") url.searchParams.set("next", next);
-  return url.toString();
-}
-
-/** @param next hub path the callback returns to; the callback checks it again. */
+/** @param next hub path to land on after sign in; the server checks it when storing and again in the callback. */
 export function SignInButton({ next }: { next: string }) {
   const [busy, setBusy] = useState(false);
 
   async function signIn() {
     setBusy(true);
+    try {
+      await rememberReturn(next);
+    } catch {
+      // Sign in still works without the return path; it just lands on /hub.
+    }
     // This page's own origin, so preview deploys come back to themselves.
     const { error } = await browserClient().auth.signInWithOAuth({
       provider: "github",
-      options: { redirectTo: callbackUrl(window.location.origin, next) },
+      options: { redirectTo: `${window.location.origin}/hub/auth/callback` },
     });
     if (error) setBusy(false);
   }

@@ -5,7 +5,7 @@ import { requireOwner } from "@/lib/auth/require-owner";
 import { isItemId } from "@/lib/hub/format";
 import { masonStore } from "@/lib/hub/mason-store";
 import type { HubStore, Item } from "@/lib/hub/types";
-import { IDEA_LABEL } from "@/lib/ideas/read";
+import { IDEA_LABEL, isIdea } from "@/lib/ideas/read";
 import { MAX_REVIEW_NOTE } from "@/lib/ideas/types";
 import { sessionClient } from "@/lib/supabase/server";
 
@@ -18,6 +18,8 @@ async function ownerIdea(id: unknown): Promise<{ store: HubStore; item: Item; id
   const store = await masonStore();
   const item = await store.getItem(id);
   if (!item) throw new Error("no such item");
+  // Without this a crafted POST could enroll any todo item into a paid review.
+  if (!isIdea(item)) throw new Error("not an idea");
   return { store, item, id };
 }
 
@@ -25,10 +27,18 @@ function assertOpen(item: Item): void {
   if (item.state !== "open") throw new Error("only an open idea can change");
 }
 
+class ReviewRunning extends Error {
+  constructor() {
+    super(REVIEW_RUNNING);
+  }
+}
+
 /** Updates the idea's settings row, inserting it when an older idea has none yet. */
 async function writeSettings(id: string, columns: Record<string, unknown>): Promise<void> {
   const client = await sessionClient();
   const { data, error } = await client.from("idea_settings").update(columns).eq("item_id", id).select("item_id");
+  // The database refuses changes that leave a claim under 30 minutes old while it is still working.
+  if (error && /a review is running/.test(String(error.message))) throw new ReviewRunning();
   if (error) throw error;
   if ((data ?? []).length > 0) return;
   const { error: insertError } = await client.from("idea_settings").insert({ item_id: id, ...columns });
@@ -57,22 +67,21 @@ export async function requestReview(id: string, note: string): Promise<{ error: 
       review_note: text || null,
     });
   } catch (error) {
-    // The database refuses to re-queue while a claim under 30 minutes old is still working.
-    if (/a review is running/.test(String((error as { message?: unknown } | null)?.message))) {
-      return { error: REVIEW_RUNNING };
-    }
+    if (error instanceof ReviewRunning) return { error: REVIEW_RUNNING };
     throw error;
   }
   refreshHub();
   return { error: null };
 }
 
-/** Mason's call: the idea becomes a task on the Todo list and stops coming back. */
+/** Mason's call: the idea becomes a task on the Todo list, keeps the idea label so the Promoted filter finds it, and stops coming back. */
 export async function promoteIdea(id: string): Promise<void> {
   const { store, item } = await ownerIdea(id);
   assertOpen(item);
-  await store.updateItem(item.id, { list: "todo" });
+  if (item.list === "todo") throw new Error("this idea is already a task");
   await writeSettings(item.id, stopColumns());
+  const labels = item.labels.includes(IDEA_LABEL) ? item.labels : [...item.labels, IDEA_LABEL];
+  await store.updateItem(item.id, { list: "todo", labels });
   refreshHub();
 }
 
@@ -102,7 +111,7 @@ export async function backToInbox(id: string): Promise<void> {
   if ((data as { moved_from_inbox?: boolean } | null)?.moved_from_inbox !== true) {
     throw new Error("only an idea moved from the inbox can go back to the inbox");
   }
-  await store.updateItem(item.id, { list: "inbox", labels: item.labels.filter((label) => label !== IDEA_LABEL) });
   await writeSettings(item.id, stopColumns());
+  await store.updateItem(item.id, { list: "inbox", labels: item.labels.filter((label) => label !== IDEA_LABEL) });
   refreshHub();
 }

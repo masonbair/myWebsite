@@ -141,6 +141,39 @@ describe("ideas actions", () => {
     expect(typeof settings.get(idea.id)?.reminders_stopped_at).toBe("string");
   });
 
+  it("adds the idea label when promoting an older idea that lacks it, so Promoted still finds it", async () => {
+    const item = await store.addItem({ title: "old idea", list: "ideas", labels: ["laptop"], source: "import" });
+    await promoteIdea(item.id);
+    expect(await store.getItem(item.id)).toMatchObject({ list: "todo", labels: ["laptop", "idea"] });
+  });
+
+  it("will not promote an idea that is already a task", async () => {
+    const idea = await newIdea();
+    await store.updateItem(idea.id, { list: "todo" });
+    await expect(promoteIdea(idea.id)).rejects.toThrow("already a task");
+  });
+
+  it("says plainly when promote meets a running review, and leaves the idea where it was", async () => {
+    const idea = await newIdea();
+    updateError = { message: "a review is running; try again in a few minutes" };
+    await expect(promoteIdea(idea.id)).rejects.toThrow("A review is running. Try again in a few minutes.");
+    expect((await store.getItem(idea.id))?.list).toBe("ideas");
+  });
+
+  it("refuses items that are not ideas, so a crafted POST cannot enroll a task into a paid review", async () => {
+    const task = await store.addItem({ title: "a task", list: "todo", labels: [], source: "capture" });
+    for (const act of [
+      () => requestReview(task.id, ""),
+      () => promoteIdea(task.id),
+      () => stopReminders(task.id),
+      () => setNoWebSearch(task.id, true),
+      () => backToInbox(task.id),
+    ]) {
+      await expect(act()).rejects.toThrow("not an idea");
+    }
+    expect(settings.has(task.id)).toBe(false);
+  });
+
   it("stops reminders and switches web search", async () => {
     const idea = await newIdea();
     await stopReminders(idea.id);
