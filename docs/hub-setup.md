@@ -104,3 +104,11 @@ Public page reads are counted in `proxy.ts` and written to Supabase through `ana
 4. New public routes: add them to `KNOWN_PATHS` in `lib/analytics/classify.ts`, or they show as "other".
 
 Abuse limits: per day, at most 5,000 distinct count rows (the rest fold into one "overflow" row), 20,000 visitor hashes and 200 unknown-bot samples. If junk traffic ever gets heavy, add a Vercel Firewall rate-limit rule (Project → Firewall → Rules → Rate limit, e.g. 120 requests per minute per IP on `/`). Check the plan price first.
+
+## Timeline (/hub/timeline)
+
+One plain-words summary per project per day, written by the `daily-log` Claude skill (`~/.claude/skills/daily-log`) through the connector's `log_day` tool. Rows are never deleted; agents can only write today and the two days before (UTC), so a past day stays as it was. Every write is in `audit_log` with action `timeline`.
+
+1. Run `supabase db push` for 0013.
+2. Add the connector for the skill once, with `HUB_AGENT_TOKEN`: `claude mcp add --scope user --transport http hub https://masonbair.com/api/mcp/mcp --header "Authorization: Bearer <HUB_AGENT_TOKEN>" --header "X-Client-Name: daily-log"`.
+3. The hourly timer is `~/.claude/skills/daily-log/run-hourly.sh` under launchd. It only starts Claude when a day's commits changed.
