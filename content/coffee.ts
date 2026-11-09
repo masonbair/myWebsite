@@ -17,7 +17,7 @@ const emailBody = [
   "What I'd like to talk about:",
   "Three times that work for me, with my time zone:",
   "How I found your page:",
-].join("\n");
+].join("\r\n");
 
 /** Booking that needs no JavaScript: a prefilled email any mail client or text-only agent can send. */
 export const bookingMailto = `mailto:${contact.email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
@@ -96,7 +96,7 @@ export const coffee: {
       body: [
         "I graduated from Kent State in May 2026 with a B.S. in Computer Science. I was President of HacKSU, the largest CS club on campus, and helped run the Kent Hack Enough hackathon.",
         "I also worked as an IT help desk technician and an assistant system administrator on campus, and did undergraduate research building a web version of ImageJ.",
-        "Happy to talk about classes, campus jobs, study abroad, landing internships, or starting and running a hackathon.",
+        "Happy to talk about classes, campus jobs, study abroad, landing internships, or organizing or running a hackathon.",
       ],
     },
   ],

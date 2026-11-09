@@ -50,6 +50,15 @@ describe("sitemap", () => {
   });
 });
 
+describe("llms.txt", () => {
+  it("matches the page's booking URL, email, and niche anchors", () => {
+    const text = readFileSync("public/llms.txt", "utf8");
+    expect(text).toContain(bookingUrl);
+    expect(text).toContain(contact.email);
+    for (const { id } of coffee.niches) expect(text).toContain(`https://masonbair.com/coffee#${id}`);
+  });
+});
+
 describe("indexnow", () => {
   it("serves the key file at the site root", () => {
     expect(readFileSync(`public/${INDEXNOW_KEY}.txt`, "utf8").trim()).toBe(INDEXNOW_KEY);
@@ -63,5 +72,9 @@ describe("indexnow", () => {
       keyLocation: `https://masonbair.com/${INDEXNOW_KEY}.txt`,
       urlList: ["https://masonbair.com", "https://masonbair.com/coffee"],
     });
+  });
+
+  it("ignores a trailing slash on the site URL", () => {
+    expect(indexNowPayload("https://masonbair.com/", "").keyLocation).toBe(`https://masonbair.com/${INDEXNOW_KEY}.txt`);
   });
 });

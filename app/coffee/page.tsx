@@ -146,8 +146,8 @@ export default function CoffeePage() {
         </h2>
         <div className="mt-10 grid max-w-5xl gap-x-16 gap-y-12 md:grid-cols-2">
           {coffee.niches.map(({ id, heading, body }) => (
-            <section key={id} id={id} aria-labelledby={`${id}-title`} className="scroll-mt-28">
-              <h3 id={`${id}-title`} className="text-xl font-semibold tracking-tight text-ink">
+            <article key={id} id={id} className="scroll-mt-28">
+              <h3 className="text-xl font-semibold tracking-tight text-ink">
                 {heading}
               </h3>
               <div className="mt-3 max-w-[60ch] space-y-3 leading-relaxed text-mute">
@@ -155,7 +155,7 @@ export default function CoffeePage() {
                   <p key={line}>{line}</p>
                 ))}
               </div>
-            </section>
+            </article>
           ))}
         </div>
       </section>

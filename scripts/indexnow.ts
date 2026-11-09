@@ -6,15 +6,16 @@ export const INDEXNOW_KEY = "ff299680043c902e40ce6cb93c5e40b2";
 const INDEXNOW_ENDPOINT = "https://api.indexnow.org/indexnow";
 
 /** Builds the IndexNow POST body from a sitemap. @param siteUrl origin, e.g. https://masonbair.com @param sitemapXml sitemap.xml text */
-export function indexNowPayload(siteUrl: string, sitemapXml: string) {
-  const { host } = new URL(siteUrl);
+export function indexNowPayload(site: string, sitemapXml: string) {
+  const { host, origin: siteUrl } = new URL(site);
   const urlList = [...sitemapXml.matchAll(/<loc>([^<]+)<\/loc>/g)]
     .map((m) => m[1].trim())
     .filter((url) => new URL(url).host === host);
   return { host, key: INDEXNOW_KEY, keyLocation: `${siteUrl}/${INDEXNOW_KEY}.txt`, urlList };
 }
 
-async function main(siteUrl: string) {
+async function main(site: string) {
+  const siteUrl = new URL(site).origin;
   const keyRes = await fetch(`${siteUrl}/${INDEXNOW_KEY}.txt`);
   if (!keyRes.ok || (await keyRes.text()).trim() !== INDEXNOW_KEY) {
     throw new Error(`Key file is not live at ${siteUrl}/${INDEXNOW_KEY}.txt; deploy first.`);
