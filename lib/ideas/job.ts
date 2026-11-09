@@ -1,6 +1,7 @@
 import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
 import { APIConnectionError } from "@anthropic-ai/sdk";
+import { errorName } from "@/lib/hub/events";
 import { formatInstantIn } from "@/lib/hub/format";
 import { parseMemo } from "@/lib/hub/memo-split";
 import type { Message } from "@/lib/hub/notify";
@@ -388,19 +389,28 @@ async function notifyFailures(deps: IdeasJobDeps): Promise<void> {
   });
 }
 
+async function step(name: string, run: () => Promise<void>): Promise<void> {
+  try {
+    await run();
+  } catch (e) {
+    console.error(`ideas ${name} failed: ${errorName(e)}`);
+  }
+}
+
 /** One run of the ideas event: detect, review under the monthly cap, resurface, then the daily failure message. */
 export async function runIdeasJob(deps: IdeasJobDeps): Promise<IdeasRunResult> {
   const startedAt = deps.now().getTime();
   const result: IdeasRunResult = { detected: 0, reviewed: [], failed: [], paused: false, resurfaced: 0 };
-  result.detected = await detectStep(deps, startedAt);
-  await reviewStep(deps, startedAt, result);
-  if (deps.resurface) {
-    // A calendar or database failure here must not stop the daily failure message.
-    try {
-      result.resurfaced = await deps.resurface();
-    } catch (e) {
-      console.error(`ideas resurface failed: ${(e as { code?: string }).code ?? (e as Error).name}`);
-    }
+  // A database or spend-read failure in one step must not stop the steps after it or the daily failure message.
+  await step("detect", async () => {
+    result.detected = await detectStep(deps, startedAt);
+  });
+  await step("review", () => reviewStep(deps, startedAt, result));
+  const resurface = deps.resurface;
+  if (resurface) {
+    await step("resurface", async () => {
+      result.resurfaced = await resurface();
+    });
   }
   await notifyFailures(deps);
   return result;

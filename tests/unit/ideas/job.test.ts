@@ -402,6 +402,25 @@ describe("budgetFromEnv", () => {
 });
 
 describe("runIdeasJob resurfacing", () => {
+  it("still resurfaces and sends the failure message when detection and reviews throw", async () => {
+    const h = harness();
+    h.seed();
+    h.rows.failedDetections = 1;
+    const resurface = vi.fn(async () => 1);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await runIdeasJob({
+      ...h.deps,
+      store: { ...h.store, claimSource: async () => Promise.reject(Object.assign(new Error("secret idea text"), { code: "57014" })) },
+      spend: async () => Promise.reject(new TypeError("fetch failed: secret")),
+      resurface,
+    });
+    expect(result.resurfaced).toBe(1);
+    expect(resurface).toHaveBeenCalledOnce();
+    expect(h.sent.map((m) => m.title)).toEqual(["Some ideas need a retry"]);
+    expect(log.mock.calls).toEqual([["ideas detect failed: 57014"], ["ideas review failed: TypeError"]]);
+    log.mockRestore();
+  });
+
   it("still resurfaces without a Claude key", async () => {
     const h = harness([], { anthropic: null, resurface: async () => 2 });
     expect((await runIdeasJob(h.deps)).resurfaced).toBe(2);

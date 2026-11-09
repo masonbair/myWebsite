@@ -234,14 +234,15 @@ export function createIdeasJobStore(client: SupabaseClient, sourceLeaseMs = SOUR
         return true;
       }
       if (item.list !== "inbox") return false;
-      await hub.updateItem(id, {
-        list: "ideas",
-        labels: item.labels.includes("idea") ? item.labels : [...item.labels, "idea"],
-      });
+      // Settings first, so a crash before the move leaves the capture in the inbox and the retry redoes all of it.
       await queueReview(id, scheduleFrom);
       // The insert above skips a row that already exists, so the flag is set on its own.
       const { error } = await client.from("idea_settings").update({ moved_from_inbox: true }).eq("item_id", id);
       if (error) throw error;
+      await hub.updateItem(id, {
+        list: "ideas",
+        labels: item.labels.includes("idea") ? item.labels : [...item.labels, "idea"],
+      });
       return true;
     },
 

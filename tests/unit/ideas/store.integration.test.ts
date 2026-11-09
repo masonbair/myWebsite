@@ -204,6 +204,35 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
     });
   });
 
+  it("writes the settings before the move, so a crash at the move leaves the capture in the inbox for the retry", async () => {
+    const real = client();
+    let failMove = true;
+    const crashing = new Proxy(real, {
+      get(target, prop, receiver) {
+        if (prop !== "from") return Reflect.get(target, prop, receiver);
+        return (table: string) => {
+          const query = target.from(table);
+          if (table !== "items" || !failMove) return query;
+          return new Proxy(query, {
+            get(q, p, r) {
+              if (p === "update") throw new Error("crash before the move");
+              return Reflect.get(q, p, r);
+            },
+          });
+        };
+      },
+    });
+    const capture = await newCapture("integration crash");
+    await expect(createIdeasJobStore(crashing).moveCaptureToIdeas(capture.id, "2026-11-08")).rejects.toThrow("crash before the move");
+    expect(await hub().getItem(capture.id)).toMatchObject({ list: "inbox" });
+    expect(await settingsRow(capture.id)).toMatchObject({ moved_from_inbox: true, review_status: "waiting" });
+
+    failMove = false;
+    expect(await createIdeasJobStore(crashing).moveCaptureToIdeas(capture.id, "2026-11-08")).toBe(true);
+    expect(await hub().getItem(capture.id)).toMatchObject({ list: "ideas", labels: ["idea"] });
+    expect(await settingsRow(capture.id)).toMatchObject({ moved_from_inbox: true, schedule_from: "2026-11-08" });
+  });
+
   it("never moves a capture Mason filed elsewhere or archived", async () => {
     const store = createIdeasJobStore(client());
     const todo = await newCapture("integration todo");
@@ -409,7 +438,7 @@ describe.skipIf(!enabled)("HiNote recordings against local Supabase", () => {
     const store = createIdeasJobStore(client(), 0);
     const idea = await store.addIdeaFrom({ key: recordingRef(file), footer: `From HiNote recording ${file}, recorded 2026-11-08 07:00 MST`, scheduleFrom: "2026-11-09" }, 0, "Q", "spoken words");
     const { data: keyed } = await client().from("items").select("id, description").eq("client_key", `idea:rec:${file}#0`);
-    expect(keyed).toEqual([{ id: idea, description: `> spoken words\n\nFrom HiNote recording ${file}, recorded 2026-11-08 14:00 UTC` }]);
+    expect(keyed).toEqual([{ id: idea, description: `> spoken words\n\nFrom HiNote recording ${file}, recorded 2026-11-08 07:00 MST` }]);
     await client()
       .from("idea_recordings")
       .update({ quotes: [{ title: "Q", quote: "spoken words", whole_item: false, sure: false, outcome: { kind: "new", id: idea } }], idea_item_ids: [idea] })
