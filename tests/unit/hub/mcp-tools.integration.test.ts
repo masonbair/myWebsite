@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import { handleMcpRequest } from "@/lib/hub/mcp-tools";
 import { createHubStore } from "@/lib/hub/store";
+import { timelineWriter } from "@/lib/hub/timeline";
 import { parseNow } from "@/lib/now";
 
 // Same gate as store.integration.test.ts: HUB_TEST_DB_URL=1 plus the local API URL and keys from `supabase status -o env`.
@@ -24,6 +25,7 @@ describe.skipIf(!enabled)("mcp tools against local Supabase", () => {
         token,
         storeFor: (client) => createHubStore(db(), { kind: "agent", client }),
         readNow: async () => parseNow(null),
+        timelineFor: (client) => timelineWriter(db(), { kind: "agent", client }),
       })) as typeof fetch;
     const transport = new StreamableHTTPClientTransport(new URL("https://hub.test/api/mcp/mcp"), {
       fetch: fetchFn,

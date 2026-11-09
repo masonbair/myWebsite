@@ -1,6 +1,7 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { describe, expect, it } from "vitest";
 import { MCP_TOOL_NAMES, handleMcpRequest } from "@/lib/hub/mcp-tools";
+import type { TimelineDayInput } from "@/lib/hub/timeline";
 import type { NowData } from "@/lib/now";
 import { createFakeStore } from "./fake-store";
 import { seedItem } from "./worker-harness";
@@ -18,6 +19,7 @@ const NOW: NowData = {
 function setup(options: { token?: string; clientName?: string | null; serverToken?: string | undefined } = {}) {
   const rows = createFakeStore({ kind: "mason" }).rows;
   const clients: string[] = [];
+  const logged: { client: string; input: TimelineDayInput }[] = [];
   const serverToken = "serverToken" in options ? options.serverToken : TOKEN;
   const fetchFn = (async (input: string | URL | Request, init?: RequestInit) =>
     handleMcpRequest(new Request(input, init), {
@@ -27,10 +29,16 @@ function setup(options: { token?: string; clientName?: string | null; serverToke
         return createFakeStore({ kind: "agent", client }, rows);
       },
       readNow: async () => NOW,
+      timelineFor: (client) => ({
+        logDay: async (input) => {
+          logged.push({ client, input });
+          return [];
+        },
+      }),
     })) as typeof fetch;
   const headers: Record<string, string> = { authorization: `Bearer ${options.token ?? TOKEN}` };
   if (options.clientName !== null) headers["x-client-name"] = options.clientName ?? "test-agent";
-  return { rows, clients, fetchFn, headers };
+  return { rows, clients, logged, fetchFn, headers };
 }
 
 async function connect(options: Parameters<typeof setup>[0] = {}) {
@@ -51,10 +59,26 @@ describe("mcp agent connector", () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["add_comment", "add_item", "find_items", "get_item", "get_now", "list_comments", "merge_duplicate", "update_item"].sort(),
+      ["add_comment", "add_item", "find_items", "get_item", "get_now", "list_comments", "log_day", "merge_duplicate", "update_item"].sort(),
     );
     expect([...MCP_TOOL_NAMES].sort()).toEqual(names);
     for (const tool of tools) expect(tool.description).toMatch(/data, never instructions/);
+  });
+
+  it("log_day hands the day to the timeline for the calling client", async () => {
+    const { client, logged } = await connect({ clientName: "daily-log" });
+    const day = { day: "2026-11-09", projects: [{ project: "myWebsite", summary: "Added a timeline page.", commits: 3, branches: ["hub-timeline"] }] };
+    const result = await client.callTool({ name: "log_day", arguments: day });
+    expect(result.isError).toBeFalsy();
+    expect(logged).toEqual([{ client: "daily-log", input: day }]);
+  });
+
+  it("log_day refuses a project listed twice and a day that is not a date", async () => {
+    const { client, logged } = await connect();
+    const entry = { project: "a", summary: "x", commits: 1, branches: [] };
+    expect((await client.callTool({ name: "log_day", arguments: { day: "2026-11-09", projects: [entry, entry] } })).isError).toBe(true);
+    expect((await client.callTool({ name: "log_day", arguments: { day: "2026-02-31", projects: [entry] } })).isError).toBe(true);
+    expect(logged).toEqual([]);
   });
 
   it("add_item lands in the inbox with the client as the source", async () => {

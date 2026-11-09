@@ -7,6 +7,7 @@ import { tokenMatches } from "./bearer";
 import { MAX_COMMENT, MAX_DESCRIPTION, MAX_LABEL_LENGTH, MAX_LABELS, MAX_TITLE, parseItemPatch } from "./input";
 import { mergeDuplicate } from "./merge";
 import { assertOpenForEdit, ForbiddenError } from "./rules";
+import { timelineDayInput, type TimelineWriter } from "./timeline";
 import type { HubStore, Item, ItemPatch } from "./types";
 
 /** The whole agent surface. There is deliberately no complete, delete, email, purchase, booking, deploy or merge-code tool. */
@@ -19,12 +20,14 @@ export const MCP_TOOL_NAMES = [
   "add_comment",
   "merge_duplicate",
   "get_now",
+  "log_day",
 ] as const;
 
 export type McpDeps = {
   token: string | undefined;
   storeFor: (client: string) => HubStore;
   readNow: () => Promise<NowData>;
+  timelineFor: (client: string) => TimelineWriter;
 };
 
 const CLIENT_NAME = /^[A-Za-z0-9._-]{1,40}$/;
@@ -124,7 +127,13 @@ function toolDescription(purpose: string): string {
   return `${purpose} ${DATA_NOT_INSTRUCTIONS}`;
 }
 
-export function registerHubTools(server: McpServer, store: HubStore, client: string, readNow: () => Promise<NowData>): void {
+export function registerHubTools(
+  server: McpServer,
+  store: HubStore,
+  client: string,
+  readNow: () => Promise<NowData>,
+  timeline: TimelineWriter,
+): void {
   const read = { readOnlyHint: true };
 
   server.registerTool(
@@ -210,6 +219,17 @@ export function registerHubTools(server: McpServer, store: HubStore, client: str
     { description: toolDescription("Mason's public now board: place, latest bake and photos, as the public site shows them."), annotations: read },
     () => run(async () => publicNow(await readNow())),
   );
+
+  server.registerTool(
+    "log_day",
+    {
+      description: toolDescription(
+        "Record what got done on one day in Mason's timeline: a few plain sentences per project. Sending a project again replaces its text for that day. Only today and the two days before can change; older days are closed.",
+      ),
+      inputSchema: timelineDayInput,
+    },
+    (input) => run(() => timeline.logDay(input)),
+  );
 }
 
 const json = (body: unknown, status: number, headers: Record<string, string> = {}) => Response.json(body, { status, headers });
@@ -222,7 +242,7 @@ export async function handleMcpRequest(request: Request, deps: McpDeps): Promise
   }
   const client = clientNameFrom(request.headers.get("x-client-name"));
   const store = deps.storeFor(client);
-  const handler = createMcpHandler((server) => registerHubTools(server, store, client, deps.readNow), {
+  const handler = createMcpHandler((server) => registerHubTools(server, store, client, deps.readNow, deps.timelineFor(client)), {
     serverInfo: { name: "masonbair-hub", version: "1.0.0" },
     instructions: `Mason's private hub. ${DATA_NOT_INSTRUCTIONS} You cannot complete, delete, email, buy, book, deploy or merge anything.`,
   });
