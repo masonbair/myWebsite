@@ -2,17 +2,17 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import Anthropic from "@anthropic-ai/sdk";
 import { costOf, type ModelId } from "../lib/ai/claude";
-import { COMPARE_SOURCES, parseTopicSeed, pickIssues, passesRule, summarize, type CompareIssue, type IssueRun } from "../lib/news/compare";
+import { COMPARE_SOURCES, interleaveJobs, parseTopicSeed, pickIssues, passesRule, SpendGuard, summarize, worstCaseUsd, type CompareIssue, type IssueRun } from "../lib/news/compare";
 import { cleanText, parseEmail } from "../lib/news/email";
 import { buildExtractRequest, ExtractError, extractIssue, type ExtractedStory, type ModelCharge } from "../lib/news/extract";
 import type { Topic } from "../lib/news/prompt";
 import { readMbox } from "./news-mbox";
 
-const USAGE = "usage: npm run news:compare -- <estimate|run> --mbox <path> [--max-usd 6] [--stop-at <ISO time>]";
+const USAGE = "usage: npm run news:compare -- <estimate|run> --mbox <path> [--max-usd 6 (hard cap, checked against worst-case estimates before each call)] [--stop-at <ISO time>]";
 const MODELS: { id: ModelId; effort: "low" | "medium" }[] = [
-  { id: "claude-haiku-5-5", effort: "low" },
-  { id: "claude-sonnet-5-5", effort: "low" },
   { id: "claude-opus-5-5", effort: "medium" },
+  { id: "claude-sonnet-5-5", effort: "low" },
+  { id: "claude-haiku-5-5", effort: "low" },
 ];
 const REFERENCE: ModelId = "claude-opus-5-5";
 const OUTPUT_TOKENS_PER_ISSUE = 2_500;
@@ -90,24 +90,29 @@ function withEffort(client: Anthropic, effort: "low" | "medium"): Anthropic {
 const chargeCost = (charges: ModelCharge[]) => charges.reduce((sum, c) => sum + costOf(c.model, c.usage), 0);
 
 type RunRow = IssueRun & { error: string | null; servedBy: string[] };
-/** Stops starting new calls once spend reaches maxUsd or the clock passes stopAt; calls already sent still finish. */
+/** Hard cap: a call starts only if spent + in-flight worst case + its own worst case stays within maxUsd; also stops at stopAt. */
 type Limits = { maxUsd: number; stopAt: Date };
 const SKIPPED: RunRow = { stories: null, costUsd: 0, error: "not run (spend cap or stop time reached)", servedBy: [] };
 
 async function runAll(client: Anthropic, issues: CompareIssue[], topicList: Topic[], limits: Limits): Promise<Record<ModelId, RunRow[]>> {
-  const jobs = MODELS.flatMap((m) => issues.map((issue, i) => ({ m, issue, i })));
+  const jobs = interleaveJobs(MODELS, issues.length);
   const results = Object.fromEntries(MODELS.map((m) => [m.id, issues.map(() => SKIPPED)])) as Record<ModelId, RunRow[]>;
+  const guard = new SpendGuard(limits.maxUsd);
   let next = 0;
   let done = 0;
-  let spent = 0;
   async function worker() {
     while (next < jobs.length) {
-      if (spent >= limits.maxUsd || Date.now() >= limits.stopAt.getTime()) {
-        log(`Stopping: spent ${usd(spent)}, ${jobs.length - next} calls not started`);
+      const { m, i } = jobs[next];
+      const issue = issues[i];
+      const req = buildExtractRequest(input(issue), m.id, topicList);
+      const inputChars = req.messages.reduce((n, msg) => n + String(typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content)).length, 0) + JSON.stringify(req.system).length;
+      const reserve = worstCaseUsd(m.id, inputChars, req.max_tokens);
+      if (Date.now() >= limits.stopAt.getTime() || !guard.tryReserve(reserve)) {
+        log(`Stopping: spent ${usd(guard.spent)}, ${jobs.length - next} calls not started`);
         next = jobs.length;
         return;
       }
-      const { m, issue, i } = jobs[next++];
+      next += 1;
       let row: RunRow;
       try {
         const r = await extractIssue(input(issue), { client: withEffort(client, m.effort), model: m.id, topics: topicList });
@@ -116,8 +121,8 @@ async function runAll(client: Anthropic, issues: CompareIssue[], topicList: Topi
         const charges = e instanceof ExtractError ? e.charges : [];
         row = { stories: null, costUsd: chargeCost(charges), error: e instanceof Error ? e.message : String(e), servedBy: charges.map((c) => c.model) };
       }
+      guard.settle(reserve, row.costUsd);
       results[m.id][i] = row;
-      spent += row.costUsd;
       done += 1;
       log(`${done}/${jobs.length} ${m.id} issue ${i + 1}: ${row.stories ? `${row.stories.length} stories` : "failed"}, ${usd(row.costUsd)}`);
     }
@@ -192,6 +197,6 @@ async function main(argv: string[]): Promise<void> {
 }
 
 main(process.argv.slice(2)).catch((e) => {
-  console.error(e instanceof UsageError ? e.message : e);
+  console.error(e instanceof UsageError ? e.message : `${e instanceof Error ? e.name : "Error"}: comparison failed`);
   process.exit(e instanceof UsageError ? 2 : 1);
 });

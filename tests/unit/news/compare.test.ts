@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchScore, matchStories, parseTopicSeed, passesRule, pickIssues, summarize, type CompareIssue } from "@/lib/news/compare";
+import { interleaveJobs, matchScore, matchStories, parseTopicSeed, passesRule, pickIssues, SpendGuard, summarize, worstCaseUsd, type CompareIssue } from "@/lib/news/compare";
 import type { ExtractedStory } from "@/lib/news/extract";
 
 const issue = (sourceName: string, day: number, id = `${sourceName}-${day}`): CompareIssue => ({
@@ -112,5 +112,31 @@ describe("summarize", () => {
     expect(s).toMatchObject({ referenceStories: 4, found: 3, foundRate: 0.75 });
     expect(passesRule(s)).toBe(false);
     expect(passesRule(summarize([{ stories: ref, costUsd: 0 }], [{ stories: ref, costUsd: 0 }]))).toBe(true);
+  });
+});
+
+describe("spend cap", () => {
+  it("prices the worst case with cache-write input, max output and one retry", () => {
+    // 3000 chars = 1000 tokens; opus: (1000*4*1.25 + 2000*20)/1e6 = 0.045; x2
+    expect(worstCaseUsd("claude-opus-5-5", 3000, 2000)).toBeCloseTo(0.09, 6);
+  });
+
+  it("refuses a call that would pass the cap alongside in-flight reservations", () => {
+    const g = new SpendGuard(1);
+    expect(g.tryReserve(0.6)).toBe(true);
+    expect(g.tryReserve(0.5)).toBe(false);
+    g.settle(0.6, 0.1);
+    expect(g.reserved).toBeCloseTo(0);
+    expect(g.spent).toBeCloseTo(0.1);
+    expect(g.tryReserve(0.9)).toBe(true);
+    expect(g.tryReserve(0.01)).toBe(false);
+  });
+});
+
+describe("interleaveJobs", () => {
+  it("runs every model for one issue before the next issue", () => {
+    expect(interleaveJobs(["opus", "sonnet", "haiku"], 2).map((j) => `${j.i}:${j.m}`)).toEqual([
+      "0:opus", "0:sonnet", "0:haiku", "1:opus", "1:sonnet", "1:haiku",
+    ]);
   });
 });

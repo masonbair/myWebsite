@@ -1,3 +1,4 @@
+import { PRICES, type ModelId } from "@/lib/ai/claude";
 import type { ExtractedStory } from "@/lib/news/extract";
 import { headlineWords, jaccard } from "@/lib/news/dedupe";
 import type { Topic } from "@/lib/news/prompt";
@@ -139,4 +140,37 @@ export function summarize(runs: IssueRun[], reference: IssueRun[]): ModelSummary
 /** The plan's rule: at least 80% of Opus's stories found and 75% topic agreement, cheapest first. */
 export function passesRule(s: ModelSummary): boolean {
   return s.failed === 0 && s.foundRate >= 0.8 && s.topicAgreement >= 0.75;
+}
+
+/** Jobs ordered issue by issue, models in the given order, so an early stop still leaves the first model's output for the issues that ran. */
+export function interleaveJobs<M>(models: readonly M[], issueCount: number): { m: M; i: number }[] {
+  return Array.from({ length: issueCount }, (_, i) => models.map((m) => ({ m, i }))).flat();
+}
+
+/** Characters per token assumed when sizing a call; low on purpose so the estimate runs high. */
+const CHARS_PER_TOKEN = 3;
+
+/** Worst-case dollars for one extractIssue call: cache-write-priced input plus max output, doubled for its one internal retry. */
+export function worstCaseUsd(model: ModelId, inputChars: number, maxOutputTokens: number): number {
+  const p = PRICES[model];
+  const inputTokens = Math.ceil(inputChars / CHARS_PER_TOKEN);
+  return (2 * (inputTokens * p.input * 1.25 + maxOutputTokens * p.output)) / 1_000_000;
+}
+
+/** Tracks measured spend plus the worst case of calls in flight, and refuses a call that could pass the cap. */
+export class SpendGuard {
+  spent = 0;
+  reserved = 0;
+  constructor(readonly maxUsd: number) {}
+
+  tryReserve(usd: number): boolean {
+    if (this.spent + this.reserved + usd > this.maxUsd) return false;
+    this.reserved += usd;
+    return true;
+  }
+
+  settle(reservedUsd: number, measuredUsd: number): void {
+    this.reserved -= reservedUsd;
+    this.spent += measuredUsd;
+  }
 }
