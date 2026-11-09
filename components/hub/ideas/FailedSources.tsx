@@ -9,7 +9,7 @@ import { focusRing, quietButton } from "../styles";
 export function FailedSources({ sources }: { sources: FailedSource[] }) {
   const noun = sources.length === 1 ? "capture, memo or recording" : "captures, memos or recordings";
   return (
-    <section aria-labelledby="failed-sources" className="mt-6 rounded-tile px-5 py-4 ring-1 ring-ink/10 ring-inset">
+    <section aria-labelledby="failed-sources" className="mt-6 rounded-tile border-[2.5px] border-dashed border-line bg-surface px-5 py-4 shadow-sticker-sm">
       <h2 id="failed-sources" className="text-sm font-semibold text-ink">
         Could not read {sources.length} {noun}
       </h2>

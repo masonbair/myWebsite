@@ -9,7 +9,7 @@ import { VerdictChip } from "./IdeaRow";
 
 function Part({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="border-t border-ink/[0.06] pt-4">
+    <section className="border-t-2 border-dashed border-line/20 pt-4">
       <h3 className="text-sm font-semibold text-ink">{title}</h3>
       <div className="mt-2 max-w-[65ch] text-sm leading-relaxed text-ink/85">{children}</div>
     </section>

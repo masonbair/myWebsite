@@ -17,12 +17,12 @@ export function ScheduleList({ schedule, settings }: { schedule: IdeaReturn[]; s
       {schedule.length > 0 ? (
         <ol className="flex flex-col gap-2">
           {schedule.map((step) => (
-            <li key={`${step.step}-${step.dueDate}`} className="flex flex-wrap items-baseline justify-between gap-x-4 text-sm">
+            <li key={`${step.step}-${step.dueDate}`} className="flex flex-wrap items-baseline justify-between gap-x-4 rounded-2xl border-2 border-line bg-surface px-4 py-2.5 text-sm">
               <span className="text-ink">
                 {STEP_NAMES[step.step] ?? `Return ${step.step}`}
                 <span className="text-mute">, {formatDay(step.dueDate)}</span>
               </span>
-              <span className={step.status === "planned" || step.status === "sent" ? "text-accent-ink" : "text-mute"}>
+              <span className={step.status === "planned" || step.status === "sent" ? "font-semibold text-accent-ink" : "text-mute"}>
                 {STATUS_NAMES[step.status]}
               </span>
             </li>

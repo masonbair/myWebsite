@@ -48,7 +48,7 @@ export default async function IdeasSettingsPage({ searchParams }: PageProps<"/hu
     <main>
       <Link
         href="/hub/ideas"
-        className={`inline-flex items-center gap-1.5 text-sm font-medium text-mute transition-colors hover:text-ink ${focusRing}`}
+        className={`inline-flex items-center gap-1.5 rounded-full text-sm font-medium text-mute transition-colors duration-300 ease-spring hover:text-ink ${focusRing}`}
       >
         <ArrowLeft size={16} weight="bold" aria-hidden />
         Ideas Lab
@@ -56,7 +56,7 @@ export default async function IdeasSettingsPage({ searchParams }: PageProps<"/hu
       <h1 className="mt-3 text-3xl font-semibold tracking-tight">Settings</h1>
 
       {message && (
-        <p role="status" className={`mt-4 max-w-[60ch] rounded-tile px-4 py-3 text-sm ring-1 ring-inset ${message.ok ? "ring-accent/40 text-ink" : "ring-ink/15 text-ink"}`}>
+        <p role="status" className={`mt-4 max-w-[60ch] rounded-tile border-[2.5px] bg-surface px-4 py-3 text-sm text-ink shadow-sticker-sm ${message.ok ? "border-accent" : "border-line"}`}>
           {message.text}
         </p>
       )}

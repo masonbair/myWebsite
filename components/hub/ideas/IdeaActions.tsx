@@ -66,12 +66,12 @@ export function IdeaButtons({ id, open, isTask, noWebSearch, remindersStopped, m
           aria-checked={!noWebSearch}
           aria-label="Search the web during reviews"
           className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-300 ease-spring disabled:opacity-60 ${
-            noWebSearch ? "bg-ink/15" : "bg-accent"
-          } ${focusRing}`}
+            noWebSearch ? "bg-canvas" : "bg-accent"
+          } border-2 border-line ${focusRing}`}
         >
           <span
             aria-hidden
-            className={`absolute top-0.5 left-0.5 size-5 rounded-full bg-surface shadow-sm transition-transform duration-300 ease-spring ${
+            className={`absolute top-px left-px size-[18px] rounded-full border-2 border-line bg-surface transition-transform duration-300 ease-spring ${
               noWebSearch ? "" : "translate-x-5"
             }`}
           />
@@ -117,7 +117,7 @@ export function ReviewRequest({ id, enrolled }: { id: string; enrolled: boolean 
         rows={2}
         maxLength={MAX_REVIEW_NOTE}
         placeholder="What should it look at this time?"
-        className={`mt-2 block w-full resize-y rounded-2xl border-0 bg-surface px-4 py-3 text-sm text-ink shadow-tile ring-1 ring-ink/10 placeholder:text-mute focus-visible:ring-2 focus-visible:ring-accent ${focusRing}`}
+        className={`mt-2 block w-full resize-y rounded-2xl border-[2.5px] border-line bg-surface px-4 py-3 text-sm text-ink shadow-sticker-sm placeholder:text-mute ${focusRing}`}
       />
       <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
         {message && (

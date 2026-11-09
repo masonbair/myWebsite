@@ -35,7 +35,7 @@ export default async function IdeasPage({ searchParams }: PageProps<"/hub/ideas"
         <h1 className="text-3xl font-semibold tracking-tight">Ideas Lab</h1>
         <Link
           href="/hub/ideas/settings"
-          className={`inline-flex items-center gap-1.5 text-sm font-medium text-mute transition-colors hover:text-ink ${focusRing}`}
+          className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-medium text-mute transition-colors duration-300 ease-spring hover:text-ink hover:underline ${focusRing}`}
         >
           <GearSix size={16} weight="bold" aria-hidden />
           Settings
@@ -45,8 +45,8 @@ export default async function IdeasPage({ searchParams }: PageProps<"/hub/ideas"
 
       {failed.length > 0 && <FailedSources sources={failed} />}
 
-      <nav aria-label="Idea filters" className="mt-6 -mx-1 overflow-x-auto px-1">
-        <ul className="inline-flex rounded-full bg-ink/5 p-1">
+      <nav aria-label="Idea filters" className="mt-6">
+        <ul className="flex flex-wrap gap-1.5">
           {IDEA_FILTERS.map((name) => {
             const current = name === filter;
             return (
@@ -54,8 +54,8 @@ export default async function IdeasPage({ searchParams }: PageProps<"/hub/ideas"
                 <Link
                   href={name === "active" ? "/hub/ideas" : `/hub/ideas?show=${name}`}
                   aria-current={current ? "page" : undefined}
-                  className={`block rounded-full px-3 py-1.5 text-sm font-medium transition-colors duration-300 ease-spring sm:px-4 ${
-                    current ? "bg-surface text-ink shadow-sm ring-1 ring-ink/5" : "text-mute hover:text-ink"
+                  className={`block rounded-full border-2 border-line px-3 py-1 text-sm font-bold transition-colors duration-200 ease-spring sm:px-3.5 ${
+                    current ? "bg-ink text-canvas" : "bg-surface text-ink hover:bg-canvas"
                   } ${focusRing}`}
                 >
                   {FILTER_NAMES[name]}
@@ -77,13 +77,13 @@ export default async function IdeasPage({ searchParams }: PageProps<"/hub/ideas"
           </p>
         )}
         {ideas.length > 0 ? (
-          <ul className="divide-y divide-ink/[0.06] overflow-hidden rounded-tile bg-surface shadow-tile ring-1 ring-ink/5">
+          <ul className="grid gap-2.5">
             {ideas.map((idea) => (
               <IdeaRow key={idea.id} idea={idea} />
             ))}
           </ul>
         ) : (
-          <div className="rounded-tile px-5 py-6 ring-1 ring-ink/10 ring-inset">
+          <div className="rounded-tile border-2 border-dashed border-line/40 px-5 py-6">
             <p className="text-sm font-medium text-ink">{EMPTY[filter]}</p>
             {filter === "active" && (
               <p className="mt-1 text-sm text-mute">

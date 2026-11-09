@@ -49,15 +49,15 @@ export default async function IdeaPage({ params }: PageProps<"/hub/ideas/[id]">)
 
         <h1 className="mt-4 text-2xl leading-tight font-semibold tracking-tight text-balance break-words sm:text-3xl">{item.title}</h1>
         <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-mute">
-          {item.state === "done" && <span className="rounded-full bg-tea/40 px-2.5 py-0.5 font-medium text-ink">Done</span>}
-          {item.state === "archived" && <span className="rounded-full bg-rose/30 px-2.5 py-0.5 font-medium text-ink">Archived</span>}
+          {item.state === "done" && <span className="rounded-full border-[1.5px] border-line bg-tea px-2.5 py-px text-xs font-bold text-night">Done</span>}
+          {item.state === "archived" && <span className="rounded-full border-[1.5px] border-line bg-rose px-2.5 py-px text-xs font-bold text-night">Archived</span>}
           {item.list !== "ideas" && <span>In {LIST_NAMES[item.list]}</span>}
           <span>Added {timeAgo(item.createdAt)}</span>
           {settings && settings.mentionCount > 1 && <span className="font-medium text-ink/80">mentioned {settings.mentionCount} times</span>}
         </p>
 
         {settings?.movedFromInbox && open && (
-          <p className="mt-4 rounded-2xl bg-accent/10 px-4 py-3 text-sm text-ink ring-1 ring-accent/25">
+          <p className="mt-4 rounded-2xl border-[2.5px] border-line bg-surface px-4 py-3 text-sm text-ink shadow-sticker-sm">
             Moved here from the inbox by the Ideas Lab. If it is not an idea, send it back.
           </p>
         )}
@@ -115,7 +115,7 @@ export default async function IdeaPage({ params }: PageProps<"/hub/ideas/[id]">)
             </summary>
             <ol className="mt-4 flex flex-col gap-8">
               {earlier.map((version) => (
-                <li key={version.version} className="border-l-2 border-ink/10 pl-4">
+                <li key={version.version} className="border-l-2 border-line/30 pl-4">
                   <ReviewView version={version} />
                 </li>
               ))}
