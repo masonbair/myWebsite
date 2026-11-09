@@ -1,9 +1,10 @@
 import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
+import { APIConnectionError, APIUserAbortError } from "@anthropic-ai/sdk";
 import type { Message } from "@/lib/hub/notify";
 import { reviewIdea } from "./review";
 import type { IdeasJobStore } from "./store";
-import { ReviewFailed } from "./types";
+import { CapReached, ReviewFailed } from "./types";
 
 export type IdeasJobDeps = {
   store: IdeasJobStore;
@@ -27,8 +28,12 @@ export type IdeasRunResult = { detected: number; reviewed: string[]; failed: str
 export const DEFAULT_BUDGET_USD = 20;
 // Detection costs cents and must keep running past the review cap so no idea is lost, but not without limit.
 const DETECTION_CAP_FACTOR = 1.25;
-// A review with search can take over a minute, so none starts this close to the function's time limit.
-const START_MARGIN_MS = 90_000;
+// A review with search can take a couple of minutes, so none starts this close to the function's time limit.
+const START_MARGIN_MS = 150_000;
+// Abort a call still running this close to the limit, so the claim is released instead of left for the stale sweep.
+const ABORT_MARGIN_MS = 15_000;
+// Rate limits, overload, timeouts and conflicts pass on their own; they must not use up an idea's two attempts.
+const PASSING_STATUSES = new Set([408, 409, 429]);
 const DAY_MS = 24 * 60 * 60 * 1000;
 const IDEAS_URL = "https://masonbair.com/hub/ideas";
 
@@ -42,10 +47,24 @@ export function budgetFromEnv(value: string | undefined): number {
   return Number.isFinite(n) && n >= 0 ? n : DEFAULT_BUDGET_USD;
 }
 
-function failCode(e: unknown): string {
-  if (e instanceof ReviewFailed) return e.code;
+function statusOf(e: unknown): number | null {
   const status = (e as { status?: unknown } | null)?.status;
-  return typeof status === "number" ? `api_${status}` : "error";
+  return typeof status === "number" ? status : null;
+}
+
+/** Errors that say nothing about the idea; the claim goes back to waiting uncounted. */
+function isPassing(e: unknown, signal: AbortSignal): boolean {
+  if (signal.aborted || e instanceof APIUserAbortError || e instanceof APIConnectionError) return true;
+  const status = statusOf(e);
+  return status !== null && (PASSING_STATUSES.has(status) || status >= 500);
+}
+
+function failCode(e: unknown, signal: AbortSignal): string {
+  if (e instanceof ReviewFailed) return e.code;
+  if (signal.aborted || e instanceof APIUserAbortError) return "aborted";
+  if (e instanceof APIConnectionError) return "connection";
+  const status = statusOf(e);
+  return status !== null ? `api_${status}` : "error";
 }
 
 /** Sends one ntfy message unless the flag is set; the flag is set only after a successful send. */
@@ -70,11 +89,23 @@ async function pauseForCap(deps: IdeasJobDeps, spend: number): Promise<void> {
   });
 }
 
-async function reviewOne(deps: IdeasJobDeps, anthropic: Anthropic, id: string, result: IdeasRunResult): Promise<void> {
+type Outcome = "next" | "stop";
+
+async function reviewOne(
+  deps: IdeasJobDeps,
+  anthropic: Anthropic,
+  id: string,
+  result: IdeasRunResult,
+  signal: AbortSignal,
+): Promise<Outcome> {
   const { store } = deps;
   try {
     const [idea, settings] = await Promise.all([store.getIdea(id), store.settings(id)]);
     if (!idea || !settings) throw new Error("missing");
+    if (idea.state !== "open") {
+      await store.releaseClaim(id, "none");
+      return "next";
+    }
     const others = (await store.openIdeaTitles()).filter((o) => o.id !== id);
     let cost = 0;
     const { review, model } = await reviewIdea({
@@ -83,39 +114,66 @@ async function reviewOne(deps: IdeasJobDeps, anthropic: Anthropic, id: string, r
       others,
       note: settings.reviewNote,
       webSearch: !deps.webSearchOff && !settings.noWebSearch,
+      signal,
+      beforeCall: async () => {
+        if (!capState(await deps.spend(), deps.budgetUsd).reviews) throw new CapReached();
+      },
       record: async (call) => {
-        cost += await store.recordUsage({ model: call.model, itemId: id, purpose: call.purpose, usage: call.usage });
+        try {
+          cost += await store.recordUsage({ model: call.model, itemId: id, purpose: call.purpose, usage: call.usage });
+        } catch (e) {
+          console.error(`ideas usage not recorded ${id} ${call.model} in=${call.usage.input_tokens} out=${call.usage.output_tokens}`);
+          throw e;
+        }
       },
     });
     await store.saveReview(id, review, model, cost, settings.reviewNote);
     result.reviewed.push(id);
+    return "next";
   } catch (e) {
-    const code = failCode(e);
+    if (e instanceof CapReached) {
+      await store.releaseClaim(id, "paused");
+      await pauseForCap(deps, await deps.spend());
+      result.paused = true;
+      return "stop";
+    }
+    const code = failCode(e, signal);
     console.error(`ideas review failed for ${id}: ${code}`);
+    if (isPassing(e, signal)) {
+      await store.releaseClaim(id, "waiting");
+      return "stop";
+    }
     await store.failReview(id, code);
     result.failed.push(id);
+    return "next";
   }
 }
 
 async function reviewStep(deps: IdeasJobDeps, startedAt: number, result: IdeasRunResult): Promise<void> {
   const anthropic = deps.anthropic;
   if (!anthropic) return;
-  const stopAt = startedAt + deps.deadlineMs - START_MARGIN_MS;
-  let resumed = false;
-  while (deps.now().getTime() <= stopAt) {
-    const spend = await deps.spend();
-    if (!capState(spend, deps.budgetUsd).reviews) {
-      await pauseForCap(deps, spend);
-      result.paused = true;
-      return;
+  const deadline = startedAt + deps.deadlineMs;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(0, deadline - ABORT_MARGIN_MS - deps.now().getTime()));
+  try {
+    let resumed = false;
+    while (deps.now().getTime() <= deadline - START_MARGIN_MS) {
+      const spend = await deps.spend();
+      if (!capState(spend, deps.budgetUsd).reviews) {
+        await pauseForCap(deps, spend);
+        result.paused = true;
+        return;
+      }
+      if (!resumed) {
+        await deps.store.resumePaused();
+        resumed = true;
+      }
+      const id = await deps.store.claimReview();
+      if (!id) return;
+      if ((await reviewOne(deps, anthropic, id, result, controller.signal)) === "stop") return;
     }
-    if (!resumed) {
-      await deps.store.resumePaused();
-      resumed = true;
-    }
-    const id = await deps.store.claimReview();
-    if (!id) return;
-    await reviewOne(deps, anthropic, id, result);
+  } finally {
+    clearTimeout(timer);
   }
 }
 

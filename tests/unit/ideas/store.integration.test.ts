@@ -98,4 +98,21 @@ describe.skipIf(!enabled)("ideas job store against local Supabase", () => {
     await store.setFlag(key, "sent");
     expect(await store.getFlag(key)).toBe("sent");
   });
+
+  it("releases a claim uncounted, and a late save or failure cannot overwrite a finished review", async () => {
+    const store = createIdeasJobStore(client());
+    const idea = await newIdea();
+    expect(await store.claimReview()).toBe(idea.id);
+    await store.releaseClaim(idea.id, "paused");
+    expect(await store.settings(idea.id)).toMatchObject({ reviewStatus: "paused", reviewAttempts: 0 });
+    await store.releaseClaim(idea.id, "waiting");
+    expect((await store.settings(idea.id))?.reviewStatus).toBe("paused");
+
+    await client().from("idea_settings").update({ review_status: "waiting" }).eq("item_id", idea.id);
+    expect(await store.claimReview()).toBe(idea.id);
+    await store.saveReview(idea.id, validReview(), "claude-opus-5-5", 0.1, null);
+    await store.failReview(idea.id, "schema");
+    await store.releaseClaim(idea.id, "none");
+    expect(await store.settings(idea.id)).toMatchObject({ reviewStatus: "done", reviewAttempts: 0, lastError: null });
+  });
 });

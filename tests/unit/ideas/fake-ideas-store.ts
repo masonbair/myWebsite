@@ -84,6 +84,10 @@ export function createFakeIdeasStore() {
       s.lastError = code;
       return s.reviewStatus;
     },
+    async releaseClaim(id, status) {
+      const s = rows.settings.get(id)!;
+      if (s.reviewStatus === "working") s.reviewStatus = status;
+    },
     pauseWaiting: async () => setStatus("waiting", "paused"),
     resumePaused: async () => setStatus("paused", "waiting"),
     async recordUsage(row) {

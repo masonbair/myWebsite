@@ -20,6 +20,8 @@ export type IdeasJobStore = {
   saveReview(id: string, review: IdeaReview, model: ModelId, costUsd: number, note: string | null): Promise<number>;
   /** Counts one real failure: back to waiting, or failed on the second. */
   failReview(id: string, code: string): Promise<ReviewStatus>;
+  /** Gives a claim back with no attempt counted: waiting after a passing error, paused at the cap, none for a closed idea. */
+  releaseClaim(id: string, status: "waiting" | "paused" | "none"): Promise<void>;
   pauseWaiting(): Promise<number>;
   resumePaused(): Promise<number>;
   recordUsage(row: { model: ModelId; itemId: string; purpose: string; usage: ClaudeUsage }): Promise<number>;
@@ -126,7 +128,8 @@ export function createIdeasJobStore(client: SupabaseClient): IdeasJobStore {
       const { error } = await client
         .from("idea_settings")
         .update({ review_status: "done", review_attempts: 0, review_claimed_at: null, last_error: null, review_note: null })
-        .eq("item_id", id);
+        .eq("item_id", id)
+        .eq("review_status", "working");
       if (error) throw error;
       await audit("idea-review", id, { version, model });
       return version;
@@ -136,13 +139,25 @@ export function createIdeasJobStore(client: SupabaseClient): IdeasJobStore {
       const current = await readSettings(id);
       const attempts = (current?.reviewAttempts ?? 0) + 1;
       const status: ReviewStatus = attempts >= MAX_FAILED_ATTEMPTS ? "failed" : "waiting";
-      const { error } = await client
+      const { data, error } = await client
         .from("idea_settings")
         .update({ review_status: status, review_attempts: attempts, review_claimed_at: null, last_error: code })
-        .eq("item_id", id);
+        .eq("item_id", id)
+        .eq("review_status", "working")
+        .select("item_id");
       if (error) throw error;
+      if ((data ?? []).length === 0) return current?.reviewStatus ?? "none";
       await audit("idea-review-failed", id, { code, attempts });
       return status;
+    },
+
+    async releaseClaim(id, status) {
+      const { error } = await client
+        .from("idea_settings")
+        .update({ review_status: status, review_claimed_at: null })
+        .eq("item_id", id)
+        .eq("review_status", "working");
+      if (error) throw error;
     },
 
     pauseWaiting: () => moveStatus("waiting", "paused"),

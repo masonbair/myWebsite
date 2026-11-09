@@ -40,3 +40,11 @@ export class ReviewFailed extends Error {
     this.name = "ReviewFailed";
   }
 }
+
+/** Spend reached the monthly cap before a paid call; the idea goes back in line, not counted as a failure. */
+export class CapReached extends Error {
+  constructor() {
+    super("ideas monthly cap reached");
+    this.name = "CapReached";
+  }
+}

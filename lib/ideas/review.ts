@@ -44,6 +44,10 @@ export type ReviewInput = {
   webSearch: boolean;
   /** Called after every billed call, before any failure is thrown, so spend is never lost. */
   record: (call: ReviewCall) => Promise<void>;
+  /** Called before every paid call, pause resends included; throws CapReached at the cap. */
+  beforeCall: () => Promise<void>;
+  /** Aborts an in-flight call before the function's time limit kills it. */
+  signal?: AbortSignal;
 };
 
 // A closing tag inside the data could end the block early and let the rest read as instructions.
@@ -89,17 +93,22 @@ async function findSimilar(input: ReviewInput): Promise<string> {
   const messages: BetaMessageParam[] = [{ role: "user", content: ideaBlock(input.idea) }];
   const texts: string[] = [];
   for (let resends = 0; ; resends += 1) {
+    await input.beforeCall();
     const message = await input.client.beta.messages
-      .stream({
-        model: REVIEW_MODEL,
-        max_tokens: 16000,
-        betas: [FALLBACK_BETA],
-        fallbacks: "default",
-        system: SEARCH_SYSTEM,
-        tools: [WEB_SEARCH_TOOL],
-        output_config: { effort: "medium" },
-        messages,
-      })
+      .stream(
+        {
+          model: REVIEW_MODEL,
+          max_tokens: 16000,
+          betas: [FALLBACK_BETA],
+          fallbacks: "default",
+          thinking: { type: "adaptive" },
+          system: SEARCH_SYSTEM,
+          tools: [WEB_SEARCH_TOOL],
+          output_config: { effort: "medium" },
+          messages,
+        },
+        { signal: input.signal },
+      )
       .finalMessage();
     await input.record({ purpose: "similar", model: servedBy(message), usage: message.usage });
     if (message.stop_reason === "refusal") throw new ReviewFailed("refusal");
@@ -137,16 +146,21 @@ const REVIEW_FORMAT = { type: "json_schema" as const, schema: betaZodOutputForma
 /** One honest review of an idea; with web search on, a search call runs first and feeds the review as data. */
 export async function reviewIdea(input: ReviewInput): Promise<{ review: IdeaReview; model: ModelId }> {
   const searchNotes = input.webSearch ? await findSimilar(input) : null;
+  await input.beforeCall();
   const message = await input.client.beta.messages
-    .stream({
-      model: REVIEW_MODEL,
-      max_tokens: 32000,
-      betas: [FALLBACK_BETA],
-      fallbacks: "default",
-      system: [{ type: "text", text: ABOUT_MASON, cache_control: { type: "ephemeral" } }],
-      output_config: { effort: "high", format: REVIEW_FORMAT },
-      messages: [{ role: "user", content: reviewPrompt(input, searchNotes) }],
-    })
+    .stream(
+      {
+        model: REVIEW_MODEL,
+        max_tokens: 32000,
+        betas: [FALLBACK_BETA],
+        fallbacks: "default",
+        thinking: { type: "adaptive" },
+        system: [{ type: "text", text: ABOUT_MASON, cache_control: { type: "ephemeral" } }],
+        output_config: { effort: "high", format: REVIEW_FORMAT },
+        messages: [{ role: "user", content: reviewPrompt(input, searchNotes) }],
+      },
+      { signal: input.signal },
+    )
     .finalMessage();
   const model = servedBy(message);
   await input.record({ purpose: "review", model, usage: message.usage });

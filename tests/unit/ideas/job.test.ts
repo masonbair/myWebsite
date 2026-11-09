@@ -1,3 +1,4 @@
+import { APIUserAbortError } from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import { budgetFromEnv, capState, runIdeasJob, type IdeasJobDeps } from "@/lib/ideas/job";
@@ -85,18 +86,77 @@ describe("runIdeasJob reviews", () => {
     log.mockRestore();
   });
 
-  it("stores an API error as a code, not text", async () => {
+  it("gives a claim back uncounted on a passing API error and stops the run", async () => {
     const h = harness();
-    const idea = h.seed();
-    const failing = { beta: { messages: { stream: () => ({ finalMessage: async () => Promise.reject(Object.assign(new Error("overloaded"), { status: 529 })) }) } } };
+    const a = h.seed();
+    h.seed();
+    let streams = 0;
+    const failing = {
+      beta: { messages: { stream: () => (streams++, { finalMessage: async () => Promise.reject(Object.assign(new Error("overloaded"), { status: 529 })) }) } },
+    };
     vi.spyOn(console, "error").mockImplementation(() => {});
-    await runIdeasJob({ ...h.deps, anthropic: failing as unknown as IdeasJobDeps["anthropic"] });
-    expect(h.rows.settings.get(idea.id)?.lastError).toBe("api_529");
+    const result = await runIdeasJob({ ...h.deps, anthropic: failing as unknown as IdeasJobDeps["anthropic"] });
+    expect(streams).toBe(1);
+    expect(result.failed).toEqual([]);
+    expect(h.rows.settings.get(a.id)).toMatchObject({ reviewStatus: "waiting", reviewAttempts: 0 });
     vi.mocked(console.error).mockRestore();
   });
 
+  it("still counts a permanent API error as an attempt", async () => {
+    const h = harness();
+    const idea = h.seed();
+    const failing = { beta: { messages: { stream: () => ({ finalMessage: async () => Promise.reject(Object.assign(new Error("bad"), { status: 400 })) }) } } };
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await runIdeasJob({ ...h.deps, anthropic: failing as unknown as IdeasJobDeps["anthropic"] });
+    expect(h.rows.settings.get(idea.id)).toMatchObject({ reviewStatus: "failed", reviewAttempts: 2, lastError: "api_400" });
+    vi.mocked(console.error).mockRestore();
+  });
+
+  it("aborts a call still running near the deadline and gives the claim back uncounted", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const h = harness();
+    const idea = h.seed();
+    const hanging = {
+      beta: {
+        messages: {
+          stream: (_params: unknown, options: { signal: AbortSignal }) => ({
+            finalMessage: () => new Promise((_, reject) => options.signal.addEventListener("abort", () => reject(new APIUserAbortError()))),
+          }),
+        },
+      },
+    };
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const run = runIdeasJob({ ...h.deps, anthropic: hanging as unknown as IdeasJobDeps["anthropic"] });
+    await vi.advanceTimersByTimeAsync(270_000 - 15_000);
+    const result = await run;
+    expect(result.failed).toEqual([]);
+    expect(h.rows.settings.get(idea.id)).toMatchObject({ reviewStatus: "waiting", reviewAttempts: 0 });
+    vi.mocked(console.error).mockRestore();
+    vi.useRealTimers();
+  });
+
+  it("closes the review of an idea that is no longer open, with no Claude call", async () => {
+    const h = harness([ok()]);
+    const done = h.seed({ state: "done" });
+    const result = await runIdeasJob(h.deps);
+    expect(h.anthropic.sent).toHaveLength(0);
+    expect(result.reviewed).toEqual([]);
+    expect(h.rows.settings.get(done.id)?.reviewStatus).toBe("none");
+  });
+
+  it("logs ids and token counts when usage cannot be recorded", async () => {
+    const h = harness([ok()]);
+    const idea = h.seed({ title: "secret title" });
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await runIdeasJob({ ...h.deps, store: { ...h.store, recordUsage: async () => Promise.reject(new Error("insert failed")) } });
+    const logged = log.mock.calls.flat().join(" ");
+    expect(logged).toContain(`ideas usage not recorded ${idea.id} claude-opus-5-5 in=1000 out=500`);
+    expect(logged).not.toContain("secret title");
+    log.mockRestore();
+  });
+
   it("starts no new review once the deadline margin is reached", async () => {
-    const h = harness([ok()], { deadlineMs: 60_000 });
+    const h = harness([ok()], { deadlineMs: 149_000 });
     const idea = h.seed();
     const result = await runIdeasJob(h.deps);
     expect(result.reviewed).toEqual([]);
@@ -145,6 +205,17 @@ describe("runIdeasJob cost cap", () => {
     expect(h.anthropic.sent).toHaveLength(0);
     expect(h.rows.reviews).toHaveLength(1);
     expect(h.rows.settings.get(idea.id)?.reviewStatus).toBe("paused");
+  });
+
+  it("checks the cap before the review call, so a pricey search stops it with no attempt counted", async () => {
+    const search: FakeReply = { ...textReply("Bread Timer https://breadtimer.example"), usage: usage(10_000, 2_000) };
+    const h = harness([search, ok()], { baseSpend: 19.95, webSearchOff: false });
+    const idea = h.seed();
+    const result = await runIdeasJob(h.deps);
+    expect(h.anthropic.sent).toHaveLength(1);
+    expect(result).toMatchObject({ reviewed: [], failed: [], paused: true });
+    expect(h.rows.settings.get(idea.id)).toMatchObject({ reviewStatus: "paused", reviewAttempts: 0 });
+    expect(h.sent).toHaveLength(1);
   });
 
   it("checks the cap before every review, so spend inside a run stops the next one", async () => {
