@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(77);
+select plan(79);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a1', 'ideas-owner@example.com'),
@@ -167,6 +167,15 @@ select throws_ok(
 select lives_ok(
   $$ update public.idea_settings set review_status = 'waiting', review_requested_at = now() where item_id = 'd0000000-0000-0000-0000-000000000006' $$,
   'the owner can restart a review whose claim went stale');
+select throws_ok(
+  $$ update public.idea_settings set review_status = 'waiting', review_attempts = 0 where item_id = 'd0000000-0000-0000-0000-000000000005' $$,
+  '42501', null, 'the owner cannot set attempts directly, even while retrying');
+update public.idea_settings set review_status = 'waiting', review_requested_at = now()
+  where item_id = 'd0000000-0000-0000-0000-000000000005';
+select results_eq(
+  $$ select review_status, review_attempts, last_error from public.idea_settings where item_id = 'd0000000-0000-0000-0000-000000000005' $$,
+  $$ values ('waiting'::text, 0, null::text) $$,
+  'retrying a failed review starts it with no attempts and no error');
 select lives_ok(
   $$ update public.idea_settings set no_web_search = true where item_id = 'd0000000-0000-0000-0000-000000000003' $$,
   'the owner can change other settings while a review is done');

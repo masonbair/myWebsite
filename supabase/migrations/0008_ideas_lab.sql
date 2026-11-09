@@ -123,6 +123,11 @@ begin
         or new.last_error is distinct from old.last_error then
     raise exception 'only the ideas job changes review bookkeeping';
   end if;
+  -- A retry starts fresh, or the first stale re-claim would fail it again on the old attempt count.
+  if tg_op = 'UPDATE' and new.review_status = 'waiting' and old.review_status not in ('waiting', 'working') then
+    new.review_attempts := 0;
+    new.last_error := null;
+  end if;
   return new;
 end;
 $$;
