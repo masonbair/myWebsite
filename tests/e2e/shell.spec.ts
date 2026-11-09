@@ -56,3 +56,18 @@ test("no em dashes", async ({ page }) => {
   expect(text).not.toContain("—");
   expect(text).not.toContain("–");
 });
+
+// Tailwind v4's outline-none zeroes the outline style that focus-visible:outline-2 reads, so a ring can be set and still never draw.
+test("keyboard focus draws a visible outline", async ({ page }) => {
+  await page.goto("/coffee");
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press("Tab");
+    const ring = await page.evaluate(() => {
+      const s = getComputedStyle(document.activeElement!);
+      return { style: s.outlineStyle, width: parseFloat(s.outlineWidth), tag: document.activeElement!.tagName };
+    });
+    if (ring.tag === "BODY") continue;
+    expect(ring.style, `focus ring on tab stop ${i + 1}`).not.toBe("none");
+    expect(ring.width).toBeGreaterThanOrEqual(2);
+  }
+});
