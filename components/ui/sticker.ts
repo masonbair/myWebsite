@@ -10,6 +10,6 @@ export const stickerButton = `${stickerButtonShape} border-line bg-ink text-canv
 /** Round tea bubble at the end of a sticker button. */
 export const buttonBubble = "flex size-9 items-center justify-center rounded-full bg-tea text-night";
 
-/** Small outlined label; add border and fill colors. */
+/** Small outlined label; add border, fill and text size (usually text-[11px]). */
 export const tag =
-  "inline-block rounded-full border-2 px-2.5 py-0.5 text-[11px] leading-snug font-bold tracking-[0.04em] whitespace-nowrap";
+  "inline-block rounded-full border-2 px-2.5 py-0.5 leading-snug font-bold tracking-[0.04em] whitespace-nowrap";

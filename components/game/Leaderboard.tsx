@@ -14,7 +14,7 @@ import {
 import { game, useGame } from "./store";
 
 const SHOWN = 10;
-const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink";
 const OFFLINE = "Couldn't reach the leaderboard. Saved on this device.";
 const FOOTER = { loading: "", shared: "Scores are shared with everyone.", local: "Scores are saved on this device." };
 
@@ -87,7 +87,7 @@ export function Leaderboard({ onClose }: { onClose: () => void }) {
       transition={{ duration: reduce ? 0 : 0.35, ease: [0.32, 0.72, 0, 1] }}
       className="pointer-events-auto fixed inset-x-4 top-20 origin-top-right rounded-tile border-[2.5px] border-line bg-surface p-1.5 shadow-tile md:absolute md:inset-x-auto md:top-[calc(100%+0.875rem)] md:right-0 md:w-[22rem]"
     >
-      <div className="rounded-[calc(1.5rem-0.375rem)] bg-surface p-5">
+      <div className="p-5">
         <div className="flex items-center justify-between gap-4">
           <h2 id="leaderboard-title" className="text-lg font-bold tracking-tight text-ink">
             Leaderboard

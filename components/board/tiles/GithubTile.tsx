@@ -8,7 +8,7 @@ const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-of
 const plural = (n: number, word: string) => `${word}${n === 1 ? "" : "s"}`;
 const countFormat = new Intl.NumberFormat("en-US");
 
-// Geist Mono gives the comma a full digit slot, so separators use the sans font to keep "1,331" tight.
+// JetBrains Mono gives the comma a full digit slot, so separators use the sans font to keep "1,331" tight.
 function Count({ n }: { n: number }) {
   return countFormat.formatToParts(n).map((p, i) =>
     p.type === "group" ? (
@@ -50,8 +50,8 @@ export function GithubTile({ github }: { github: GithubActivity | null }) {
       <div>
         <Prompt className="text-mute">git log --me</Prompt>
         <div className="mt-2 flex items-center justify-between gap-2">
-          <span className={`${tag} border-line bg-surface text-ink`}>GitHub</span>
-          <a href={PROFILE} target="_blank" rel="noopener noreferrer" className={`rounded-full font-bold text-ink ${focusRing}`}>
+          <span className={`${tag} text-[11px] border-line bg-surface text-ink`}>GitHub</span>
+          <a href={PROFILE} target="_blank" rel="noopener noreferrer" aria-label="masonbair on GitHub" className={`rounded-full font-bold text-ink ${focusRing}`}>
             masonbair
           </a>
         </div>

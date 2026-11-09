@@ -141,7 +141,7 @@ export function CatGame() {
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: "spring", stiffness: 260, damping: 18 }}
             style={{ left: circle.x, top: circle.y, width: circle.size, height: circle.size }}
-            className="fixed z-40 cursor-pointer rounded-full bg-[radial-gradient(circle_at_32%_28%,var(--color-tea),var(--color-accent)_70%)] shadow-tile ring-4 ring-surface outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+            className="fixed z-40 cursor-pointer rounded-full bg-[radial-gradient(circle_at_32%_28%,var(--color-tea),var(--color-accent)_70%)] shadow-tile ring-4 ring-surface outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-ink"
           />
       )}
       {pops.map((p) => (
@@ -198,7 +198,7 @@ export function CatGame() {
             initial={false}
             animate={{ opacity: color ? 1 : 0 }}
             transition={{ duration: reduce ? 0 : 0.5, ease }}
-            className="group pointer-events-auto relative size-[58px] cursor-pointer rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent min-[501px]:size-20"
+            className="group pointer-events-auto relative size-[58px] cursor-pointer rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-ink min-[501px]:size-20"
           >
             <span className="block transition-transform duration-300 ease-spring group-hover:-translate-y-0.5 group-active:scale-95 motion-reduce:transition-none">
               {color && <Cat stage={stage} color={color} />}

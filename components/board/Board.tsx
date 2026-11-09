@@ -8,7 +8,6 @@ import { LocationTile } from "./tiles/LocationTile";
 import { PhotoTile } from "./tiles/PhotoTile";
 import { ProjectsTile } from "./tiles/ProjectsTile";
 
-// The hello tile already shows Mason_web, so the empty-album fallback is a different photo.
 const FALLBACK_PHOTO: Photo = {
   src: "/misc/Mason_traveling.webp",
   alt: "Mason smiling in a red bucket hat and sunglasses, taking a selfie on a roadside with green mountains behind him",

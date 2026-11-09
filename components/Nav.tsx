@@ -18,7 +18,7 @@ export function Nav() {
   return (
     <header className="pointer-events-none fixed inset-x-0 top-3 z-50 flex justify-center px-4 md:top-5">
       {/* Only the pill takes clicks, so game circles beside it stay reachable. */}
-            <nav
+      <nav
         aria-label="Main"
         className="pointer-events-auto relative flex h-14 w-full items-center justify-between gap-6 rounded-full border-[2.5px] border-line bg-surface pr-1.5 pl-1.5 shadow-sticker-sm md:w-auto"
       >

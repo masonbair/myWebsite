@@ -24,7 +24,7 @@ export function ItemRow({
   return (
     <li
       data-just-saved={justSaved || undefined}
-      className={`${sticker} relative flex items-start gap-1 py-1 pr-4 pl-1 transition-[translate] duration-200 ease-spring hover:-translate-y-px ${justSaved ? "bg-accent/25" : ""}`}
+      className={`${sticker} relative flex items-start gap-1 py-1 pr-4 pl-1 transition-[translate] duration-200 ease-spring hover:-translate-y-px bg-surface ${justSaved ? "ring-4 ring-accent" : ""}`}
     >
       {/* Above the row-wide link overlay, so the tap lands on Done and not on the item. */}
       <form action={completeItem.bind(null, item.id)} className="relative z-10">

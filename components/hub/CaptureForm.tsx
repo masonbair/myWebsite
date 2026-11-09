@@ -61,7 +61,6 @@ export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
           save();
         }}
       >
-        <div>
           <div className="rounded-tile border-[2.5px] border-line bg-surface shadow-tile">
             <label htmlFor="capture-text" className="sr-only">
               Capture
@@ -108,7 +107,6 @@ export function CaptureForm({ emptyShare }: { emptyShare: boolean }) {
               </button>
             </div>
           </div>
-        </div>
       </form>
 
       {voice.supported && <p className="mt-3 px-2 text-xs text-mute">Voice is turned into text by Google.</p>}

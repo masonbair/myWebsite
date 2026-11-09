@@ -43,7 +43,7 @@ export function NavMenu({ links }: { links: NavLink[] }) {
         aria-controls="mobile-menu"
         aria-label={open ? "Close menu" : "Open menu"}
         onClick={() => setOpen((o) => !o)}
-        className="relative size-10 rounded-full border-2 border-line bg-surface outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.96] md:hidden"
+        className="relative size-10 rounded-full border-2 border-line bg-surface outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink active:scale-[0.96] md:hidden"
       >
         <span className={`${bar} top-1/2 ${open ? "rotate-45" : "-translate-y-[3.5px]"}`} />
         <span className={`${bar} top-1/2 ${open ? "-rotate-45" : "translate-y-[3.5px]"}`} />

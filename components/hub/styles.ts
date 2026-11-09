@@ -4,7 +4,7 @@ export const focusRing =
 export const panel = "rounded-tile border-[2.5px] border-line bg-surface shadow-tile";
 
 /** Small sticker for rows and chips inside a page. */
-export const sticker = "rounded-2xl border-[2.5px] border-line bg-surface shadow-sticker-sm";
+export const sticker = "rounded-2xl border-[2.5px] border-line shadow-sticker-sm";
 
 export const primaryButton = `inline-flex h-10 items-center gap-2 rounded-full border-[2.5px] border-line bg-accent px-5 text-sm font-bold text-night shadow-sticker-sm transition-[translate,box-shadow] duration-200 ease-spring active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-60 ${focusRing}`;
 
@@ -12,4 +12,4 @@ export const quietButton = `inline-flex h-10 items-center gap-2 rounded-full bor
 
 export const smallButton = `inline-flex h-9 items-center rounded-full border-2 border-line bg-surface px-3.5 text-sm font-semibold text-ink transition-colors duration-200 ease-spring hover:bg-canvas disabled:opacity-60 ${focusRing}`;
 
-export const field = `h-9 rounded-xl border-0 bg-canvas px-3 text-sm text-ink ring-1 ring-ink/10 placeholder:text-mute focus-visible:ring-2 focus-visible:ring-accent outline-none`;
+export const field = `h-9 rounded-xl border-2 border-line bg-canvas px-3 text-sm text-ink placeholder:text-mute focus-visible:ring-2 focus-visible:ring-accent-ink outline-none`;
