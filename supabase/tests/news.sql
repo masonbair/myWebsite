@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(121);
+select plan(125);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a9', 'news-owner@example.com'),
@@ -15,6 +15,22 @@ select is(
   'the six newsletters and shared are seeded');
 select is(
   (select public from public.news_sources where id = 'shared'), false, 'shared is never public');
+select is(
+  (select jsonb_object_agg(id, sender_addresses) from public.news_sources
+   where id in ('mindstream', 'superhuman', 'the-hustle', 'tech-brew')),
+  '{"mindstream": ["hello@mindstream.news"], "superhuman": ["superhuman@mail.joinsuperhuman.ai"],
+    "the-hustle": ["news@thehustle.co"], "tech-brew": ["techbrew@morningbrew.com"]}'::jsonb,
+  'four sources have exactly their sender addresses');
+select is(
+  (select array_agg(id order by id) from public.news_sources
+   where sender_addresses = '{}' and id not in ('shared')),
+  array['morning-brew', 'rundown-ai'], 'morning-brew and rundown-ai have no address yet');
+select is(
+  (select count(*)::int from public.news_sources where sender_domains <> '{}'),
+  0, 'no source matches by domain');
+select is(
+  (select count(*)::int from public.news_sources where archive_pattern is not null),
+  0, 'archive_pattern is null for every source');
 
 select is(
   (select count(*)::int from pg_class c join pg_namespace n on n.oid = c.relnamespace
@@ -268,7 +284,7 @@ select results_eq(
 select results_eq(
   $$ select source_id, public_url from public.news_trends_coverage
      where day = '2001-01-02' and kind = 'topic' and key = 'test-chips' order by source_id $$,
-  $$ values ('morning-brew', 'https://www.morningbrew.com/daily/issues/2001-01-02'), ('tech-brew', 'https://www.morningbrew.com/tech') $$,
+  $$ values ('morning-brew', 'https://www.morningbrew.com/daily/issues/2001-01-02'), ('tech-brew', 'https://www.techbrew.com') $$,
   'coverage links the issue or falls back to the homepage');
 select is(
   (select count(*)::int from public.news_trends_daily where key = 'test-hidden')
@@ -302,7 +318,7 @@ select results_eq(
   'public trends label topics by name');
 select results_eq(
   $$ select source_name, public_url from public.news_public_coverage('topic', 'test-chips', '2001-01-01') order by source_name $$,
-  $$ values ('Morning Brew', 'https://www.morningbrew.com/daily/issues/2001-01-02'), ('Tech Brew', 'https://www.morningbrew.com/tech') $$,
+  $$ values ('Morning Brew', 'https://www.morningbrew.com/daily/issues/2001-01-02'), ('Tech Brew', 'https://www.techbrew.com') $$,
   'public coverage names each newsletter');
 
 select results_eq(
