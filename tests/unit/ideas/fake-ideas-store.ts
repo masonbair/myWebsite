@@ -1,14 +1,13 @@
 import { costOf } from "@/lib/ai/claude";
 import { ClaimLost, type IdeasJobStore } from "@/lib/ideas/store";
-import type { IdeaReview, IdeaSettings, ReviewStatus, SourceKind } from "@/lib/ideas/types";
+import type { IdeaReview, IdeaSettings, ReviewStatus, SavedIdea, SourceKind } from "@/lib/ideas/types";
 import type { Comment, Item } from "@/lib/hub/types";
 
 export type FakeSource = {
   itemId: string;
   kind: SourceKind;
   status: "pending" | "done" | "failed";
-  ideaIds: string[];
-  quotes: string[];
+  ideas: SavedIdea[];
   attempts: number;
   model: string | null;
   lastError: string | null;
@@ -125,28 +124,39 @@ export function createFakeIdeasStore() {
       rows.flags.set(key, value);
     },
     async ideaQuote(id) {
-      const source = [...rows.sources.values()].find((s) => s.ideaIds.includes(id));
-      return source ? (source.quotes[source.ideaIds.indexOf(id)] ?? null) : null;
+      const entries = [...rows.sources.values()].flatMap((s) => s.ideas).filter((i) => i.outcome?.id === id);
+      return (entries.find((i) => i.outcome?.kind !== "mention") ?? entries[0])?.quote ?? null;
     },
     async claimSource(kinds) {
       const next = [...rows.sources.values()].find((s) => s.status === "pending" && s.attempts < 3 && !s.claimed && kinds.includes(s.kind));
       if (!next) return null;
       next.claimed = true;
-      return { itemId: next.itemId, kind: next.kind };
+      next.attempts += 1;
+      const saved = next.ideas.length ? { ideas: structuredClone(next.ideas), model: next.model as "claude-haiku-5-5" | null } : null;
+      return { itemId: next.itemId, kind: next.kind, saved };
     },
     listComments: async (id) => rows.comments.filter((c) => c.itemId === id),
-    async finishSource(id, ideaIds, quotes, model) {
+    async saveIdeas(id, ideas, model) {
       const source = rows.sources.get(id)!;
       if (source.status !== "pending" || !source.claimed) throw new ClaimLost(id);
-      Object.assign(source, { status: "done", ideaIds, quotes, model, claimed: false });
+      Object.assign(source, { ideas: structuredClone(ideas), model });
+    },
+    async finishSource(id, ideas, model) {
+      const source = rows.sources.get(id)!;
+      if (source.status !== "pending" || !source.claimed) throw new ClaimLost(id);
+      Object.assign(source, { status: "done", ideas: structuredClone(ideas), model, claimed: false });
     },
     async failSource(id, code) {
       const source = rows.sources.get(id)!;
-      source.attempts += 1;
       source.status = source.attempts >= 3 ? "failed" : "pending";
       source.lastError = code;
       source.claimed = false;
       return source.status;
+    },
+    async releaseSource(id) {
+      const source = rows.sources.get(id)!;
+      source.attempts -= 1;
+      source.claimed = false;
     },
     async moveCaptureToIdeas(id) {
       const item = rows.items.get(id)!;
@@ -220,7 +230,7 @@ export function createFakeIdeasStore() {
   function seedSource(item: Partial<Item> = {}, kind: SourceKind = "capture"): Item {
     const seeded = ideaItem({ labels: [], list: "inbox", ...item });
     rows.items.set(seeded.id, seeded);
-    rows.sources.set(seeded.id, { itemId: seeded.id, kind, status: "pending", ideaIds: [], quotes: [], attempts: 0, model: null, lastError: null, claimed: false });
+    rows.sources.set(seeded.id, { itemId: seeded.id, kind, status: "pending", ideas: [], attempts: 0, model: null, lastError: null, claimed: false });
     return seeded;
   }
 

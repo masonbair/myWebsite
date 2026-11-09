@@ -4,7 +4,17 @@ import { recordUsage, type ClaudeUsage, type ModelId } from "@/lib/ai/claude";
 import { auditActor } from "@/lib/hub/rules";
 import { createHubStore } from "@/lib/hub/store";
 import type { Actor, Comment, Item } from "@/lib/hub/types";
-import { PROMPT_VERSION, type IdeaReview, type IdeaSettings, type ReviewStatus, type SourceKind } from "./types";
+import { z } from "zod";
+import {
+  PROMPT_VERSION,
+  SAVED_IDEA,
+  type IdeaReview,
+  type IdeaSettings,
+  type MemoIdeas,
+  type ReviewStatus,
+  type SavedIdea,
+  type SourceKind,
+} from "./types";
 
 /** The idea is no longer claimed by this run (a stale re-claim or Mason's change); its review must not be saved. */
 export class ClaimLost extends Error {
@@ -22,7 +32,8 @@ const OPEN_IDEAS_LIMIT = 200;
 const SOURCE_LEASE_MS = 10 * 60 * 1000;
 const SOURCE_CANDIDATES = 20;
 
-export type ClaimedSource = { itemId: string; kind: SourceKind };
+/** A claimed source; `saved` is the detection a failed earlier run already made, to file from instead of asking again. */
+export type ClaimedSource = { itemId: string; kind: SourceKind; saved: { ideas: SavedIdea[]; model: ModelId | null } | null };
 /** Where a new idea came from, for its client key and description footer. */
 export type IdeaOrigin = { itemId: string; url: string; recorded: string };
 
@@ -46,13 +57,17 @@ export type IdeasJobStore = {
   setFlag(key: string, value: unknown): Promise<void>;
   /** The quote detection stored for this idea, or null for a typed or saved idea. */
   ideaQuote(id: string): Promise<string | null>;
-  /** Takes the oldest pending source of these kinds with attempts left; two runs never take the same one. */
+  /** Takes the oldest pending source of these kinds and counts an attempt; two runs never take the same one. */
   claimSource(kinds: SourceKind[]): Promise<ClaimedSource | null>;
   listComments(id: string): Promise<Comment[]>;
-  /** Marks our claimed source done with what it produced; throws ClaimLost if another run took it. */
-  finishSource(id: string, ideaIds: string[], quotes: string[], model: ModelId | null): Promise<void>;
-  /** Counts one real failure: failed on the third, otherwise pending for a later run. */
+  /** Saves the detected ideas and each one's outcome so far on our claimed source; throws ClaimLost if another run took it. */
+  saveIdeas(id: string, ideas: SavedIdea[], model: ModelId | null): Promise<void>;
+  /** Marks our claimed source done with its ideas and their outcomes; throws ClaimLost if another run took it. */
+  finishSource(id: string, ideas: SavedIdea[], model: ModelId | null): Promise<void>;
+  /** Records a real failure on the attempt the claim counted: failed on the third, otherwise pending for a later run. */
   failSource(id: string, code: string): Promise<"pending" | "failed">;
+  /** Gives back the claim's attempt after a passing error or the cap, which say nothing about the source. */
+  releaseSource(id: string): Promise<void>;
   /** Files an inbox capture under ideas as it is, and queues its review. */
   moveCaptureToIdeas(id: string): Promise<void>;
   /** Makes (once per source and index) a new idea item holding the quote, and queues its review; returns its id. */
@@ -101,9 +116,10 @@ export function createIdeasJobStore(client: SupabaseClient, sourceLeaseMs = SOUR
     if ((data ?? []).length === 0) throw new ClaimLost(id);
   }
 
-  // The updated_at this run's claim set per source; a finish or failure must still match it.
-  const sourceClaims = new Map<string, string>();
+  // The updated_at this run's last write set per source, and the attempts its claim counted; each write must still match it.
+  const sourceClaims = new Map<string, { stamp: string; attempts: number }>();
 
+  /** One guarded write to our claimed source; a write that leaves it pending keeps the claim with the new stamp. */
   async function updateOwnSource(id: string, columns: Record<string, unknown>): Promise<void> {
     const held = sourceClaims.get(id);
     if (!held) throw new ClaimLost(id);
@@ -112,12 +128,20 @@ export function createIdeasJobStore(client: SupabaseClient, sourceLeaseMs = SOUR
       .update(columns)
       .eq("source_item_id", id)
       .eq("status", "pending")
-      .eq("updated_at", held)
-      .select("updated_at");
+      .eq("updated_at", held.stamp)
+      .select("updated_at, status");
     if (error) throw error;
-    if ((data ?? []).length === 0) throw new ClaimLost(id);
-    sourceClaims.delete(id);
+    const row = (data as { updated_at: string; status: string }[] | null)?.[0];
+    if (!row) throw new ClaimLost(id);
+    if (row.status === "pending") sourceClaims.set(id, { ...held, stamp: row.updated_at, attempts: (columns.attempts as number) ?? held.attempts });
+    else sourceClaims.delete(id);
   }
+
+  const ideasColumns = (ideas: SavedIdea[], model: ModelId | null) => ({
+    quotes: ideas,
+    idea_item_ids: ideas.flatMap((i) => (i.outcome ? [i.outcome.id] : [])),
+    model,
+  });
 
   /** Enrolls an idea and puts it in the review line; an existing settings row is left as it is. */
   async function queueReview(id: string, scheduleFrom: string): Promise<void> {
@@ -254,65 +278,71 @@ export function createIdeasJobStore(client: SupabaseClient, sourceLeaseMs = SOUR
     async ideaQuote(id) {
       const { data, error } = await client
         .from("idea_sources")
-        .select("idea_item_ids, quotes")
+        .select("quotes")
         .contains("idea_item_ids", [id])
         .order("created_at")
-        .limit(1)
-        .maybeSingle();
+        .limit(SOURCE_CANDIDATES);
       if (error) throw error;
-      if (!data) return null;
-      const row = data as { idea_item_ids: string[]; quotes: unknown[] };
-      const quote = row.quotes[row.idea_item_ids.indexOf(id)];
-      return typeof quote === "string" ? quote : null;
+      const entries = ((data ?? []) as { quotes: unknown }[]).flatMap((row) => savedIdeas(row.quotes) ?? []).filter((i) => i.outcome?.id === id);
+      // The source an idea was filed from holds its own words; a later mention is only a repeat.
+      return (entries.find((i) => i.outcome?.kind !== "mention") ?? entries[0])?.quote ?? null;
     },
 
     async claimSource(kinds) {
       const { data, error } = await client
         .from("idea_sources")
-        .select("source_item_id, kind, attempts, created_at, updated_at")
+        .select("source_item_id, kind, attempts, quotes, model, created_at, updated_at")
         .eq("status", "pending")
-        .lt("attempts", MAX_DETECT_ATTEMPTS)
         .in("kind", kinds)
         .order("created_at")
         .limit(SOURCE_CANDIDATES);
       if (error) throw error;
       const leaseEnd = Date.now() - sourceLeaseMs;
-      type Row = { source_item_id: string; kind: SourceKind; attempts: number; created_at: string; updated_at: string };
+      type Row = { source_item_id: string; kind: SourceKind; attempts: number; quotes: unknown; model: ModelId | null; created_at: string; updated_at: string };
       for (const row of (data ?? []) as Row[]) {
         const untouched = row.updated_at === row.created_at;
         if (!untouched && Date.parse(row.updated_at) > leaseEnd) continue;
+        // A run died holding its third attempt, so the source fails instead of looping on paid calls.
+        const exhausted = row.attempts >= MAX_DETECT_ATTEMPTS;
         // The touch trigger moves updated_at, so only the first of two racing runs matches the old value.
         const { data: won, error: claimError } = await client
           .from("idea_sources")
-          .update({ attempts: row.attempts })
+          .update(exhausted ? { status: "failed", last_error: "stale" } : { attempts: row.attempts + 1 })
           .eq("source_item_id", row.source_item_id)
           .eq("status", "pending")
           .eq("updated_at", row.updated_at)
           .select("updated_at");
         if (claimError) throw claimError;
         const stamp = (won as { updated_at: string }[] | null)?.[0]?.updated_at;
-        if (!stamp) continue;
-        sourceClaims.set(row.source_item_id, stamp);
-        return { itemId: row.source_item_id, kind: row.kind };
+        if (!stamp || exhausted) continue;
+        sourceClaims.set(row.source_item_id, { stamp, attempts: row.attempts + 1 });
+        const ideas = savedIdeas(row.quotes);
+        return { itemId: row.source_item_id, kind: row.kind, saved: ideas?.length ? { ideas, model: row.model } : null };
       }
       return null;
     },
 
     listComments: (id) => hub.listComments(id),
 
-    async finishSource(id, ideaIds, quotes, model) {
-      await updateOwnSource(id, { status: "done", idea_item_ids: ideaIds, quotes, model, last_error: null });
-      await audit("idea-detect", id, { ideas: ideaIds.length, model });
+    saveIdeas: (id, ideas, model) => updateOwnSource(id, ideasColumns(ideas, model)),
+
+    async finishSource(id, ideas, model) {
+      await updateOwnSource(id, { status: "done", last_error: null, ...ideasColumns(ideas, model) });
+      await audit("idea-detect", id, { ideas: ideas.length, model });
     },
 
     async failSource(id, code) {
-      const { data, error } = await client.from("idea_sources").select("attempts").eq("source_item_id", id).single();
-      if (error) throw error;
-      const attempts = (data as { attempts: number }).attempts + 1;
+      const attempts = sourceClaims.get(id)?.attempts ?? MAX_DETECT_ATTEMPTS;
       const status = attempts >= MAX_DETECT_ATTEMPTS ? "failed" : "pending";
-      await updateOwnSource(id, { status, attempts, last_error: code });
+      await updateOwnSource(id, { status, last_error: code });
       await audit("idea-detect-failed", id, { code, attempts });
       return status;
+    },
+
+    async releaseSource(id) {
+      const held = sourceClaims.get(id);
+      if (!held) return;
+      await updateOwnSource(id, { attempts: held.attempts - 1 });
     },
 
     async moveCaptureToIdeas(id) {
@@ -376,17 +406,25 @@ export async function queueMemoIdeas(client: SupabaseClient, itemId: string): Pr
   if (error) throw error;
 }
 
-/** Idea item ids the Ideas Lab already filed from each memo, so the worker's memo split leaves its ideas alone. */
-export async function ideasFiledFrom(client: SupabaseClient, memoIds: string[]): Promise<Map<string, string[]>> {
-  const filed = new Map<string, string[]>();
+/** Whether the Ideas Lab owns each memo's ideas (its source is pending or done) and which it filed, for the memo split. */
+export async function ideasFiledFrom(client: SupabaseClient, memoIds: string[]): Promise<Map<string, MemoIdeas>> {
+  const filed = new Map<string, MemoIdeas>();
   // Ids travel in the URL, so ask in batches that stay well under URL length limits.
   for (let start = 0; start < memoIds.length; start += 100) {
     const batch = memoIds.slice(start, start + 100);
-    const { data, error } = await client.from("idea_sources").select("source_item_id, idea_item_ids").in("source_item_id", batch);
+    const { data, error } = await client.from("idea_sources").select("source_item_id, status, idea_item_ids").in("source_item_id", batch);
     if (error) throw error;
-    for (const row of (data ?? []) as { source_item_id: string; idea_item_ids: string[] }[]) filed.set(row.source_item_id, row.idea_item_ids);
+    for (const row of (data ?? []) as { source_item_id: string; status: string; idea_item_ids: string[] }[]) {
+      filed.set(row.source_item_id, { owned: row.status !== "failed", filed: row.idea_item_ids });
+    }
   }
   return filed;
+}
+
+/** The saved detection on a source row, or null when there is none in the current shape. */
+function savedIdeas(quotes: unknown): SavedIdea[] | null {
+  const parsed = z.array(SAVED_IDEA).safeParse(quotes);
+  return parsed.success ? parsed.data : null;
 }
 
 const quoted = (text: string) =>

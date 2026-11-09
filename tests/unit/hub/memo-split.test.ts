@@ -61,7 +61,7 @@ describe("parseMemo", () => {
 });
 
 describe("parsePieces", () => {
-  it("empties the ideas list once the Ideas Lab filed ideas from the memo, keeping to-dos and notes", () => {
+  it("drops the worker's ideas when the Ideas Lab owns them, still filing to-dos, notes and unknown-project notes", () => {
     const json = {
       todos: [todo(null)],
       notes: [
@@ -70,11 +70,11 @@ describe("parsePieces", () => {
       ],
       ideas: [{ text: "A sourdough timer", source: "A sourdough timer." }],
     };
-    const pieces = parsePieces(json, PROJECTS, ["00000000-0000-4000-9000-000000000001"]);
-    expect(pieces.ideas).toEqual([]);
+    const pieces = parsePieces(json, PROJECTS, true);
+    expect(pieces.ideas.map((i) => i.text)).toEqual(["A costume app"]);
     expect(pieces.todos).toHaveLength(1);
     expect(pieces.notes.map((n) => n.text)).toEqual(["Ledger export"]);
-    expect(parsePieces(json, PROJECTS, []).ideas).toHaveLength(2);
+    expect(parsePieces(json, PROJECTS, false).ideas.map((i) => i.text)).toEqual(["A costume app", "A sourdough timer"]);
   });
 
   it("rejects a missing todos array", () => {
@@ -153,7 +153,7 @@ describe("listMemos", () => {
     const good = seedMemo(h, "x".repeat(20_000));
     const broken = seedItem(h.rows, { labels: ["hidock-memo"], description: "edited away" });
     const { memos, skipped } = await listMemos(h.hub);
-    expect(memos).toEqual([{ id: good.id, file: FILE, recorded: RECORDED, transcript: "x".repeat(20_000), ideasFiled: [] }]);
+    expect(memos).toEqual([{ id: good.id, file: FILE, recorded: RECORDED, transcript: "x".repeat(20_000), ideasOwnedByIdeasLab: false, ideasFiled: [] }]);
     expect(skipped).toEqual([broken.id]);
   });
 });

@@ -194,13 +194,13 @@ async function detectOne(
   try {
     const item = await store.getIdea(id);
     if (!item) throw new Error("missing");
-    // Mason filed or closed it himself before the job got to it.
-    if (item.state !== "open" || item.list === "ideas" || item.labels.includes("idea")) {
-      await store.finishSource(id, [], [], null);
+    // Mason filed or closed the capture himself first; a memo is read even once its split archived it.
+    const filedByMason = item.state !== "open" || item.list === "ideas" || item.labels.includes("idea");
+    if (source.kind === "capture" && !source.saved && filedByMason) {
+      await store.finishSource(id, [], null);
       return { outcome: "next", found: 0 };
     }
     const memo = source.kind === "memo" ? parseMemo(item, await store.listComments(id)) : null;
-    const text = memo ? memo.transcript : [item.title, item.description].filter((t) => t.trim()).join("\n\n");
     const origin = { itemId: id, url: item.url, recorded: memo ? memo.recorded : item.createdAt };
     const hooks = paidHooks(deps, id, (spend) => capState(spend, deps.budgetUsd).detection);
     const ctx = {
@@ -211,28 +211,50 @@ async function detectOne(
         await hooks.record(call);
       },
     };
-    const { ideas, model } = await detectIdeas({ ...ctx, text, kind: source.kind });
-    const open = ideas.length ? await store.openIdeaTitles() : [];
-    const moveWhole = source.kind === "capture" && ideas.length === 1 && ideas[0].whole_item && ideas[0].sure;
-    const ideaIds: string[] = [];
-    for (const [n, idea] of ideas.entries()) {
-      const { matchId } = open.length ? await sameIdea({ ...ctx, candidate: `${idea.title}\n${idea.quote}`, open }) : { matchId: null };
-      if (matchId) await store.mentionAgain(matchId, item.url, origin.recorded.slice(0, 10), idea.quote);
-      else if (moveWhole) await store.moveCaptureToIdeas(id);
-      ideaIds.push(matchId ?? (moveWhole ? id : await store.addIdeaFrom(origin, n, idea.title, idea.quote)));
+    let saved = source.saved;
+    if (!saved) {
+      const text = memo ? memo.transcript : [item.title, item.description].filter((t) => t.trim()).join("\n\n");
+      const detected = await detectIdeas({ ...ctx, text, kind: source.kind });
+      saved = { ideas: detected.ideas.map((i) => ({ ...i, outcome: null })), model: detected.model };
+      // Saved before anything is filed, so a retry files the same ideas at the same indexes without asking again.
+      if (saved.ideas.length) await store.saveIdeas(id, saved.ideas, saved.model);
     }
-    await store.finishSource(id, ideaIds, ideas.map((i) => i.quote), model);
-    return { outcome: "next", found: ideaIds.length };
+    const ideas = saved.ideas;
+    const ownIds = new Set(ideas.flatMap((i) => (i.outcome && i.outcome.kind !== "mention" ? [i.outcome.id] : [])));
+    const open = ideas.some((i) => !i.outcome) ? (await store.openIdeaTitles()).filter((o) => !ownIds.has(o.id) && o.id !== id) : [];
+    const moveWhole = source.kind === "capture" && ideas.length === 1 && ideas[0].whole_item && ideas[0].sure;
+    for (const [n, idea] of ideas.entries()) {
+      if (idea.outcome) continue;
+      const { matchId } = open.length ? await sameIdea({ ...ctx, candidate: `${idea.title}\n${idea.quote}`, open }) : { matchId: null };
+      if (matchId) {
+        await store.mentionAgain(matchId, item.url, origin.recorded.slice(0, 10), idea.quote);
+        idea.outcome = { kind: "mention", id: matchId };
+      } else if (moveWhole) {
+        await store.moveCaptureToIdeas(id);
+        idea.outcome = { kind: "moved", id };
+      } else {
+        idea.outcome = { kind: "new", id: await store.addIdeaFrom(origin, n, idea.title, idea.quote) };
+      }
+      if (n < ideas.length - 1) await store.saveIdeas(id, ideas, saved.model);
+    }
+    await store.finishSource(id, ideas, saved.model);
+    return { outcome: "next", found: ideas.length };
   } catch (e) {
     // At the detection cap the source stays pending for next month or a higher cap; nothing is lost.
-    if (e instanceof CapReached) return { outcome: "stop", found: 0 };
+    if (e instanceof CapReached) {
+      await store.releaseSource(id);
+      return { outcome: "stop", found: 0 };
+    }
     if (e instanceof ClaimLost) {
       console.error(`ideas detection for ${id} lost its claim before saving`);
       return { outcome: "next", found: 0 };
     }
     const code = failCode(e, signal);
     console.error(`ideas detection failed for ${id}: ${code}`);
-    if (isPassing(e, signal)) return { outcome: "stop", found: 0 };
+    if (isPassing(e, signal)) {
+      await store.releaseSource(id);
+      return { outcome: "stop", found: 0 };
+    }
     await store.failSource(id, code);
     return { outcome: signal.aborted ? "stop" : "next", found: 0 };
   }

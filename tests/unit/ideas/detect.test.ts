@@ -38,6 +38,29 @@ function harness(replies: FakeReply[] = [], overrides: Partial<IdeasJobDeps> & {
   return { ...fake, anthropic, deps, advance: (ms: number) => (clock += ms) };
 }
 
+const outcomes = (h: ReturnType<typeof harness>, id: string) => h.rows.sources.get(id)?.ideas.map((i) => i.outcome);
+
+/** Answers detect and same-idea calls by their system prompt; an Error step is thrown as that call's failure. */
+function byPurpose(detect: () => FakeReply, sameSteps: (FakeReply | Error)[]) {
+  const sent: Record<string, unknown>[] = [];
+  let detectCalls = 0;
+  const client = {
+    beta: {
+      messages: {
+        stream(params: Record<string, unknown>) {
+          sent.push(params);
+          const isDetect = String(params.system).startsWith("You find ideas");
+          if (isDetect) detectCalls += 1;
+          const step = isDetect ? detect() : sameSteps.shift();
+          if (!step) throw new Error("no step left");
+          return { finalMessage: async () => (step instanceof Error ? Promise.reject(step) : { usage: { input_tokens: 10, output_tokens: 5 }, ...step }) };
+        },
+      },
+    },
+  };
+  return { client: client as unknown as IdeasJobDeps["anthropic"], sent, detectCalls: () => detectCalls };
+}
+
 const failing = (status: number) =>
   ({
     beta: { messages: { stream: () => ({ finalMessage: async () => Promise.reject(Object.assign(new Error("api"), { status })) }) } },
@@ -57,7 +80,10 @@ describe("detection on captures", () => {
     });
     expect(h.rows.moved.has(capture.id)).toBe(true);
     expect(h.rows.settings.get(capture.id)?.reviewStatus).toBe("waiting");
-    expect(h.rows.sources.get(capture.id)).toMatchObject({ status: "done", ideaIds: [capture.id], quotes: ["a timer for sourdough"], model: HAIKU });
+    expect(h.rows.sources.get(capture.id)).toMatchObject({ status: "done", model: HAIKU });
+    expect(h.rows.sources.get(capture.id)?.ideas).toEqual([
+      { title: "Sourdough timer", quote: "a timer for sourdough", whole_item: true, sure: true, outcome: { kind: "moved", id: capture.id } },
+    ]);
     expect(h.rows.usage).toEqual([expect.objectContaining({ itemId: capture.id, purpose: "detect", model: HAIKU })]);
   });
 
@@ -70,7 +96,8 @@ describe("detection on captures", () => {
     expect(copy).toMatchObject({ title: "Sourdough timer", list: "ideas", labels: ["idea"], source: "ideas-lab" });
     expect(copy.description).toBe(`> a timer for sourdough\n\nSource: ${capture.url}, recorded ${capture.createdAt}\nkey:idea:${capture.id}#0`);
     expect(h.rows.settings.get(copy.id)?.reviewStatus).toBe("waiting");
-    expect(h.rows.sources.get(capture.id)).toMatchObject({ status: "done", ideaIds: [copy.id] });
+    expect(h.rows.sources.get(capture.id)?.status).toBe("done");
+    expect(outcomes(h, capture.id)).toEqual([{ kind: "new", id: copy.id }]);
   });
 
   it("copies when one capture holds two ideas, even if both are sure", async () => {
@@ -124,8 +151,55 @@ describe("detection on captures", () => {
     const closed = h.seedSource({ state: "done" });
     await runIdeasJob(h.deps);
     expect(h.anthropic.sent).toEqual([]);
-    expect(h.rows.sources.get(filed.id)).toMatchObject({ status: "done", ideaIds: [] });
-    expect(h.rows.sources.get(closed.id)).toMatchObject({ status: "done", ideaIds: [] });
+    expect(h.rows.sources.get(filed.id)).toMatchObject({ status: "done", ideas: [] });
+    expect(h.rows.sources.get(closed.id)).toMatchObject({ status: "done", ideas: [] });
+  });
+
+  it("resumes a source from its saved detection after a passing error, filing each idea once", async () => {
+    const h = harness();
+    const existing = h.seed({ title: "Sourdough timer" }, { reviewStatus: "done" });
+    const capture = h.seedSource();
+    const ideaA = { title: "Sourdough timer", quote: "the sourdough timer again" };
+    const ideaB = { title: "Bakery map", quote: "a map of bakeries" };
+    const overloaded = Object.assign(new Error("overloaded"), { status: 529 });
+    const first = byPurpose(() => found(ideaA, ideaB), [same(existing.id), overloaded]);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await runIdeasJob({ ...h.deps, anthropic: first.client });
+    expect(h.rows.sources.get(capture.id)).toMatchObject({ status: "pending", attempts: 0, claimed: false });
+    expect(outcomes(h, capture.id)).toEqual([{ kind: "mention", id: existing.id }, null]);
+
+    const second = byPurpose(() => found(ideaB, ideaA), [same(null)]);
+    await runIdeasJob({ ...h.deps, anthropic: second.client });
+    vi.mocked(console.error).mockRestore();
+    expect(second.detectCalls()).toBe(0);
+    expect(h.rows.comments.filter((c) => c.body.startsWith("Mentioned again"))).toHaveLength(1);
+    expect(h.rows.mentions.get(existing.id)).toBe(2);
+    const created = [...h.rows.items.values()].filter((i) => i.source === "ideas-lab");
+    expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({ title: "Bakery map" });
+    expect(created[0].description).toContain("> a map of bakeries");
+    expect(created[0].description).toContain(`key:idea:${capture.id}#1`);
+    expect(h.rows.sources.get(capture.id)?.status).toBe("done");
+    expect(await h.store.ideaQuote(created[0].id)).toBe("a map of bakeries");
+  });
+
+  it("prefers the quote an idea was filed from over a later mention of it", async () => {
+    const h = harness();
+    const filedFrom = h.seedSource();
+    const mentionedIn = h.seedSource();
+    const ideaId = "00000000-0000-4000-9000-00000000beef";
+    const entry = { title: "t", whole_item: false, sure: false };
+    h.rows.sources.get(mentionedIn.id)!.ideas = [{ ...entry, quote: "said again", outcome: { kind: "mention", id: ideaId } }];
+    h.rows.sources.get(filedFrom.id)!.ideas = [{ ...entry, quote: "first words", outcome: { kind: "new", id: ideaId } }];
+    expect(await h.store.ideaQuote(ideaId)).toBe("first words");
+  });
+
+  it("counts an attempt when it claims and gives it back on the cap", async () => {
+    const h = harness([], { baseSpend: 25 });
+    const capture = h.seedSource();
+    await runIdeasJob(h.deps);
+    expect(h.rows.sources.get(capture.id)).toMatchObject({ status: "pending", attempts: 0 });
+    expect(h.calls.filter((c) => c === "releaseSource")).toHaveLength(1);
   });
 
   it("marks a source failed after three real Haiku failures", async () => {
@@ -201,6 +275,15 @@ describe("detection on memos", () => {
     return memo;
   }
 
+  it("still reads a memo whose split archived it while its detection waited", async () => {
+    const h = harness([found({ title: "Sourdough timer" })], { memoDetection: true });
+    const memo = seedMemo(h, "An idea: a sourdough timer.");
+    h.rows.items.set(memo.id, { ...h.rows.items.get(memo.id)!, state: "archived" });
+    await runIdeasJob(h.deps);
+    expect(h.anthropic.sent).toHaveLength(1);
+    expect([...h.rows.items.values()].filter((i) => i.source === "ideas-lab").map((i) => i.title)).toEqual(["Sourdough timer"]);
+  });
+
   it("is not read while IDEAS_MEMO_DETECTION is off", async () => {
     const h = harness([found()]);
     const memo = seedMemo(h, "An idea: a sourdough timer.");
@@ -220,7 +303,8 @@ describe("detection on memos", () => {
     const ideas = [...h.rows.items.values()].filter((i) => i.source === "ideas-lab");
     expect(ideas.map((i) => i.title)).toEqual(["Sourdough timer", "Bakery map"]);
     expect(ideas[1].description).toContain(`> a map of bakeries\n\nSource: ${memo.url}, recorded 2026-11-08T09:00:00`);
-    expect(h.rows.sources.get(memo.id)).toMatchObject({ status: "done", ideaIds: ideas.map((i) => i.id) });
+    expect(h.rows.sources.get(memo.id)?.status).toBe("done");
+    expect(outcomes(h, memo.id)).toEqual(ideas.map((i) => ({ kind: "new", id: i.id })));
     const content = (h.anthropic.sent[0].messages as { content: string }[])[0].content;
     expect(content).toContain("voice memo transcript");
     expect(content).toContain("Call the bank. An idea");

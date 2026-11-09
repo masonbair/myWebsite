@@ -152,7 +152,7 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
   async function drain() {
     const store = createIdeasJobStore(client(), 0);
     for (let claimed = await store.claimSource(["capture", "memo"]); claimed; claimed = await store.claimSource(["capture", "memo"])) {
-      await store.finishSource(claimed.itemId, [], [], null);
+      await store.finishSource(claimed.itemId, [], null);
     }
   }
 
@@ -166,21 +166,21 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
     ]);
     expect([a, b].filter((c) => c?.itemId === capture.id)).toHaveLength(1);
     expect(await createIdeasJobStore(client()).claimSource(["capture"])).toBeNull();
-    await expect(createIdeasJobStore(client()).finishSource(capture.id, [], [], null)).rejects.toBeInstanceOf(ClaimLost);
+    await expect(createIdeasJobStore(client()).finishSource(capture.id, [], null)).rejects.toBeInstanceOf(ClaimLost);
   });
 
   it("counts failures and marks the third failed", async () => {
     await drain();
     const store = createIdeasJobStore(client());
     const capture = await newCapture();
-    expect(await store.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture" });
+    expect(await store.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture", saved: null });
     expect(await store.failSource(capture.id, "schema")).toBe("pending");
     // A failed source waits out the lease before a later run retries it.
     expect(await store.claimSource(["capture"])).toBeNull();
     const noLease = createIdeasJobStore(client(), 0);
-    expect(await noLease.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture" });
+    expect(await noLease.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture", saved: null });
     expect(await noLease.failSource(capture.id, "schema")).toBe("pending");
-    expect(await noLease.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture" });
+    expect(await noLease.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture", saved: null });
     expect(await noLease.failSource(capture.id, "refusal")).toBe("failed");
     expect(await source(capture.id)).toMatchObject({ status: "failed", attempts: 3, last_error: "refusal" });
     expect(await noLease.claimSource(["capture"])).toBeNull();
@@ -226,9 +226,10 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
     const capture = await newCapture();
     const origin = { itemId: capture.id, url: capture.url, recorded: capture.createdAt };
     const idea = await store.addIdeaFrom(origin, 0, "Bakery map", "a map of bakeries");
-    expect(await store.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture" });
-    await store.finishSource(capture.id, [idea], ["a map of bakeries"], "claude-haiku-5-5");
-    expect(await source(capture.id)).toMatchObject({ status: "done", idea_item_ids: [idea], quotes: ["a map of bakeries"], model: "claude-haiku-5-5" });
+    expect(await store.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture", saved: null });
+    const saved = [{ title: "Bakery map", quote: "a map of bakeries", whole_item: false, sure: false, outcome: { kind: "new" as const, id: idea } }];
+    await store.finishSource(capture.id, saved, "claude-haiku-5-5");
+    expect(await source(capture.id)).toMatchObject({ status: "done", idea_item_ids: [idea], quotes: saved, model: "claude-haiku-5-5" });
     expect(await store.ideaQuote(idea)).toBe("a map of bakeries");
 
     await store.mentionAgain(idea, "https://masonbair.com/hub/item/x", "2026-11-09", "bakery map again");
@@ -245,6 +246,58 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
     await queueMemoIdeas(client(), memo.id);
     await queueMemoIdeas(client(), memo.id);
     expect(await source(memo.id)).toMatchObject({ kind: "memo", status: "pending" });
-    expect(await ideasFiledFrom(client(), [memo.id])).toEqual(new Map([[memo.id, []]]));
+    expect(await ideasFiledFrom(client(), [memo.id])).toEqual(new Map([[memo.id, { owned: true, filed: [] }]]));
+  });
+
+  it("reports the Ideas Lab owns a memo's ideas while pending or done, not once failed or never queued", async () => {
+    await drain();
+    const memo = () => hub().addItem({ title: "HiDock memo y", labels: ["hidock-memo"], source: "memo:phone", clientKey: randomUUID() });
+    const [pending, failed, done, none] = await Promise.all([memo(), memo(), memo(), memo()]);
+    for (const m of [pending, failed, done]) await queueMemoIdeas(client(), m.id);
+    await client().from("idea_sources").update({ status: "failed" }).eq("source_item_id", failed.id);
+    await client().from("idea_sources").update({ status: "done", idea_item_ids: [pending.id] }).eq("source_item_id", done.id);
+    const owned = await ideasFiledFrom(client(), [pending.id, failed.id, done.id, none.id]);
+    expect(owned.get(pending.id)).toEqual({ owned: true, filed: [] });
+    expect(owned.get(failed.id)).toEqual({ owned: false, filed: [] });
+    expect(owned.get(done.id)).toEqual({ owned: true, filed: [pending.id] });
+    expect(owned.get(none.id)).toBeUndefined();
+  });
+
+  it("saves detection progress so a later claim gets it back, and gives a passing stop's attempt back", async () => {
+    await drain();
+    const store = createIdeasJobStore(client(), 0);
+    const capture = await newCapture();
+    expect((await store.claimSource(["capture"]))?.saved).toBeNull();
+    expect(await source(capture.id)).toMatchObject({ attempts: 1 });
+    const ideas = [
+      { title: "A", quote: "qa", whole_item: false, sure: false, outcome: { kind: "mention" as const, id: capture.id } },
+      { title: "B", quote: "qb", whole_item: false, sure: false, outcome: null },
+    ];
+    await store.saveIdeas(capture.id, ideas, "claude-haiku-5-5");
+    await store.releaseSource(capture.id);
+    expect(await source(capture.id)).toMatchObject({ status: "pending", attempts: 0, idea_item_ids: [capture.id] });
+    expect(await store.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture", saved: { ideas, model: "claude-haiku-5-5" } });
+  });
+
+  it("fails a source whose third claim died without a finish, instead of claiming it again", async () => {
+    await drain();
+    const capture = await newCapture();
+    for (let run = 0; run < 3; run += 1) {
+      expect((await createIdeasJobStore(client(), 0).claimSource(["capture"]))?.itemId).toBe(capture.id);
+    }
+    expect(await createIdeasJobStore(client(), 0).claimSource(["capture"])).toBeNull();
+    expect(await source(capture.id)).toMatchObject({ status: "failed", attempts: 3, last_error: "stale" });
+  });
+
+  it("gives the review the quote an idea was filed from, not a later mention", async () => {
+    const store = createIdeasJobStore(client(), 0);
+    // The mention's source is older, so a plain oldest-first pick would get the wrong quote.
+    const later = await newCapture();
+    const ideaSource = await newCapture();
+    const idea = await store.addIdeaFrom({ itemId: ideaSource.id, url: ideaSource.url, recorded: ideaSource.createdAt }, 0, "Q", "first words");
+    const entry = { title: "Q", whole_item: false, sure: false };
+    await client().from("idea_sources").update({ quotes: [{ ...entry, quote: "said again", outcome: { kind: "mention", id: idea } }], idea_item_ids: [idea] }).eq("source_item_id", later.id);
+    await client().from("idea_sources").update({ quotes: [{ ...entry, quote: "first words", outcome: { kind: "new", id: idea } }], idea_item_ids: [idea] }).eq("source_item_id", ideaSource.id);
+    expect(await store.ideaQuote(idea)).toBe("first words");
   });
 });

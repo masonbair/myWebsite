@@ -71,3 +71,15 @@ export class DetectFailed extends Error {
     this.name = "DetectFailed";
   }
 }
+
+/** How one detected idea was filed: a new item, the source itself moved, or a mention on an open idea. */
+export const IDEA_OUTCOME = z.object({ kind: z.enum(["new", "moved", "mention"]), id: z.string() });
+
+/** One detected idea as saved on idea_sources.quotes, so a retry files from it instead of detecting again. */
+export const SAVED_IDEA = DETECT_SCHEMA.shape.ideas.element.extend({ outcome: IDEA_OUTCOME.nullable() });
+
+export type SavedIdea = z.infer<typeof SAVED_IDEA>;
+export type IdeaOutcome = z.infer<typeof IDEA_OUTCOME>;
+
+/** The Ideas Lab's hold on a memo's ideas, for the worker's memo split. */
+export type MemoIdeas = { owned: boolean; filed: string[] };

@@ -68,7 +68,7 @@ test("bin/hub memo-split files the pieces and leaves the memo archived, never do
   const file = newFile();
   const { id } = (await (await upload(file, "phone")).json()) as { id: string };
   const memos = JSON.parse(hub(["memos"]).stdout) as { id: string; file: string; transcript: string }[];
-  expect(memos).toContainEqual({ id, file, recorded: "2026-10-22T18:35:04", transcript: "Call the dentist tomorrow. Idea: a costume app.", ideasFiled: [] });
+  expect(memos).toContainEqual({ id, file, recorded: "2026-10-22T18:35:04", transcript: "Call the dentist tomorrow. Idea: a costume app.", ideasOwnedByIdeasLab: false, ideasFiled: [] });
 
   const pieces = join(mkdtempSync(join(tmpdir(), "hub-memo-")), "pieces.json");
   writeFileSync(pieces, JSON.stringify({
@@ -91,7 +91,7 @@ test("bin/hub memo-split files the pieces and leaves the memo archived, never do
   ]);
 });
 
-test("bin/hub memo-split files no ideas once the Ideas Lab took them from the memo", async () => {
+test("bin/hub memo-split files no ideas while the Ideas Lab owns the memo's ideas", async () => {
   const file = newFile();
   const { id } = (await (await upload(file, "phone")).json()) as { id: string };
   const { data: idea, error: ideaError } = await serviceClient()
@@ -105,8 +105,8 @@ test("bin/hub memo-split files no ideas once the Ideas Lab took them from the me
     .insert({ source_item_id: id, kind: "memo", status: "done", idea_item_ids: [idea.id], quotes: ["Idea: a costume app."] });
   if (error) throw error;
 
-  const memos = JSON.parse(hub(["memos"]).stdout) as { id: string; ideasFiled: string[] }[];
-  expect(memos.find((m) => m.id === id)?.ideasFiled).toEqual([idea.id]);
+  const memos = JSON.parse(hub(["memos"]).stdout) as { id: string; ideasOwnedByIdeasLab: boolean; ideasFiled: string[] }[];
+  expect(memos.find((m) => m.id === id)).toMatchObject({ ideasOwnedByIdeasLab: true, ideasFiled: [idea.id] });
   const pieces = join(mkdtempSync(join(tmpdir(), "hub-memo-")), "pieces.json");
   writeFileSync(pieces, JSON.stringify({
     todos: [{ text: "Call the dentist", source: "Call the dentist tomorrow.", date: "2026-10-23", time: null, project: null }],

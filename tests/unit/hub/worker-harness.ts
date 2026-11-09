@@ -43,7 +43,7 @@ type Harness = {
 /** The real route handler over a fake store, reached through the real HTTP client with an in-process fetch. */
 export function workerHarness(
   overrides: Partial<HubStore> = {},
-  server: { token?: string; ideasFiled?: Record<string, string[]> } = { token: TOKEN },
+  server: { token?: string; ideasFiled?: Record<string, { owned: boolean; filed: string[] }> } = { token: TOKEN },
 ): Harness {
   const token = server.token;
   const rows = createFakeStore({ kind: "mason" }).rows;

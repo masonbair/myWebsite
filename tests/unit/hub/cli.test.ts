@@ -14,7 +14,7 @@ function tempFile(text = "Three costume ideas\nDetails...") {
   return file;
 }
 
-type Overrides = { notify?: () => never; store?: Partial<HubStore>; ideasFiled?: Record<string, string[]> };
+type Overrides = { notify?: () => never; store?: Partial<HubStore>; ideasFiled?: Record<string, { owned: boolean; filed: string[] }> };
 
 function harness(overrides: Overrides = {}) {
   const api = workerHarness(overrides.store, { token: TOKEN, ideasFiled: overrides.ideasFiled });
@@ -463,7 +463,7 @@ describe("runCli", () => {
       seedItem(h.rows, { labels: ["hidock"] });
       expect(await runCli(["memos"], h.deps)).toBe(0);
       expect(JSON.parse(h.out[0])).toEqual([
-        { id: memo.id, file: FILE, recorded: "2026-10-22T18:35:04", transcript: "Call the dentist.", ideasFiled: [] },
+        { id: memo.id, file: FILE, recorded: "2026-10-22T18:35:04", transcript: "Call the dentist.", ideasOwnedByIdeasLab: false, ideasFiled: [] },
       ]);
       expect(h.err).toEqual([`skipped ${broken.id}: not a readable HiDock memo`]);
     });
@@ -479,21 +479,31 @@ describe("runCli", () => {
       expect(piece.labels).toEqual(["hidock", "ledger", "to-schedule"]);
     });
 
-    it("memos and memo-split leave a memo's ideas to the Ideas Lab once it filed any", async () => {
-      const ideasFiled: Record<string, string[]> = {};
+    it("memos and memo-split leave a memo's ideas to the Ideas Lab while it owns them", async () => {
+      const ideasFiled: Record<string, { owned: boolean; filed: string[] }> = {};
       const h = harness({ ideasFiled });
       const memo = seedMemo(h);
-      ideasFiled[memo.id] = ["00000000-0000-4000-9000-000000000001"];
+      ideasFiled[memo.id] = { owned: true, filed: [] };
       expect(await runCli(["memos"], h.deps)).toBe(0);
-      expect(JSON.parse(h.out[0])[0].ideasFiled).toEqual(ideasFiled[memo.id]);
+      expect(JSON.parse(h.out[0])[0]).toMatchObject({ ideasOwnedByIdeasLab: true, ideasFiled: [] });
       const pieces = {
         todos: [{ text: "Call the dentist", source: "Call the dentist.", date: null, time: null, project: null }],
         notes: [{ text: "A costume app", source: "A costume app.", project: "unknown" }],
         ideas: [{ text: "A sourdough timer", source: "A sourdough timer." }],
       };
       expect(await runCli(["memo-split", memo.id, "--pieces", tempFile(JSON.stringify(pieces))], h.deps)).toBe(0);
-      expect(h.out[1]).toBe("filed 1 pieces");
-      expect([...h.rows.items.values()].filter((i) => i.labels.includes("hidock")).map((i) => i.title)).toEqual(["Call the dentist"]);
+      expect(h.out[1]).toBe("filed 2 pieces");
+      expect([...h.rows.items.values()].filter((i) => i.labels.includes("hidock")).map((i) => i.title).sort()).toEqual(["A costume app", "Call the dentist"]);
+    });
+
+    it("memo-split files the worker's ideas when the Ideas Lab does not own them (failed or never queued)", async () => {
+      const ideasFiled: Record<string, { owned: boolean; filed: string[] }> = {};
+      const h = harness({ ideasFiled });
+      const memo = seedMemo(h);
+      ideasFiled[memo.id] = { owned: false, filed: [] };
+      const pieces = { todos: [], notes: [], ideas: [{ text: "A sourdough timer", source: "A sourdough timer." }] };
+      expect(await runCli(["memo-split", memo.id, "--pieces", tempFile(JSON.stringify(pieces))], h.deps)).toBe(0);
+      expect(h.out).toEqual(["filed 1 pieces"]);
     });
 
     it("memo-split exits 2 on a bad pieces file and changes nothing", async () => {
