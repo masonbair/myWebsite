@@ -8,6 +8,8 @@ afterEach(() => vi.restoreAllMocks());
 const topics = [
   { slug: "chips", name: "Chips" },
   { slug: "ai-models", name: "AI models" },
+  { slug: "energy", name: "Energy" },
+  { slug: "rates", name: "Interest rates" },
 ];
 
 const input: ExtractInput = {
@@ -99,6 +101,19 @@ describe("buildExtractRequest", () => {
   });
 });
 
+describe("buildExtractRequest schema", () => {
+  it("limits topics to the list and closes every object", () => {
+    const req = buildExtractRequest(input, "claude-sonnet-5-5", topics);
+    const schema = (req.output_config?.format as { schema: Record<string, any> }).schema;
+    expect(schema.additionalProperties).toBe(false);
+    const story = schema.properties.stories.items;
+    expect(story.additionalProperties).toBe(false);
+    expect(story.properties.topics.items.enum).toEqual(["chips", "ai-models", "energy", "rates"]);
+    expect(story.properties.companies.items.additionalProperties).toBe(false);
+    expect("$schema" in schema).toBe(false);
+  });
+});
+
 describe("systemPrompt", () => {
   it("says the newsletter is data and lists topics in a stable order", () => {
     const prompt = systemPrompt(topics);
@@ -165,6 +180,73 @@ describe("extractIssue", () => {
     const bad = { stories: [{ ...goodStory, sentiment: 3 }] };
     const { client } = stubClient(reply(bad), reply(bad));
     await expect(extractIssue(input, deps(client))).rejects.toMatchObject({ reason: "schema" });
+  });
+
+  it("reads only the text after the last fallback block", async () => {
+    const served = {
+      stop_reason: "end_turn",
+      model: "claude-opus-5-5",
+      content: [
+        { type: "text", text: '{"stor' },
+        { type: "fallback", from: { model: "claude-sonnet-5-5" }, to: { model: "claude-opus-5-5" }, trigger: { type: "refusal" } },
+        { type: "text", text: JSON.stringify({ stories: [goodStory] }) },
+      ],
+      usage: { input_tokens: 100, output_tokens: 50 },
+    };
+    const { client } = stubClient(served);
+    const out = await extractIssue(input, deps(client));
+    expect(out.stories).toHaveLength(1);
+  });
+
+  it("throws ExtractError api with the usage so far when the call itself fails, without another try", async () => {
+    const { client, create } = stubClient(reply("", "refusal"));
+    create.mockRejectedValueOnce(new Error("overloaded"));
+    const err = (await extractIssue(input, deps(client)).catch((e: unknown) => e)) as ExtractError;
+    expect(err).toBeInstanceOf(ExtractError);
+    expect(err.reason).toBe("api");
+    expect(err.usage.input_tokens).toBe(100);
+    expect((err.cause as Error).message).toBe("overloaded");
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("charges each model for the tokens it used when a fallback served the reply", async () => {
+    const served = {
+      ...reply({ stories: [goodStory] }),
+      model: "claude-opus-5-5",
+      usage: {
+        input_tokens: 300,
+        output_tokens: 60,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+        iterations: [
+          { type: "message", model: "claude-sonnet-5-5", input_tokens: 100, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+          { type: "fallback_message", model: "claude-opus-5-5", input_tokens: 200, output_tokens: 50, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+        ],
+      },
+    };
+    const { client } = stubClient(served);
+    const out = await extractIssue(input, deps(client));
+    expect(out.charges).toEqual([
+      { model: "claude-sonnet-5-5", usage: expect.objectContaining({ input_tokens: 100, output_tokens: 10 }) },
+      { model: "claude-opus-5-5", usage: expect.objectContaining({ input_tokens: 200, output_tokens: 50 }) },
+    ]);
+    expect(out.usage).toMatchObject({ input_tokens: 300, output_tokens: 60 });
+  });
+
+  it("charges the response model when there is no iteration breakdown", async () => {
+    const { client } = stubClient({ ...reply({ stories: [goodStory] }), model: "claude-opus-5-5" });
+    const out = await extractIssue(input, deps(client));
+    expect(out.charges.map((c) => c.model)).toEqual(["claude-opus-5-5"]);
+  });
+
+  it("keeps at most 3 distinct known topics and drops stories with an empty headline instead of failing", async () => {
+    const many = { ...goodStory, topics: ["chips", "x", "chips", "ai-models", "y"] };
+    const tooMany = { ...goodStory, topics: ["chips", "ai-models", "z", "energy", "rates"] };
+    const blank = { ...goodStory, headline: "  " };
+    const { client, create } = stubClient(reply({ stories: [many, blank, tooMany] }));
+    const out = await extractIssue(input, deps(client));
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(out.stories.map((st) => st.topics)).toEqual([["chips", "ai-models"], ["chips", "ai-models", "energy"]]);
   });
 
   it("drops topics that are not on the list", async () => {

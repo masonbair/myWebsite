@@ -2,7 +2,7 @@ import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
 import { transformJSONSchema } from "@anthropic-ai/sdk/lib/transform-json-schema";
 import { z } from "zod";
-import type { ClaudeUsage, ModelId } from "@/lib/ai/claude";
+import { PRICES, type ClaudeUsage, type ModelId } from "@/lib/ai/claude";
 import { replySchema, storySchema, systemPrompt, type Topic } from "@/lib/news/prompt";
 
 export type ExtractInput = { sourceName: string; subject: string; publishedOn: string; text: string };
@@ -17,15 +17,17 @@ export type ExtractedStory = {
   link: string | null;
 };
 
-export type ExtractFailure = "refusal" | "max_tokens" | "schema";
+export type ExtractFailure = "refusal" | "max_tokens" | "schema" | "api";
 
 export class ExtractError extends Error {
   constructor(
     readonly reason: ExtractFailure,
     readonly usage: ClaudeUsage,
+    readonly charges: ModelCharge[],
     detail: string,
+    options?: { cause?: unknown },
   ) {
-    super(`extraction failed (${reason}): ${detail}`);
+    super(`extraction failed (${reason}): ${detail}`, options);
     this.name = "ExtractError";
   }
 }
@@ -82,34 +84,88 @@ export function buildExtractRequest(
   return request;
 }
 
-function addUsage(total: ClaudeUsage, u: Anthropic.Beta.Messages.BetaUsage): ClaudeUsage {
+/** Tokens one model used, so each ai_usage row is priced by the model that actually ran. */
+export type ModelCharge = { model: ModelId; usage: ClaudeUsage };
+
+type TokenCounts = {
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cache_read_input_tokens?: number | null;
+  cache_creation_input_tokens?: number | null;
+};
+
+function knownModel(model: string | null | undefined, fallback: ModelId): ModelId {
+  return model && model in PRICES ? (model as ModelId) : fallback;
+}
+
+const ZERO: ClaudeUsage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+
+function sumUsage(a: ClaudeUsage, b: TokenCounts): ClaudeUsage {
   return {
-    input_tokens: total.input_tokens + (u.input_tokens ?? 0),
-    output_tokens: total.output_tokens + (u.output_tokens ?? 0),
-    cache_read_input_tokens: (total.cache_read_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0),
-    cache_creation_input_tokens: (total.cache_creation_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0),
+    input_tokens: a.input_tokens + (b.input_tokens ?? 0),
+    output_tokens: a.output_tokens + (b.output_tokens ?? 0),
+    cache_read_input_tokens: (a.cache_read_input_tokens ?? 0) + (b.cache_read_input_tokens ?? 0),
+    cache_creation_input_tokens: (a.cache_creation_input_tokens ?? 0) + (b.cache_creation_input_tokens ?? 0),
   };
+}
+
+function addCharge(charges: ModelCharge[], model: ModelId, u: TokenCounts): void {
+  const charge = charges.find((c) => c.model === model);
+  if (charge) charge.usage = sumUsage(charge.usage, u);
+  else charges.push({ model, usage: sumUsage(ZERO, u) });
+}
+
+function chargeMessage(charges: ModelCharge[], message: Anthropic.Beta.Messages.BetaMessage, requested: ModelId): void {
+  const steps = (message.usage.iterations ?? []).filter((i) => i.type === "message" || i.type === "fallback_message");
+  if (steps.length === 0) {
+    addCharge(charges, knownModel(message.model, requested), message.usage);
+    return;
+  }
+  for (const step of steps) addCharge(charges, knownModel(step.model, requested), step);
+}
+
+function totalUsage(charges: ModelCharge[]): ClaudeUsage {
+  return charges.reduce((sum, c) => sumUsage(sum, c.usage), ZERO);
 }
 
 type Attempt = { ok: true; stories: ExtractedStory[] } | { ok: false; reason: ExtractFailure; detail: string };
 
+/** Text after the last fallback block: earlier text belongs to a model that declined part way. */
+function replyText(content: Anthropic.Beta.Messages.BetaContentBlock[]): string {
+  let from = 0;
+  content.forEach((b, i) => {
+    if (b.type === "fallback") from = i + 1;
+  });
+  return content
+    .slice(from)
+    .flatMap((b) => (b.type === "text" ? [b.text] : []))
+    .join("");
+}
+
+// The API cannot enforce maxItems or minLength, so trim rather than fail the whole issue over them.
+function tidy(raw: unknown, allowed: Set<string>): unknown {
+  const stories = (raw as { stories?: unknown })?.stories;
+  if (!Array.isArray(stories)) return raw;
+  const kept = stories.filter((s) => !(s && typeof s.headline === "string" && s.headline.trim() === ""));
+  for (const s of kept) {
+    if (s && Array.isArray(s.topics)) {
+      const known = s.topics.filter((t: unknown): t is string => typeof t === "string" && allowed.has(t));
+      s.topics = [...new Set(known)].slice(0, 3);
+    }
+  }
+  return { ...(raw as object), stories: kept };
+}
+
 function readReply(message: Anthropic.Beta.Messages.BetaMessage, allowed: Set<string>): Attempt {
   if (message.stop_reason === "refusal") return { ok: false, reason: "refusal", detail: "model declined" };
   if (message.stop_reason === "max_tokens") return { ok: false, reason: "max_tokens", detail: "reply cut off" };
-  const text = message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
   let raw: unknown;
   try {
-    raw = JSON.parse(text);
+    raw = JSON.parse(replyText(message.content));
   } catch {
     return { ok: false, reason: "schema", detail: "reply is not JSON" };
   }
-  const stories = (raw as { stories?: unknown })?.stories;
-  if (Array.isArray(stories)) {
-    for (const s of stories) {
-      if (s && Array.isArray(s.topics)) s.topics = s.topics.filter((t: unknown) => typeof t === "string" && allowed.has(t));
-    }
-  }
-  const parsed = replySchema.safeParse(raw);
+  const parsed = replySchema.safeParse(tidy(raw, allowed));
   if (!parsed.success) return { ok: false, reason: "schema", detail: parsed.error.issues[0]?.message ?? "bad shape" };
   return {
     ok: true,
@@ -117,21 +173,30 @@ function readReply(message: Anthropic.Beta.Messages.BetaMessage, allowed: Set<st
   };
 }
 
+export type ExtractResult = { stories: ExtractedStory[]; usage: ClaudeUsage; charges: ModelCharge[] };
+
 /** Splits one issue into stories; retries once on refusal, cut-off or bad shape, then throws ExtractError. */
 export async function extractIssue(
   input: ExtractInput,
   deps: { client: Anthropic; model: ModelId; topics: Topic[] },
-): Promise<{ stories: ExtractedStory[]; usage: ClaudeUsage }> {
+): Promise<ExtractResult> {
   const request = buildExtractRequest(input, deps.model, deps.topics);
   const allowed = new Set(deps.topics.map((t) => t.slug));
-  let usage: ClaudeUsage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+  const charges: ModelCharge[] = [];
   let last: Attempt | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const message = await deps.client.beta.messages.create(request);
-    usage = addUsage(usage, message.usage);
+    let message: Anthropic.Beta.Messages.BetaMessage;
+    try {
+      message = await deps.client.beta.messages.create(request);
+    } catch (cause) {
+      // The SDK already retried transient errors, so one more try here would only add spend.
+      const detail = cause instanceof Error ? cause.message : String(cause);
+      throw new ExtractError("api", totalUsage(charges), charges, detail, { cause });
+    }
+    chargeMessage(charges, message, deps.model);
     last = readReply(message, allowed);
-    if (last.ok) return { stories: last.stories, usage };
+    if (last.ok) return { stories: last.stories, usage: totalUsage(charges), charges };
   }
   const failed = last as Extract<Attempt, { ok: false }>;
-  throw new ExtractError(failed.reason, usage, failed.detail);
+  throw new ExtractError(failed.reason, totalUsage(charges), charges, failed.detail);
 }
