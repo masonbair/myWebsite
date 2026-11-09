@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
+import { recordVisit } from "@/lib/analytics/record";
 
 // Chrome fetches the manifest and its icons without cookies, so they must load signed out for install to work.
 const PUBLIC_HUB_PATHS = new Set([
@@ -68,13 +69,24 @@ async function gateHubPage(request: NextRequest): Promise<NextResponse> {
   return withCookies(NextResponse.redirect(new URL("/hub/login", request.url), status), response);
 }
 
-export async function proxy(request: NextRequest) {
+const HUB_PATH = /^\/(hub|api\/hub)(\/|$)/;
+
+export async function proxy(request: NextRequest, event: NextFetchEvent) {
   const path = request.nextUrl.pathname;
+  if (!HUB_PATH.test(path)) {
+    event.waitUntil(recordVisit(request));
+    return NextResponse.next();
+  }
   if (MACHINE_API.test(path)) return gateMachineApi(request);
   if (/^\/api\/hub(\/|$)/.test(path)) return gateBrowserApi(request);
   return noindex(await gateHubPage(request));
 }
 
 export const config = {
-  matcher: ["/hub/:path*", "/api/hub/:path*"],
+  matcher: [
+    "/hub/:path*",
+    "/api/hub/:path*",
+    // Public pages plus the text files crawlers read; never API routes, Next.js assets or images.
+    "/((?!api/|hub/|hub$|_next/|.*opengraph-image|favicon|.*\\.(?:png|jpe?g|gif|svg|ico|webp|avif|css|js|map|woff2?|webmanifest)$).*)",
+  ],
 };
