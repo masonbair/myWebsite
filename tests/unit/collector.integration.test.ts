@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { beforeAll, describe, expect, it } from "vitest";
+import sharp from "sharp";
+import { readBoardPhotos } from "@/lib/collector-photos";
 import { readNowRows } from "@/lib/now";
+import { servePhoto, supabasePhotoStore } from "@/lib/photo-server";
 import { BUCKET, DAYLIO_PREFIX, PHOTO_PREFIX, RPC, TABLE, daylioPath, type PlaceRow } from "@/shared/collector-contract";
 
 // Run with: HUB_TEST_DB_URL=1 HUB_TEST_SUPABASE_URL=http://127.0.0.1:54321 HUB_TEST_SERVICE_KEY=<SERVICE_ROLE_KEY> HUB_TEST_ANON_KEY=<ANON_KEY> (from `supabase status -o env`)
@@ -282,6 +285,37 @@ describe.skipIf(!enabled)("collector tables, RPCs and storage against local Supa
       expect((await stranger.storage.from(BUCKET.daylio).download(name)).error).not.toBeNull();
       await owner.storage.from(BUCKET.daylio).remove([name]);
       expect((await service().storage.from(BUCKET.daylio).download(name)).error).toBeNull();
+    });
+  });
+
+  describe("the site's photo route", () => {
+    it("serves a visible photo cleaned of its GPS EXIF, and stops once the owner hides it", async () => {
+      const assetId = `it${randomUUID().slice(0, 8)}`;
+      // Paris, a well-known public point, standing in for a location the phone failed to strip.
+      const withGps = await sharp({ create: { width: 40, height: 30, channels: 3, background: "teal" } })
+        .jpeg()
+        .withExif({ IFD3: { GPSLatitudeRef: "N", GPSLatitude: "48/1 51/1 24/1", GPSLongitudeRef: "E", GPSLongitude: "2/1 21/1 3/1" } })
+        .toBuffer();
+      const blob = new Blob([new Uint8Array(withGps)], { type: "image/jpeg" });
+      expect((await owner.storage.from(BUCKET.photos).upload(`${PHOTO_PREFIX}${assetId}.jpg`, blob, { contentType: "image/jpeg" })).error).toBeNull();
+      const add = { p_path: `${PHOTO_PREFIX}${assetId}.jpg`, p_asset_id: assetId, p_taken_at: new Date().toISOString(), p_width: 40, p_height: 30 };
+      expect((await owner.rpc(RPC.addPhoto, add)).error).toBeNull();
+      const options = { store: () => supabasePhotoStore(service()), includeHidden: false, cacheControl: "public, max-age=300" };
+
+      expect((await readBoardPhotos(service())).map((p) => p.src)).toContain(`/photos/${assetId}`);
+      const res = await servePhoto(assetId, null, options);
+      expect(res.status).toBe(200);
+      const body = Buffer.from(await res.arrayBuffer());
+      expect(body.includes(Buffer.from("Exif\0\0", "latin1"))).toBe(false);
+      expect(body.includes(Buffer.from("GPS"))).toBe(false);
+
+      expect((await owner.rpc(RPC.setPhotoHidden, { p_asset_id: assetId, p_hidden: true })).data).toBe(true);
+      expect((await readBoardPhotos(service())).map((p) => p.src)).not.toContain(`/photos/${assetId}`);
+      expect((await servePhoto(assetId, null, options)).status).toBe(404);
+      expect((await servePhoto(assetId, "256", { ...options, includeHidden: true })).status).toBe(200);
+
+      expect((await owner.rpc(RPC.setPhotoHidden, { p_asset_id: assetId, p_hidden: false })).data).toBe(true);
+      expect((await servePhoto(assetId, null, options)).status).toBe(200);
     });
   });
 

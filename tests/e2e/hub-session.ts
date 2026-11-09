@@ -1,8 +1,8 @@
-import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { BrowserContext } from "@playwright/test";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
+import { Client } from "pg";
 import { localSupabaseEnv } from "./local-supabase";
 
 export const supabase = localSupabaseEnv();
@@ -44,10 +44,19 @@ async function ownerUser(): Promise<Credentials> {
 export async function seededOwner(): Promise<Credentials> {
   const owner = await ownerUser();
   // Local Supabase has no GitHub OAuth, so the identity is written straight into auth.identities.
-  execSync(
-    `docker exec -i supabase_db_masonbair psql -U postgres -v ON_ERROR_STOP=1 -c "insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at, last_sign_in_at) values ('${OWNER_GITHUB_ID}', '${owner.id}', '{\\"sub\\":\\"${OWNER_GITHUB_ID}\\"}', 'github', now(), now(), now()) on conflict (provider_id, provider) do update set user_id = excluded.user_id, updated_at = now(), last_sign_in_at = now()"`,
-    { stdio: "ignore" },
-  );
+  // Through the stack's own DB_URL, so a run pointed at another local stack never writes to the default one.
+  const db = new Client({ connectionString: supabase.dbUrl });
+  await db.connect();
+  try {
+    await db.query(
+      `insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at, last_sign_in_at)
+       values ($1, $2, jsonb_build_object('sub', $1::text), 'github', now(), now(), now())
+       on conflict (provider_id, provider) do update set user_id = excluded.user_id, updated_at = now(), last_sign_in_at = now()`,
+      [OWNER_GITHUB_ID, owner.id],
+    );
+  } finally {
+    await db.end();
+  }
   const { error } = await serviceClient()
     .from("hub_owner")
     .upsert({ user_id: owner.id }, { onConflict: "user_id", ignoreDuplicates: true });
