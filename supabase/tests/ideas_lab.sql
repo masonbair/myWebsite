@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(68);
+select plan(77);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a1', 'ideas-owner@example.com'),
@@ -13,7 +13,10 @@ insert into public.items (id, title, list, source) values
   ('d0000000-0000-0000-0000-000000000001', 'an idea', 'ideas', 'test'),
   ('d0000000-0000-0000-0000-000000000002', 'another idea', 'ideas', 'test'),
   ('d0000000-0000-0000-0000-000000000003', 'a stuck idea', 'ideas', 'test'),
-  ('d0000000-0000-0000-0000-000000000004', 'a capture', 'inbox', 'test');
+  ('d0000000-0000-0000-0000-000000000004', 'a capture', 'inbox', 'test'),
+  ('d0000000-0000-0000-0000-000000000005', 'a twice-stuck idea', 'ideas', 'test'),
+  ('d0000000-0000-0000-0000-000000000006', 'an idea with no claim time', 'ideas', 'test'),
+  ('d0000000-0000-0000-0000-000000000007', 'an idea under review', 'ideas', 'test');
 
 set local role service_role;
 set local request.jwt.claims = '{"role":"service_role"}';
@@ -25,8 +28,12 @@ insert into public.idea_settings (item_id, enrolled, review_status, review_reque
   ('d0000000-0000-0000-0000-000000000002', true, 'done', null);
 select lives_ok(
   $$ insert into public.idea_settings (item_id, review_status, review_requested_at, review_attempts, review_claimed_at, mention_count, moved_from_inbox, last_error)
-     values ('d0000000-0000-0000-0000-000000000003', 'working', now() - interval '2 hours', 2, now() - interval '1 hour', 3, true, 'timeout') $$,
+     values ('d0000000-0000-0000-0000-000000000003', 'working', now() - interval '2 hours', 0, now() - interval '1 hour', 3, true, 'timeout') $$,
   'service_role can set every idea_settings column');
+insert into public.idea_settings (item_id, review_status, review_requested_at, review_attempts, review_claimed_at) values
+  ('d0000000-0000-0000-0000-000000000005', 'working', now() - interval '3 hours', 1, now() - interval '1 hour'),
+  ('d0000000-0000-0000-0000-000000000006', 'working', now() - interval '90 minutes', 0, null),
+  ('d0000000-0000-0000-0000-000000000007', 'working', now() - interval '4 hours', 0, now() - interval '5 minutes');
 insert into public.idea_reviews (item_id, version, review, model, prompt_version, cost_usd)
   values ('d0000000-0000-0000-0000-000000000002', 1, '{"verdict":"build"}', 'claude-opus-5-5', 'v1', 0.2);
 insert into public.idea_sources (source_item_id, kind, status) values ('d0000000-0000-0000-0000-000000000004', 'capture', 'done');
@@ -35,14 +42,25 @@ insert into public.idea_resurface (item_id, step, due_date, status)
 update public.idea_google set connected = true, calendar_id = 'cal-1';
 
 select is(public.ideas_claim_review(), 'd0000000-0000-0000-0000-000000000003'::uuid,
-  'a review stuck in working past the stale time is claimed first, as it was requested earliest');
-select is(public.ideas_claim_review(), 'd0000000-0000-0000-0000-000000000001'::uuid, 'the waiting idea is claimed next');
-select is(public.ideas_claim_review(), null, 'a second claim finds nothing left');
+  'a stale claim on its first attempt is claimed again');
 select results_eq(
-  $$ select review_status, review_claimed_at is not null from public.idea_settings where item_id = 'd0000000-0000-0000-0000-000000000001' $$,
-  $$ values ('working'::text, true) $$,
-  'a claimed idea is working with a claim time');
+  $$ select review_status, review_attempts from public.idea_settings where item_id = 'd0000000-0000-0000-0000-000000000003' $$,
+  $$ values ('working'::text, 1) $$,
+  'reclaiming a stale review counts an attempt');
+select results_eq(
+  $$ select review_status, review_attempts, last_error from public.idea_settings where item_id = 'd0000000-0000-0000-0000-000000000005' $$,
+  $$ values ('failed'::text, 2, 'stale'::text) $$,
+  'a review that went stale twice fails instead of being claimed');
+select is(public.ideas_claim_review(), 'd0000000-0000-0000-0000-000000000006'::uuid,
+  'a working idea with no claim time can be claimed again');
+select is(public.ideas_claim_review(), 'd0000000-0000-0000-0000-000000000001'::uuid, 'the waiting idea is claimed next');
+select results_eq(
+  $$ select review_status, review_claimed_at is not null, review_attempts from public.idea_settings where item_id = 'd0000000-0000-0000-0000-000000000001' $$,
+  $$ values ('working'::text, true, 0) $$,
+  'a fresh claim is working with a claim time and counts no attempt');
+select is(public.ideas_claim_review(), null, 'a review claimed minutes ago is not claimed again');
 update public.idea_settings set review_status = 'done' where item_id = 'd0000000-0000-0000-0000-000000000003';
+update public.idea_settings set review_claimed_at = now() - interval '1 hour' where item_id = 'd0000000-0000-0000-0000-000000000006';
 
 select lives_ok($$ select public.ideas_google_token_set('refresh-1') $$, 'service_role stores the Google token');
 select is(public.ideas_google_token_get(), 'refresh-1', 'service_role reads the Google token back');
@@ -118,7 +136,7 @@ select throws_ok(
 
 set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-0000000000a1","role":"authenticated"}';
 select is((select count(*)::int from public.ai_usage), 1, 'the owner reads usage');
-select is((select count(*)::int from public.idea_settings), 3, 'the owner reads settings');
+select is((select count(*)::int from public.idea_settings), 6, 'the owner reads settings');
 select is((select count(*)::int from public.idea_reviews), 1, 'the owner reads reviews');
 select is((select count(*)::int from public.idea_sources), 1, 'the owner reads sources');
 select is((select count(*)::int from public.idea_resurface), 1, 'the owner reads the schedule');
@@ -140,6 +158,15 @@ select is(
 select throws_ok(
   $$ update public.idea_settings set review_status = 'done' where item_id = 'd0000000-0000-0000-0000-000000000002' $$,
   'P0001', null, 'the owner cannot mark a review done');
+select lives_ok(
+  $$ update public.idea_settings set review_status = 'none' where item_id = 'd0000000-0000-0000-0000-000000000002' $$,
+  'the owner can set a review back to none');
+select throws_ok(
+  $$ update public.idea_settings set review_status = 'waiting', review_requested_at = now() where item_id = 'd0000000-0000-0000-0000-000000000007' $$,
+  'P0001', null, 'the owner cannot restart a review that is running');
+select lives_ok(
+  $$ update public.idea_settings set review_status = 'waiting', review_requested_at = now() where item_id = 'd0000000-0000-0000-0000-000000000006' $$,
+  'the owner can restart a review whose claim went stale');
 select lives_ok(
   $$ update public.idea_settings set no_web_search = true where item_id = 'd0000000-0000-0000-0000-000000000003' $$,
   'the owner can change other settings while a review is done');
@@ -192,6 +219,16 @@ select is(
   + (select count(*)::int from public.idea_settings where item_id in
      ('d0000000-0000-0000-0000-000000000013', 'd0000000-0000-0000-0000-000000000014', 'd0000000-0000-0000-0000-000000000015')),
   0, 'a share, an import or a captured todo creates no Ideas Lab rows');
+
+select throws_ok(
+  $$ update public.idea_settings set last_error = 'x' where item_id = 'd0000000-0000-0000-0000-000000000001' $$,
+  'P0001', null, 'postgres cannot set last_error');
+select throws_ok(
+  $$ update public.idea_settings set review_claimed_at = null where item_id = 'd0000000-0000-0000-0000-000000000001' $$,
+  'P0001', null, 'postgres cannot change the claim time');
+select throws_ok(
+  $$ update public.idea_settings set moved_from_inbox = true where item_id = 'd0000000-0000-0000-0000-000000000001' $$,
+  'P0001', null, 'postgres cannot set moved_from_inbox');
 
 select * from finish();
 rollback;

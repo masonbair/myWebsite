@@ -106,6 +106,11 @@ begin
      and new.review_status not in ('none', 'waiting') then
     raise exception 'only the ideas job can set a review to %', new.review_status;
   end if;
+  -- Leaving a live claim would let "Review again" start a second paid run while the first is still going.
+  if tg_op = 'UPDATE' and old.review_status = 'working' and new.review_status is distinct from old.review_status
+     and coalesce(old.review_claimed_at, '-infinity') >= now() - interval '30 minutes' then
+    raise exception 'a review is running; try again in a few minutes';
+  end if;
   if tg_op = 'INSERT' then
     if new.review_attempts <> 0 or new.review_claimed_at is not null or new.mention_count <> 1
        or new.moved_from_inbox or new.last_error is not null then
@@ -197,22 +202,40 @@ create trigger items_ideas_intake after insert on public.items
   execute function public.items_ideas_intake();
 
 -- Skip locked so two overlapping job runs never claim the same idea.
+-- A stale claim means a run died mid-review; it counts as an attempt, and a second one fails the idea so it never loops on paid calls.
 create function public.ideas_claim_review(p_stale interval default '30 minutes') returns uuid
-language sql set search_path = ''
+language plpgsql set search_path = ''
 as $$
-  with next as (
-    select item_id from public.idea_settings
+declare
+  picked public.idea_settings;
+begin
+  loop
+    select * into picked from public.idea_settings
     where review_status = 'waiting'
-       or (review_status = 'working' and review_claimed_at < now() - p_stale)
+       or (review_status = 'working' and coalesce(review_claimed_at, '-infinity') < now() - p_stale)
     order by review_requested_at nulls last, item_id
     limit 1
-    for update skip locked
-  )
-  update public.idea_settings s
-  set review_status = 'working', review_claimed_at = now()
-  from next
-  where s.item_id = next.item_id
-  returning s.item_id;
+    for update skip locked;
+    if not found then
+      return null;
+    end if;
+    if picked.review_status = 'waiting' then
+      update public.idea_settings set review_status = 'working', review_claimed_at = now()
+      where item_id = picked.item_id;
+      return picked.item_id;
+    end if;
+    if picked.review_attempts + 1 >= 2 then
+      update public.idea_settings
+      set review_status = 'failed', last_error = 'stale', review_attempts = picked.review_attempts + 1
+      where item_id = picked.item_id;
+    else
+      update public.idea_settings
+      set review_claimed_at = now(), review_attempts = picked.review_attempts + 1
+      where item_id = picked.item_id;
+      return picked.item_id;
+    end if;
+  end loop;
+end;
 $$;
 
 revoke execute on function public.ideas_claim_review(interval) from public, anon, authenticated;
