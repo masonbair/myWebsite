@@ -17,10 +17,12 @@ function fakeClient(rows: Record<string, unknown>[], insertError: Error | null =
         let since = "";
         const chain = {
           eq: (_c: string, v: string) => ((feature = v), chain),
-          gte: async (_c: string, v: string) => (
-            (since = v),
-            { data: rows.filter((r) => r.feature === feature && String(r.at) >= since), error: null }
-          ),
+          gte: (_c: string, v: string) => ((since = v), chain),
+          order: () => chain,
+          range: async (from: number, to: number) => ({
+            data: rows.filter((r) => r.feature === feature && String(r.at) >= since).slice(from, to + 1),
+            error: null,
+          }),
         };
         return chain;
       },
@@ -135,5 +137,18 @@ describe("monthSpend", () => {
     const out = await monthSpend(client, "ideas", new Date("2026-01-05T00:00:00Z"));
     expect(out.lastMonth).toBe(3);
     expect(out.thisMonth).toBe(0);
+  });
+
+  it("pages past 1000 rows so the total includes every page", async () => {
+    const rows = Array.from({ length: 1250 }, () => ({
+      feature: "ideas",
+      model: "claude-opus-5-5",
+      cost_usd: 1,
+      at: "2026-11-02T00:00:00Z",
+    }));
+    const { client } = fakeClient(rows);
+    const out = await monthSpend(client, "ideas", new Date("2026-11-09T10:00:00Z"));
+    expect(out.calls).toBe(1250);
+    expect(out.thisMonth).toBe(1250);
   });
 });

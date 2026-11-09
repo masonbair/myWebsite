@@ -70,15 +70,23 @@ export async function monthSpend(
 ): Promise<{ thisMonth: number; lastMonth: number; byModel: Record<string, number>; calls: number }> {
   const thisStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
   const lastStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1);
-  const { data, error } = await client
-    .from("ai_usage")
-    .select("model, cost_usd, at")
-    .eq("feature", feature)
-    .gte("at", new Date(lastStart).toISOString());
-  if (error) throw error;
+  const PAGE = 1000;
+  const rows: { model: string; cost_usd: number | string; at: string }[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await client
+      .from("ai_usage")
+      .select("model, cost_usd, at")
+      .eq("feature", feature)
+      .gte("at", new Date(lastStart).toISOString())
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    rows.push(...(data ?? []));
+    if ((data ?? []).length < PAGE) break;
+  }
 
   const out = { thisMonth: 0, lastMonth: 0, byModel: {} as Record<string, number>, calls: 0 };
-  for (const r of (data ?? []) as { model: string; cost_usd: number | string; at: string }[]) {
+  for (const r of rows) {
     const cost = Number(r.cost_usd);
     if (Date.parse(r.at) >= thisStart) {
       out.thisMonth += cost;
