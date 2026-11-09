@@ -3,6 +3,7 @@ import { tokenMatches } from "./bearer";
 import { CLAUDE_LABEL } from "./rules";
 import { notify } from "./notify";
 import { offsetMinutesAt } from "./schedule";
+import type { IdeasRunResult } from "@/lib/ideas/job";
 import type { BackupResult } from "./backup";
 import type { HubStore, Item } from "./types";
 
@@ -25,6 +26,8 @@ export type EventDeps = {
   fetchFn: typeof fetch;
   /** Null when no blob store is connected. */
   backup: (() => Promise<BackupResult>) | null;
+  /** One Ideas Lab run; null when the ideas Claude key is unset. */
+  ideas?: (() => Promise<IdeasRunResult>) | null;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -208,6 +211,10 @@ export async function handleEventRequest(request: Request, event: string, deps: 
     if (event === "reminders") return await sendReminders(deps);
     if (event === "approved") return await fireApproved(request, deps);
     if (event === "backup") return await backup(deps);
+    if (event === "ideas") {
+      if (!deps.ideas) return json({ error: "ideas are not configured" }, 503);
+      return json(await deps.ideas());
+    }
     return json({ error: "not found" }, 404);
   } catch (e) {
     console.error("hub event", event, e);

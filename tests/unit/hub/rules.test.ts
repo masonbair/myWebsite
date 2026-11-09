@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ForbiddenError, ItemNotOpenError, assertAllowed, assertOpenForEdit } from "@/lib/hub/rules";
+import { ForbiddenError, ItemNotOpenError, assertAllowed, assertHubStateKey, assertOpenForEdit } from "@/lib/hub/rules";
 import type { Actor, HubAction } from "@/lib/hub/types";
 
 const mason: Actor = { kind: "mason" };
@@ -43,5 +43,18 @@ describe("assertOpenForEdit", () => {
 
   it("lets anyone change an open item", () => {
     for (const actor of [mason, worker, agent]) expect(() => assertOpenForEdit(actor, { id: "i1", state: "open" })).not.toThrow();
+  });
+});
+
+describe("assertHubStateKey", () => {
+  it("allows the Ideas Lab's monthly cap flag and daily failure flag", () => {
+    expect(() => assertHubStateKey("ideas-cap-notified:2026-11")).not.toThrow();
+    expect(() => assertHubStateKey("ideas-failures-notified:2026-11-09")).not.toThrow();
+  });
+
+  it("refuses look-alike Ideas Lab keys", () => {
+    for (const key of ["ideas-cap-notified:", "ideas-cap-notified:2026-11-09", "ideas-failures-notified:2026-11", "ideas-cap-notified:2026-11x"]) {
+      expect(() => assertHubStateKey(key)).toThrow(ForbiddenError);
+    }
   });
 });

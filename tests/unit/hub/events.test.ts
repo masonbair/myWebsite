@@ -124,8 +124,9 @@ describe("event auth", () => {
     expect((await harness().call("delete")).status).toBe(404);
   });
 
-  it("exports only POST from the route", () => {
-    expect(Object.keys(route)).toEqual(["POST"]);
+  it("exports only POST and the time limit from the route", () => {
+    expect(Object.keys(route).sort()).toEqual(["POST", "maxDuration"]);
+    expect(route.maxDuration).toBe(300);
   });
 });
 
@@ -309,5 +310,29 @@ describe("backup event", () => {
 
   it("is 503 when no blob store is connected", async () => {
     expect((await harness({ backup: null }).call("backup")).status).toBe(503);
+  });
+});
+
+describe("ideas event", () => {
+  const result = { detected: 0, reviewed: ["a"], failed: [], paused: false, resurfaced: 0 };
+
+  it("answers 503 when no ideas runner is configured", async () => {
+    expect((await harness({ ideas: null }).call("ideas")).status).toBe(503);
+    expect((await harness().call("ideas")).status).toBe(503);
+  });
+
+  it("runs the ideas job and returns its result", async () => {
+    let runs = 0;
+    const res = await harness({ ideas: async () => (runs++, result) }).call("ideas");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(result);
+    expect(runs).toBe(1);
+  });
+
+  it("refuses a wrong token before running anything", async () => {
+    let runs = 0;
+    const res = await harness({ ideas: async () => (runs++, result) }).call("ideas", {}, "Bearer nope");
+    expect(res.status).toBe(401);
+    expect(runs).toBe(0);
   });
 });
