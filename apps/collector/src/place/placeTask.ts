@@ -31,7 +31,8 @@ function samePlace(a: PlaceReport, b: PlaceReport): boolean {
 /** One background wake. The fix is matched on the phone; only a place name ever leaves it. */
 export async function runPlaceTask(fixes: Fix[], now = Date.now(), timeZone: string | null = deviceTimeZone()): Promise<void> {
   const fix = fixes.at(-1);
-  if (!fix || !(await signedIn())) return;
+  // Checked here too, so a task that failed to stop still sends nothing once the switch is off.
+  if (!fix || !(await readJson<boolean>(PLACE_TASK_WANTED_KEY, false)) || !(await signedIn())) return;
   const report = toReport(fix.coords, await loadPrivatePlaces());
   if (!report) return;
   const last = await readJson<LastSent | null>(LAST_SENT_KEY, null);

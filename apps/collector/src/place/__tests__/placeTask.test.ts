@@ -38,6 +38,7 @@ beforeEach(async () => {
   bgPerm.mockReset().mockResolvedValue(granted);
   started.mockReset().mockResolvedValue(false);
   fix.mockReset().mockResolvedValue(LISBON[0].coords);
+  await AsyncStorage.setItem('place-task-wanted', 'true');
 });
 
 describe('runPlaceTask', () => {
@@ -87,20 +88,29 @@ describe('runPlaceTask', () => {
   it('does nothing when no place is near', async () => {
     await runPlaceTask([{ coords: { latitude: 0, longitude: -30 } }], 1000, ZONE);
     expect(insert).not.toHaveBeenCalled();
-    expect(await AsyncStorage.getAllKeys()).toEqual([]);
+    expect(await AsyncStorage.getAllKeys()).toEqual(['place-task-wanted']);
+  });
+
+  it('sends nothing when Report my place is off, even if the task is still running', async () => {
+    await AsyncStorage.setItem('place-task-wanted', 'false');
+    await runPlaceTask(LISBON, 1000, ZONE);
+    await AsyncStorage.removeItem('place-task-wanted');
+    await runPlaceTask(LISBON, 2000, ZONE);
+    expect(insert).not.toHaveBeenCalled();
+    expect(await stored('place-last-sent')).toBeNull();
   });
 
   it('does nothing when signed out', async () => {
     signed.mockResolvedValue(false);
     await runPlaceTask(LISBON, 1000, ZONE);
     expect(insert).not.toHaveBeenCalled();
-    expect(await AsyncStorage.getAllKeys()).toEqual([]);
+    expect(await AsyncStorage.getAllKeys()).toEqual(['place-task-wanted']);
   });
 
   it('keeps the old state on an insert error so the next wake retries', async () => {
     insert.mockResolvedValueOnce({ error: new Error('offline') });
     await runPlaceTask(LISBON, 1000, ZONE);
-    expect(await AsyncStorage.getAllKeys()).toEqual([]);
+    expect(await AsyncStorage.getAllKeys()).toEqual(['place-task-wanted']);
     await runPlaceTask(LISBON, 2000, ZONE);
     expect(insert).toHaveBeenCalledTimes(2);
     expect(await stored('job-last-ok:place')).toBe(2000);
@@ -137,6 +147,7 @@ describe('refreshStalePlace', () => {
   });
 
   it('does nothing when reporting is off, background location is not allowed, or signed out', async () => {
+    await AsyncStorage.removeItem('place-task-wanted');
     await refreshStalePlace(1000);
     await wanted();
     bgPerm.mockResolvedValueOnce({ status: 'denied', granted: false, canAskAgain: false });
