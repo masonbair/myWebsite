@@ -248,7 +248,7 @@ create trigger news_shared_guard before update on public.news_shared
   for each row execute function public.news_shared_guard();
 
 -- Security definer so the owner's share can write news_shared, which authenticated has no insert grant on.
--- No exception handler: if this insert fails the share fails too, so the item and its row exist together or not at all.
+-- Mason's share always saves; the news row is best-effort and a failure shows as a warning in the logs.
 create function public.news_items_share() returns trigger
 language plpgsql security definer set search_path = ''
 as $$
@@ -263,7 +263,11 @@ begin
   end loop;
   -- A link over 2,000 characters is skipped rather than cut, since a cut link points somewhere else.
   if link ~ '^https?://.' and pg_catalog.length(link) <= 2000 then
-    insert into public.news_shared (item_id, url, title) values (new.id, link, new.title);
+    begin
+      insert into public.news_shared (item_id, url, title) values (new.id, link, new.title);
+    exception when others then
+      raise warning 'news share link not recorded for %: %', new.id, sqlerrm;
+    end;
   end if;
   return null;
 end;

@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(125);
+select plan(128);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a9', 'news-owner@example.com'),
@@ -437,6 +437,23 @@ select is(
 select is(
   (select url from public.news_shared where item_id = '91000000-0000-0000-0000-000000000007'),
   'https://x.example/a', 'a share drops a closing paren and period that belong to the sentence');
+
+reset role;
+alter table public.news_shared add constraint force_share_failure check (url <> 'https://example.com/broken');
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-0000000000a9","role":"authenticated"}';
+select lives_ok(
+  $$ insert into public.items (id, title, source, description)
+     values ('91000000-0000-0000-0000-000000000008', 'broken share', 'share', 'https://example.com/broken') $$,
+  'the share saves even when its news_shared row cannot be written');
+select is(
+  (select count(*)::int from public.items where id = '91000000-0000-0000-0000-000000000008'),
+  1, 'the share whose news row failed is kept');
+reset role;
+select is(
+  (select count(*)::int from public.news_shared where item_id = '91000000-0000-0000-0000-000000000008'),
+  0, 'a failed news_shared insert leaves no row');
+alter table public.news_shared drop constraint force_share_failure;
 
 reset role;
 set local role service_role;

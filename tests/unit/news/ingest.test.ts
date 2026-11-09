@@ -1,8 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { ParsedEmail } from "@/lib/news/email";
+import { alignedDkimFrom } from "@/lib/news/dkim";
 import { ingestEmail, publicIssueUrl, type IngestDeps } from "@/lib/news/ingest";
 import type { NewIssue, NewsSource } from "@/lib/news/types";
+import { signRaw, testResolver } from "./dkim-fixture";
 
 const load = (name: string) => new Uint8Array(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
 
@@ -76,6 +78,38 @@ describe("ingestEmail", () => {
   it("backfill is backfill with a source, quarantined without", async () => {
     expect((await ingestEmail(load("issue.eml"), fakeDeps().deps, { kind: "backfill" })).issueStatus).toBe("backfill");
     expect((await ingestEmail(load("plain.eml"), fakeDeps().deps, { kind: "backfill" })).issueStatus).toBe("quarantined");
+  });
+});
+
+describe("ingestEmail with two From headers", () => {
+  const issue = readFileSync(new URL("./fixtures/issue.eml", import.meta.url), "utf8");
+  const dns = testResolver(["example-brew.test", "evil.example"]);
+  const signedFrom = "From: Daily Brew <news@example-brew.test>";
+  const injected = "From: Evil <x@evil.example>";
+  const viaWebhook = async (raw: Uint8Array) => {
+    const dkimFrom = await alignedDkimFrom(raw, dns);
+    expect(dkimFrom).toBeNull();
+    return (await ingestEmail(raw, fakeDeps().deps, { kind: "webhook", forwardedOk: true, dkimFrom })).issueStatus;
+  };
+  const text = async (raw: Uint8Array) => Buffer.from(raw).toString("utf8");
+
+  it("holds back a second From added above or below the signed one", async () => {
+    const signed = await text(await signRaw(issue, "example-brew.test"));
+    const above = signed.replace(signedFrom, `${injected}\r\n${signedFrom}`);
+    const below = signed.replace(signedFrom, `${signedFrom}\r\n${injected}`);
+    const top = `${injected}\r\n${signed}`;
+    for (const raw of [above, below, top]) {
+      expect(raw).not.toBe(signed);
+      expect(await viaWebhook(new TextEncoder().encode(raw))).toBe("quarantined");
+    }
+  });
+
+  it("holds back two From headers that were both signed, in either order", async () => {
+    for (const both of [`${injected}\r\n${signedFrom}`, `${signedFrom}\r\n${injected}`]) {
+      for (const domain of ["example-brew.test", "evil.example"]) {
+        expect(await viaWebhook(await signRaw(issue.replace(signedFrom, both), domain))).toBe("quarantined");
+      }
+    }
   });
 });
 
