@@ -18,6 +18,7 @@ jest.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: jest.fn(),
   getCurrentPositionAsync: jest.fn(),
+  getLastKnownPositionAsync: jest.fn(),
   Accuracy: { Lowest: 1, Balanced: 3 },
 }));
 jest.mock('../health/health', () => ({ ...jest.requireActual('../health/health'), collectHealth: jest.fn() }));
@@ -144,6 +145,21 @@ it('Run now runs the periodic job and the place sync, then refreshes health', as
   await waitFor(() => expect(collect.mock.calls.length).toBeGreaterThan(before));
   expect(runPeriodic).toHaveBeenCalled();
   expect(syncPlaceTask).toHaveBeenCalledWith('on');
+});
+
+it('Run now cannot start a second run while one is going', async () => {
+  let finish: () => void = () => {};
+  (runPeriodic as jest.Mock).mockReturnValue(new Promise<void>((r) => { finish = r; }));
+  await show();
+  const first = fireEvent.press(screen.getByText('Run now'));
+  await waitFor(() => expect(runPeriodic).toHaveBeenCalledTimes(1));
+  const button = screen.getByRole('button', { name: 'Running...' });
+  expect(button.props.accessibilityState).toMatchObject({ disabled: true });
+  const second = fireEvent.press(button);
+  finish();
+  await Promise.all([first, second]);
+  expect(runPeriodic).toHaveBeenCalledTimes(1);
+  await screen.findByText('Run now');
 });
 
 it('Run now sends one coarse place report when tracking is allowed and wanted', async () => {

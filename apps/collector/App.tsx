@@ -120,7 +120,7 @@ export default function App() {
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Collector</Text>
       <HealthList items={items} onFix={handleFix} />
-      <Button title={running ? 'Running...' : 'Run now'} onPress={handleRunNow} />
+      <Button title={running ? 'Running...' : 'Run now'} onPress={handleRunNow} disabled={running} />
 
       <View style={styles.switchRow}>
         <Text>Report my place</Text>
