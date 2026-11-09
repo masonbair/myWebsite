@@ -212,6 +212,52 @@ it('marks a place private with one coarse fix and shows only its label', async (
   await waitFor(() => expect(screen.queryByText('Lisbon flat')).toBeNull());
 });
 
+it('marking a place private re-sends the place at once with the same fix, and so does removing one', async () => {
+  const at = { latitude: 38.7223, longitude: -9.1393 };
+  (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+  (Location.getCurrentPositionAsync as jest.Mock).mockResolvedValue({ coords: at });
+  await show();
+  await fireEvent.press(screen.getByText('Mark this place private'));
+  await fireEvent.changeText(await screen.findByPlaceholderText('Name for this place'), 'test-a');
+  await fireEvent.press(screen.getByText('Save place'));
+  await waitFor(() => expect(runPlaceTask).toHaveBeenCalledTimes(1));
+  expect((runPlaceTask as jest.Mock).mock.calls[0][0]).toEqual([{ coords: at }]);
+  expect(Location.getCurrentPositionAsync).toHaveBeenCalledTimes(1);
+  expect(JSON.parse((await AsyncStorage.getItem('private-places'))!)).toHaveLength(1);
+
+  await fireEvent.press(screen.getByText('Remove test-a'));
+  await waitFor(() => expect(runPlaceTask).toHaveBeenCalledTimes(2));
+  expect((runPlaceTask as jest.Mock).mock.calls[1][0]).toEqual([{ coords: at }]);
+  expect(JSON.parse((await AsyncStorage.getItem('private-places'))!)).toEqual([]);
+});
+
+it('a failed re-send still keeps the new private place and shows no location error', async () => {
+  (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+  (Location.getCurrentPositionAsync as jest.Mock).mockResolvedValue({ coords: { latitude: 38.7223, longitude: -9.1393 } });
+  (runPlaceTask as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+  await show();
+  await fireEvent.press(screen.getByText('Mark this place private'));
+  await fireEvent.changeText(await screen.findByPlaceholderText('Name for this place'), 'test-a');
+  await fireEvent.press(screen.getByText('Save place'));
+  await screen.findByText('Remove test-a');
+  await waitFor(() => expect(runPlaceTask).toHaveBeenCalled());
+  expect(screen.queryByText(/Could not get your location/)).toBeNull();
+});
+
+it('changing private places sends nothing while reporting is off', async () => {
+  (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+  (Location.getCurrentPositionAsync as jest.Mock).mockResolvedValue({ coords: { latitude: 38.7223, longitude: -9.1393 } });
+  await AsyncStorage.setItem('place-task-wanted', 'false');
+  await show();
+  await fireEvent.press(screen.getByText('Mark this place private'));
+  await fireEvent.changeText(await screen.findByPlaceholderText('Name for this place'), 'test-a');
+  await fireEvent.press(screen.getByText('Save place'));
+  await fireEvent.press(await screen.findByText('Remove test-a'));
+  await waitFor(() => expect(screen.queryByText('test-a')).toBeNull());
+  expect(runPlaceTask).not.toHaveBeenCalled();
+  expect(Location.getCurrentPositionAsync).toHaveBeenCalledTimes(1);
+});
+
 it('asks for permission and saves nothing when location is refused', async () => {
   (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'denied' });
   await show();

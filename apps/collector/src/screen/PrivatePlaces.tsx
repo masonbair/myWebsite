@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { coarseFix } from '../place/coarseFix';
+import type { Point } from '../place/nearestPlace';
 import { addPrivatePlace, loadPrivatePlaces, removePrivatePlace } from '../place/privatePlaces';
 import { Button } from './Button';
 import { ERROR } from './theme';
 
-export function PrivatePlaces({ reportingOn }: { reportingOn: boolean }) {
+/** reportPlace is null while place reporting is off; otherwise a change re-sends the place so the site updates now. */
+export function PrivatePlaces({ reportPlace }: { reportPlace: ((at: Point) => Promise<void>) | null }) {
   const [labels, setLabels] = useState<string[]>([]);
   const [asking, setAsking] = useState(false);
   const [label, setLabel] = useState('');
@@ -27,8 +29,9 @@ export function PrivatePlaces({ reportingOn }: { reportingOn: boolean }) {
     const name = label.trim();
     if (!name) return;
     setError(null);
+    let at: Point | null;
     try {
-      const at = await coarseFix();
+      at = await coarseFix();
       if (!at) {
         setError('Location permission is needed to mark this place.');
         return;
@@ -39,6 +42,16 @@ export function PrivatePlaces({ reportingOn }: { reportingOn: boolean }) {
       await reload();
     } catch {
       setError('Could not get your location. Try again.');
+      return;
+    }
+    await sendQuietly(at);
+  }
+
+  async function sendQuietly(at: Point) {
+    try {
+      await reportPlace?.(at);
+    } catch {
+      // The next background wake or Run now sends the place instead.
     }
   }
 
@@ -51,12 +64,15 @@ export function PrivatePlaces({ reportingOn }: { reportingOn: boolean }) {
   async function remove(name: string) {
     await removePrivatePlace(name);
     await reload();
+    if (!reportPlace) return;
+    const at = await coarseFix().catch(() => null);
+    if (at) await sendQuietly(at);
   }
 
   return (
     <View style={styles.box}>
       <Text style={styles.heading}>Private places</Text>
-      {!reportingOn && labels.length === 0 && <Text>Mark home as private before you turn this on.</Text>}
+      {!reportPlace && labels.length === 0 && <Text>Mark home as private before you turn this on.</Text>}
       {labels.map((name) => (
         <View key={name} style={styles.row}>
           <Text>{name}</Text>

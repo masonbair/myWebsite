@@ -10,7 +10,7 @@ import { registerPeriodic, runPeriodic } from './src/jobs/periodicTask';
 import { readJson, writeJson } from './src/lib/store';
 import { PLACE_TASK_WANTED_KEY } from './src/lib/storageKeys';
 import { signInWithGitHub, signOut, type SignInResult } from './src/lib/signIn';
-import { ABOUT } from './src/place/nearestPlace';
+import { ABOUT, type Point } from './src/place/nearestPlace';
 import { coarseFix } from './src/place/coarseFix';
 import { runPlaceTask, syncPlaceTask } from './src/place/placeTask';
 import { Button } from './src/screen/Button';
@@ -82,6 +82,10 @@ export default function App() {
     }
   }
 
+  async function reportPlaceNow(at: Point) {
+    await runPlaceTask([{ coords: at }], Date.now());
+  }
+
   async function handleLocationSwitch(next: boolean) {
     setLocationWanted(next);
     await writeJson(PLACE_TASK_WANTED_KEY, next);
@@ -123,7 +127,7 @@ export default function App() {
         <Switch value={canTrack && locationWanted} disabled={!canTrack} onValueChange={handleLocationSwitch} trackColor={{ true: ACCENT }} />
       </View>
 
-      <PrivatePlaces reportingOn={canTrack && locationWanted} />
+      <PrivatePlaces reportPlace={canTrack && locationWanted ? reportPlaceNow : null} />
       <Button title="Choose Daylio folder" onPress={handlePickFolder} />
 
       <Text style={styles.heading}>Setup</Text>
