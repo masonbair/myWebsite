@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { HubServiceWorker } from "@/components/hub/HubServiceWorker";
 
 export const metadata: Metadata = {
   title: "Hub",
@@ -22,6 +23,8 @@ export default function HubLayout({ children }: LayoutProps<"/hub">) {
           This page needs JavaScript. Turn it on for masonbair.com in your browser settings.
         </p>
       </noscript>
+      {/* Registered on signed-out pages too: browsers offer install only once a worker controls the page. */}
+      <HubServiceWorker />
       {children}
     </div>
   );

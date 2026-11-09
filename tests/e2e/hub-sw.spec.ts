@@ -63,6 +63,15 @@ test.describe("hub service worker", () => {
     expect(response.headers()["cache-control"]).toBe("no-cache");
   });
 
+  test("registers on the signed-out login page, so the hub can be installed before signing in", async ({ browser }) => {
+    const signedOut = await browser.newContext();
+    const page = await signedOut.newPage();
+    await page.goto(`${SW_BASE}/hub/login`);
+    const scope = await page.evaluate(async () => (await navigator.serviceWorker.ready).scope);
+    expect(scope).toBe(`${SW_BASE}/hub/`);
+    await signedOut.close();
+  });
+
   test("the default hub server registers no worker", async ({ page }) => {
     await page.goto(`http://localhost:${HUB_PORT}/hub/capture`);
     await expect(page.getByRole("textbox", { name: "Capture" })).toBeFocused();
