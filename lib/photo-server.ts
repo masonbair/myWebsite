@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import sharp from "sharp";
-import { ASSET_ID, DEFAULT_PHOTO_WIDTH, snapPhotoWidth } from "@/lib/collector-photos";
+import { ASSET_ID, DEFAULT_PHOTO_WIDTH, isServedPhotoWidth } from "@/lib/collector-photos";
 import { BUCKET, PHOTO_PREFIX } from "@/shared/collector-contract";
 
 /** How the photo routes reach the database and storage; tests pass a fake. */
@@ -29,9 +29,12 @@ export function supabasePhotoStore(client: SupabaseClient): PhotoStore {
 
 const isJpeg = (b: Uint8Array) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
 
+// The phone sends at most 2400 px a side (about 6 MP), so this only stops decompression bombs.
+export const MAX_INPUT_PIXELS = 50_000_000;
+
 /** Re-encodes a JPEG no wider or taller than maxEdge; sharp drops all EXIF, XMP, IPTC and ICC data unless asked to keep it. */
 export async function cleanJpeg(input: Uint8Array, maxEdge: number): Promise<Uint8Array> {
-  const out = await sharp(input, { failOn: "error" })
+  const out = await sharp(input, { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS })
     // Applies the EXIF orientation to the pixels first, since the orientation tag is dropped with the rest.
     .rotate()
     .resize({ width: maxEdge, height: maxEdge, fit: "inside", withoutEnlargement: true })
@@ -47,8 +50,9 @@ const notFound = () => new Response("Not found", { status: 404, headers: { "Cach
 /** A photo the phone uploaded, cleaned and resized, or 404 for a bad id, a hidden photo (unless includeHidden), or bytes that are not a JPEG. */
 export async function servePhoto(assetId: string, widthParam: string | null, options: ServeOptions): Promise<Response> {
   if (!ASSET_ID.test(assetId)) return notFound();
-  const asked = Number(widthParam);
-  const width = widthParam !== null && Number.isInteger(asked) && asked > 0 ? snapPhotoWidth(asked) : DEFAULT_PHOTO_WIDTH;
+  // Any other w is refused, so visitors cannot spray cache keys that each force a fresh re-encode.
+  const width = widthParam === null ? DEFAULT_PHOTO_WIDTH : /^[1-9][0-9]{0,3}$/.test(widthParam) ? Number(widthParam) : NaN;
+  if (!isServedPhotoWidth(width)) return notFound();
   let store: PhotoStore;
   let hidden: boolean | null;
   try {

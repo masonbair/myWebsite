@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { describe, expect, it, vi } from "vitest";
-import { servePhoto, type PhotoStore } from "@/lib/photo-server";
+import { MAX_INPUT_PIXELS, cleanJpeg, servePhoto, type PhotoStore } from "@/lib/photo-server";
 
 // Paris, a well-known public point, standing in for a location the phone failed to strip.
 const GPS_EXIF = {
@@ -78,14 +78,32 @@ describe("servePhoto", () => {
     expect(meta.icc).toBeUndefined();
   });
 
-  it("shrinks to the snapped width and never enlarges", async () => {
+  it("serves only the four allowed widths, shrinking but never enlarging", async () => {
     const { store } = fakeStore({ big: { hidden: false, bytes: await jpegWithLocation(2000, 1000) }, small: { hidden: false, bytes: await jpegWithLocation() } });
     const width = async (id: string, w: string | null) =>
       (await sharp(Buffer.from(await (await servePhoto(id, w, { ...PUBLIC, store: () => store })).arrayBuffer())).metadata()).width;
-    expect(await width("big", "300")).toBe(640);
-    expect(await width("big", "99999")).toBe(1600);
-    expect(await width("big", "nope")).toBe(1600);
+    expect(await width("big", "640")).toBe(640);
+    expect(await width("big", null)).toBe(1600);
     expect(await width("small", "1080")).toBe(64);
+  });
+
+  it("404s any other w with no cache and without touching the store, so cache keys cannot be sprayed", async () => {
+    const { store } = fakeStore({ big: { hidden: false, bytes: await jpegWithLocation() } });
+    for (const w of ["300", "99999", "0640", "640.0", "nope", "", "-640", "1e3", " 640"]) {
+      const res = await servePhoto("big", w, { ...PUBLIC, store: () => store });
+      expect(res.status, w).toBe(404);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+    }
+    expect(store.isHidden).not.toHaveBeenCalled();
+  });
+
+  it("refuses an image over the pixel limit instead of decoding it", async () => {
+    expect(MAX_INPUT_PIXELS).toBe(50_000_000);
+    // 8000 x 7000 = 56 MP, just over the limit; a flat color keeps the file tiny.
+    const huge = new Uint8Array(await sharp({ create: { width: 8000, height: 7000, channels: 3, background: "gray" } }).jpeg().toBuffer());
+    await expect(cleanJpeg(huge, 256)).rejects.toThrow(/pixel limit/i);
+    const { store } = fakeStore({ huge: { hidden: false, bytes: huge } });
+    expect((await servePhoto("huge", "256", { ...PUBLIC, store: () => store })).status).toBe(404);
   });
 
   it("refuses ids that could leave collector/ before touching the database", async () => {

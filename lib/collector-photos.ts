@@ -6,7 +6,7 @@ const COLLECTOR_PHOTO_SRC = /^\/photos\/[A-Za-z0-9_-]{1,200}$/;
 export const BOARD_PHOTO_LIMIT = 12;
 export const HUB_PHOTO_LIMIT = 24;
 
-export type CollectorPhotoRow = { asset_id: string; taken_at: string; width: number; height: number; hidden: boolean };
+export type CollectorPhotoRow = { asset_id: string; taken_at: string; hidden: boolean };
 /** A board photo; same shape as Photo in lib/now.ts. */
 export type CollectorPhoto = { src: string; alt: string };
 
@@ -28,7 +28,7 @@ export async function readCollectorPhotos(
   client: SupabaseClient,
   { limit, includeHidden = false }: { limit: number; includeHidden?: boolean },
 ): Promise<CollectorPhotoRow[]> {
-  let query = client.from("collector_photo").select("asset_id, taken_at, width, height, hidden");
+  let query = client.from("collector_photo").select("asset_id, taken_at, hidden");
   if (!includeHidden) query = query.eq("hidden", false);
   const { data, error } = await query
     .order("taken_at", { ascending: false })
@@ -44,8 +44,10 @@ export async function readBoardPhotos(client: SupabaseClient): Promise<Collector
   return rows.map(toCollectorPhoto).filter((p): p is CollectorPhoto => p !== null);
 }
 
-const WIDTHS = [256, 640, 1080, 1600] as const;
+const WIDTHS: readonly number[] = [256, 640, 1080, 1600];
 export const DEFAULT_PHOTO_WIDTH = 1600;
+/** The route serves only these widths, so each photo has at most four cached variants. */
+export const isServedPhotoWidth = (width: number) => WIDTHS.includes(width);
 
 /** The smallest served width at least as wide as asked, so a visitor cannot make the server render arbitrary sizes. */
 export function snapPhotoWidth(width: number): number {

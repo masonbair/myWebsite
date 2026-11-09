@@ -4,6 +4,7 @@ import {
   collectorPhotoLoader,
   readBoardPhotos,
   readCollectorPhotos,
+  isServedPhotoWidth,
   snapPhotoWidth,
   toCollectorPhoto,
   type CollectorPhotoRow,
@@ -12,8 +13,6 @@ import {
 const row = (over: Partial<CollectorPhotoRow> = {}): CollectorPhotoRow => ({
   asset_id: "abc_DEF-123",
   taken_at: "2026-11-03T18:00:00Z",
-  width: 1800,
-  height: 2400,
   hidden: false,
   ...over,
 });
@@ -54,7 +53,7 @@ describe("readCollectorPhotos", () => {
     ]);
     expect(calls).toEqual([
       ["from", "collector_photo"],
-      ["select", "asset_id, taken_at, width, height, hidden"],
+      ["select", "asset_id, taken_at, hidden"],
       ["eq", "hidden", false],
       ["order", "taken_at", { ascending: false }],
       ["order", "id", { ascending: false }],
@@ -84,5 +83,7 @@ describe("photo widths", () => {
   it("snaps to a few served widths so visitors cannot ask for arbitrary renders", () => {
     expect([1, 256, 257, 640, 750, 1080, 1200, 3840].map(snapPhotoWidth)).toEqual([256, 256, 640, 640, 1080, 1080, 1600, 1600]);
     expect(collectorPhotoLoader({ src: "/photos/abc", width: 828 })).toBe("/photos/abc?w=1080");
+    expect([256, 640, 1080, 1600].every(isServedPhotoWidth)).toBe(true);
+    expect([255, 300, 3840, NaN].some(isServedPhotoWidth)).toBe(false);
   });
 });
