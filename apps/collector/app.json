@@ -1,8 +1,0 @@
-{
-  "plugins": [
-    "expo-status-bar",
-    "expo-background-task",
-    "expo-web-browser",
-    "expo-build-properties"
-  ]
-}
