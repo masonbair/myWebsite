@@ -1,10 +1,12 @@
 import type { Board as BoardData } from "@/lib/board";
+import { movers } from "@/lib/news/movers";
 import type { Photo } from "@/lib/now";
 import { Reveal } from "./Reveal";
 import { BakeTile } from "./tiles/BakeTile";
 import { GithubTile } from "./tiles/GithubTile";
 import { HelloTile } from "./tiles/HelloTile";
 import { LocationTile } from "./tiles/LocationTile";
+import { NewsTile } from "./tiles/NewsTile";
 import { PhotoTile } from "./tiles/PhotoTile";
 import { ProjectsTile } from "./tiles/ProjectsTile";
 
@@ -15,17 +17,28 @@ const FALLBACK_PHOTO: Photo = {
 };
 
 const TALL = "md:col-span-3 md:row-span-2 lg:col-span-3 lg:row-span-2";
+const FULL = "md:col-span-6 lg:col-span-12";
+const PAIR = ["md:col-span-3 lg:col-span-8", "md:col-span-3 lg:col-span-4"];
+
+// Lower tiles pair up wide-then-narrow; with an odd count the first takes a whole row so none is left half empty.
+function lowerSpans(keys: string[]): Map<string, string> {
+  const odd = keys.length % 2 === 1;
+  return new Map(keys.map((k, i) => [k, odd && i === 0 ? FULL : PAIR[(i - (odd ? 1 : 0)) % 2]]));
+}
 
 // These fill the first screen, so they paint at once: a fade-in there blanks Lighthouse's filmstrip and raises Speed Index.
 const FIRST_SCREEN = new Set(["hello", "location", "photo", "github"]);
 
 // Spans are picked from which tiles exist so every grid row is filled; dense flow alone leaves holes.
 export function Board({ board }: { board: BoardData }) {
-  const { now, github } = board;
+  const { now, github, trends } = board;
   const hasLocation = now.place !== null || now.countriesVisited > 0;
   const online = (github?.online ?? []).flatMap((r) => (r.homepage ? [{ ...r, homepage: r.homepage }] : []));
   const photos = now.photos.length > 0 ? now.photos : [FALLBACK_PHOTO];
-  const lowerSpan = online.length > 0 && now.bake ? null : "md:col-span-6 lg:col-span-12";
+  const rising = trends ? movers(trends.rows, trends.today).filter((m) => m.kind === "topic" && m.direction === "rising") : [];
+  const lower = lowerSpans(
+    [online.length > 0 && "projects", rising.length >= 3 && "news", now.bake && "bake"].filter((k): k is string => !!k),
+  );
 
   const tiles = [
     { key: "hello", span: "md:col-span-6 md:row-span-2 lg:col-span-6", node: <HelloTile /> },
@@ -42,10 +55,11 @@ export function Board({ board }: { board: BoardData }) {
     { key: "github", span: hasLocation ? "md:col-span-3 lg:col-span-3" : TALL, node: <GithubTile github={github} /> },
     online.length > 0 && {
       key: "projects",
-      span: lowerSpan ?? "md:col-span-3 lg:col-span-8",
+      span: lower.get("projects") ?? FULL,
       node: <ProjectsTile repos={online} />,
     },
-    now.bake && { key: "bake", span: lowerSpan ?? "md:col-span-3 lg:col-span-4", node: <BakeTile bake={now.bake} /> },
+    rising.length >= 3 && { key: "news", span: lower.get("news") ?? FULL, node: <NewsTile rising={rising} /> },
+    now.bake && { key: "bake", span: lower.get("bake") ?? FULL, node: <BakeTile bake={now.bake} /> },
   ].filter((t) => !!t);
 
   return (

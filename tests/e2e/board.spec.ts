@@ -174,3 +174,37 @@ test.describe("photo slideshow", () => {
     });
   });
 });
+
+test("reading tile shows three rising topics and links to trends", async ({ page }) => {
+  await page.goto(fixtureUrl("full"));
+  const tile = page.getByRole("region", { name: "What I'm reading about" });
+  await expect(tile).toBeVisible();
+  await expect(tile.getByRole("listitem")).toHaveCount(3);
+  await expect(tile.getByText("AI chips")).toBeVisible();
+  await expect(tile.getByRole("link", { name: /See all trends/ })).toHaveAttribute("href", "/trends");
+});
+
+test("reading tile is hidden without rising topics", async ({ page }) => {
+  await page.goto(fixtureUrl("empty"));
+  await expect(page.getByRole("heading", { name: "Hi, I'm Mason." })).toBeVisible();
+  await expect(page.getByRole("region", { name: "What I'm reading about" })).toHaveCount(0);
+});
+
+test("full board rows stay full with the reading tile", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "row math is for the wide grid");
+  await page.goto(fixtureUrl("full"));
+  await expect(page.getByRole("region", { name: "What I'm reading about" })).toBeVisible();
+  const gaps = await page.locator("[data-board-grid]").evaluate((grid) => {
+    const g = grid.getBoundingClientRect();
+    const gap = parseFloat(getComputedStyle(grid).columnGap);
+    const tiles = Array.from(grid.children).map((el) => el.getBoundingClientRect());
+    const tops = [...new Set(tiles.map((t) => Math.round(t.top)))];
+    // Every row line, tall tiles included, must cover the grid's full width.
+    return tops.filter((y) => {
+      const across = tiles.filter((t) => t.top <= y + 1 && t.bottom > y + 1);
+      const covered = across.reduce((sum, t) => sum + t.width, 0) + gap * (across.length - 1);
+      return Math.abs(covered - g.width) > 2;
+    }).length;
+  });
+  expect(gaps).toBe(0);
+});

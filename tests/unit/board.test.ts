@@ -2,14 +2,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { getBoard } from "@/lib/board";
 import { parseNow, readNow } from "@/lib/now";
 import type { GithubActivity } from "@/lib/github";
+import type { PublicTrends } from "@/lib/news/public";
 
 const now = parseNow({ countriesVisited: 23 });
 const github: GithubActivity = { commits30d: 4, private30d: 0, total30d: 4, repos30d: 2, recent: [], online: [] };
+const trends: PublicTrends = { today: "2026-11-09", rows: [] };
+const noTrends = async () => null;
 
 describe("getBoard", () => {
   it("getBoard merges sources", async () => {
-    const board = await getBoard({ readNow: async () => now, github: async () => github });
-    expect(board).toEqual({ now, github });
+    const board = await getBoard({ readNow: async () => now, github: async () => github, trends: async () => trends });
+    expect(board).toEqual({ now, github, trends });
   });
 
   it("getBoard survives github throwing", async () => {
@@ -18,14 +21,28 @@ describe("getBoard", () => {
       github: () => {
         throw new Error("rate limited");
       },
+      trends: noTrends,
     });
-    expect(board).toEqual({ now, github: null });
+    expect(board).toEqual({ now, github: null, trends: null });
   });
 
   it("getBoard survives the now source throwing", async () => {
-    const board = await getBoard({ readNow: async () => Promise.reject(new Error("down")), github: async () => github });
+    const board = await getBoard({
+      readNow: async () => Promise.reject(new Error("down")),
+      github: async () => github,
+      trends: noTrends,
+    });
     expect(board.now).toEqual(parseNow(null));
     expect(board.github).toEqual(github);
+  });
+
+  it("getBoard survives the trends source throwing", async () => {
+    const board = await getBoard({
+      readNow: async () => now,
+      github: async () => github,
+      trends: () => Promise.reject(new Error("down")),
+    });
+    expect(board.trends).toBeNull();
   });
 });
 
