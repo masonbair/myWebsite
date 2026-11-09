@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(109);
+select plan(121);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a9', 'news-owner@example.com'),
@@ -41,9 +41,9 @@ select is(
    where n.nspname = 'public' and p.proname like 'news\_%' and has_function_privilege('anon', p.oid, 'execute')),
   0, 'anon cannot execute any news function');
 select is(
-  (select array_agg(p.proname::text) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  (select array_agg(p.proname::text order by p.proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname like 'news\_%' and has_function_privilege('authenticated', p.oid, 'execute')),
-  array['news_retry'], 'news_retry is the only news function authenticated can execute');
+  array['news_release_issue', 'news_retry'], 'news_release_issue and news_retry are the only news functions authenticated can execute');
 select is(
   (select count(*)::int from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname like 'news\_%'
@@ -60,6 +60,9 @@ select ok(
 select ok(
   not has_function_privilege('service_role', 'public.news_retry(uuid)', 'execute'),
   'service_role cannot call news_retry');
+select ok(
+  not has_function_privilege('service_role', 'public.news_release_issue(uuid, text)', 'execute'),
+  'service_role cannot call news_release_issue');
 select columns_are('public', 'news_trends_daily',
   array['day', 'kind', 'key', 'stories', 'mentions', 'tone_avg', 'sources'],
   'news_trends_daily has only count columns');
@@ -92,7 +95,10 @@ values
   ('90000000-0000-0000-0000-000000000008', 'mindstream', '<h@test>', 'H', 'h@test', 'news/raw/h.eml', 'h', 'failed', 1, now() + interval '1 hour', null, null, null, null),
   ('90000000-0000-0000-0000-000000000009', 'superhuman', '<i@test>', 'I', 'i@test', 'news/raw/i.eml', 'i', 'processing', 0, null, now() - interval '1 hour', null, null, null),
   ('90000000-0000-0000-0000-00000000000a', 'superhuman', '<j@test>', 'J', 'j@test', 'news/raw/j.eml', 'j', 'processing', 0, null, now(), null, null, null),
-  ('90000000-0000-0000-0000-00000000000b', 'superhuman', '<k@test>', 'K', 'k@test', 'news/raw/k.eml', 'k', 'processing', 2, null, now() - interval '1 hour', null, null, null);
+  ('90000000-0000-0000-0000-00000000000b', 'superhuman', '<k@test>', 'K', 'k@test', 'news/raw/k.eml', 'k', 'processing', 2, null, now() - interval '1 hour', null, null, null),
+  ('90000000-0000-0000-0000-00000000000c', null, '<l@test>', 'L', 'l@test', 'news/raw/l.eml', 'l', 'quarantined', 0, null, null, null, null, null),
+  ('90000000-0000-0000-0000-00000000000d', 'mindstream', '<m@test>', 'M', 'm@test', 'news/raw/m.eml', 'm', 'quarantined', 0, null, null, null, null, null),
+  ('90000000-0000-0000-0000-00000000000e', null, '<n@test>', 'N', 'n@test', 'news/raw/n.eml', 'n', 'quarantined', 0, null, null, null, null, null);
 
 insert into public.items (id, title, source) values ('91000000-0000-0000-0000-000000000001', 'shared fixture', 'test');
 insert into public.news_shared (id, item_id, url, title, status, current_run_id) values
@@ -173,6 +179,12 @@ select throws_ok(
 select throws_ok(
   $$ update public.news_issues set source_id = 'tech-brew' where id = '90000000-0000-0000-0000-000000000001' $$,
   'P0001', null, 'source_id never changes');
+select throws_ok(
+  $$ update public.news_issues set source_id = null where id = '90000000-0000-0000-0000-000000000001' $$,
+  'P0001', null, 'source_id is never cleared');
+select lives_ok(
+  $$ update public.news_issues set source_id = 'tech-brew' where id = '90000000-0000-0000-0000-00000000000e' $$,
+  'a null source_id may be set once');
 select lives_ok(
   $$ update public.news_issues set status = 'done', last_error = null where id = '90000000-0000-0000-0000-000000000001' $$,
   'service_role can change status');
@@ -328,6 +340,9 @@ select throws_ok($$ select count(*) from public.news_issues $$, '42501', null, '
 select throws_ok($$ select count(*) from public.news_trends_daily $$, '42501', null, 'anon cannot read news_trends_daily');
 select throws_ok($$ select * from public.news_public_trends('2001-01-01', '2001-01-03') $$, '42501', null, 'anon cannot run news_public_trends');
 select throws_ok($$ select public.news_retry('90000000-0000-0000-0000-000000000007') $$, '42501', null, 'anon cannot call news_retry');
+select throws_ok(
+  $$ select public.news_release_issue('90000000-0000-0000-0000-00000000000c', 'morning-brew') $$,
+  '42501', null, 'anon cannot call news_release_issue');
 
 reset role;
 set local role authenticated;
@@ -341,11 +356,13 @@ select is(
   0, 'a stranger sees no rows in any news table');
 select is(
   public.news_retry('90000000-0000-0000-0000-000000000007'), false, 'a stranger cannot retry');
+select is(
+  public.news_release_issue('90000000-0000-0000-0000-00000000000c', 'morning-brew'), false, 'a stranger cannot release held-back mail');
 select throws_ok($$ select * from public.news_public_trends('2001-01-01', '2001-01-03') $$, '42501', null, 'authenticated cannot run news_public_trends');
 
 set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-0000000000a9","role":"authenticated"}';
 select is(
-  (select count(*)::int from public.news_issues where id::text like '90000000-%'), 11, 'the owner reads news_issues');
+  (select count(*)::int from public.news_issues where id::text like '90000000-%'), 14, 'the owner reads news_issues');
 select throws_ok($$ select count(*) from public.news_trends_daily $$, '42501', null, 'the owner gets permission denied on news_trends_daily');
 select throws_ok(
   $$ update public.news_issues set status = 'pending' where id = '90000000-0000-0000-0000-000000000007' $$,
@@ -361,6 +378,17 @@ select results_eq(
   $$ select status, attempts from public.news_shared where id = '92000000-0000-0000-0000-000000000002' $$,
   $$ values ('pending', 0) $$,
   'retry moves the shared row to pending with attempts reset');
+
+select is(public.news_release_issue('90000000-0000-0000-0000-00000000000c', 'nope'), false, 'release refuses an unknown source');
+select is(public.news_release_issue('90000000-0000-0000-0000-00000000000c', 'shared'), false, 'release refuses the shared source');
+select is(public.news_release_issue('90000000-0000-0000-0000-00000000000d', 'morning-brew'), false, 'release never moves mail to another newsletter');
+select is(public.news_release_issue('90000000-0000-0000-0000-000000000001', 'morning-brew'), false, 'release ignores mail that is not held back');
+select is(public.news_release_issue('90000000-0000-0000-0000-00000000000c', 'morning-brew'), true, 'the owner releases held-back mail with no source');
+select results_eq(
+  $$ select source_id, status, attempts from public.news_issues where id = '90000000-0000-0000-0000-00000000000c' $$,
+  $$ values ('morning-brew'::text, 'pending'::text, 0) $$,
+  'release sets the source and queues the issue');
+select is(public.news_release_issue('90000000-0000-0000-0000-00000000000d', 'mindstream'), true, 'the owner releases held-back mail that already matched a newsletter');
 
 select lives_ok(
   $$ insert into public.items (id, title, source, description)

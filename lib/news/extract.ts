@@ -33,6 +33,8 @@ export class ExtractError extends Error {
 }
 
 export const MAX_TEXT_CHARS = 120_000;
+/** Per-request limits for the job's Claude calls, so one stuck call (with its one retry) ends well inside the 300 s function limit. */
+export const CLAUDE_REQUEST_OPTIONS = { timeout: 90_000, maxRetries: 1 } as const;
 const FALLBACK_MODELS: ReadonlySet<ModelId> = new Set(["claude-sonnet-5-5", "claude-opus-5-5"]);
 
 type ExtractRequest = Anthropic.Beta.Messages.MessageCreateParamsNonStreaming;
@@ -42,7 +44,8 @@ function escapeAttr(value: string): string {
 }
 
 function replyJsonSchema(topics: Topic[]) {
-  const { $schema: _dialect, ...schema } = z.toJSONSchema(storySchema(topics.map((t) => t.slug)));
+  const schema: Record<string, unknown> = { ...z.toJSONSchema(storySchema(topics.map((t) => t.slug))) };
+  delete schema.$schema;
   return transformJSONSchema(schema);
 }
 
@@ -95,7 +98,7 @@ type TokenCounts = {
 };
 
 function knownModel(model: string | null | undefined, fallback: ModelId): ModelId {
-  return model && model in PRICES ? (model as ModelId) : fallback;
+  return model && Object.hasOwn(PRICES, model) ? (model as ModelId) : fallback;
 }
 
 const ZERO: ClaudeUsage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
@@ -198,7 +201,7 @@ export async function extractIssue(
   for (let attempt = 0; attempt < 2; attempt++) {
     let message: Anthropic.Beta.Messages.BetaMessage;
     try {
-      message = await deps.client.beta.messages.create(request);
+      message = await deps.client.beta.messages.create(request, CLAUDE_REQUEST_OPTIONS);
     } catch (cause) {
       // The SDK already retried transient errors, so one more try here would only add spend.
       const detail = cause instanceof Error ? cause.message : String(cause);

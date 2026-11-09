@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ModelCharge } from "@/lib/news/extract";
-import { runNewsJob, type IssueWork, type NewsJobDeps, type NewsJobStore, type SharedWork, type StoryInsert } from "@/lib/news/job";
+import { runNewsJob, supabaseNewsJobStore, type IssueWork, type NewsJobDeps, type NewsJobStore, type SharedWork, type StoryInsert } from "@/lib/news/job";
 
 vi.mock("server-only", () => ({}));
 
@@ -439,5 +439,61 @@ describe("runNewsJob fix round 1", () => {
     expect(f.rows.get("issue-1")!.status).toBe("done");
     expect(f.rows.get("issue-2")!.status).toBe("pending");
     expect(f.rows.get("issue-3")!.status).toBe("pending");
+  });
+});
+
+describe("runNewsJob final review fixes", () => {
+  it("fails an issue with empty text for good without calling Claude", async () => {
+    const f = fakeStore({ issues: [issue(1, { text: "  \n " })] });
+    const claude = stubClaude();
+    const { d } = deps(f.store, { anthropic: claude.client });
+    const result = await runNewsJob(d);
+    expect(result.failed).toEqual(["issue-1"]);
+    expect(f.rows.get("issue-1")).toMatchObject({ status: "failed", attempts: 3, lastError: "empty text; run reclean" });
+    expect(claude.create).not.toHaveBeenCalled();
+  });
+
+  it("fails a valid reply with zero stories as retryable, keeping its charge", async () => {
+    const f = fakeStore({ issues: [issue(1)] });
+    const empty = { ...goodReply, content: [{ type: "text", text: JSON.stringify({ stories: [] }) }] };
+    const { d } = deps(f.store, { anthropic: stubClaude(() => empty).client });
+    const result = await runNewsJob(d);
+    expect(result.failed).toEqual(["issue-1"]);
+    expect(f.rows.get("issue-1")).toMatchObject({ status: "failed", attempts: 1, lastError: "no stories found" });
+    expect(f.charges).toHaveLength(1);
+    expect(f.trends).toEqual([]);
+  });
+
+  it("logs a failed trend refresh and still clusters and alerts", async () => {
+    const f = fakeStore({ issues: [issue(1)], silence: [{ id: "morning-brew", name: "Morning Brew", newestAt: "2026-11-01T12:00:00Z" }] });
+    f.store.refreshTrends = async () => {
+      throw new Error("rpc down");
+    };
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { d, fetched } = deps(f.store);
+    const result = await runNewsJob(d);
+    expect(result.extracted).toEqual(["issue-1"]);
+    expect(f.clusterCalls).toHaveLength(1);
+    expect(fetched).toHaveLength(1);
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/trend refresh failed.*rpc down/));
+    log.mockRestore();
+  });
+});
+
+describe("supabaseNewsJobStore.unclustered", () => {
+  it("asks only for stories from daily runs", async () => {
+    const calls: { select?: string; eq: [string, unknown][] } = { eq: [] };
+    const q = {
+      select: (cols: string) => ((calls.select = cols), q),
+      eq: (c: string, v: unknown) => (calls.eq.push([c, v]), q),
+      is: () => q,
+      gte: () => q,
+      order: () => q,
+      range: async () => ({ data: [], error: null }),
+    };
+    const client = { from: () => q } as unknown as SupabaseClient;
+    await supabaseNewsJobStore(client, null, fetch).unclustered(NOW);
+    expect(calls.select).toContain("run:news_extraction_runs!inner(kind)");
+    expect(calls.eq).toContainEqual(["run.kind", "daily"]);
   });
 });

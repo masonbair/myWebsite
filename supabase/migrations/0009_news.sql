@@ -188,6 +188,7 @@ create trigger news_stories_no_truncate before truncate on public.news_stories
   for each statement execute function public.hub_no_delete();
 
 -- An empty clean_text may be refilled because a restore leaves it empty until the raw email is cleaned again.
+-- A null source_id may be set once, so held-back mail can be released to a newsletter (news_release_issue).
 create function public.news_issues_guard() returns trigger
 language plpgsql set search_path = ''
 as $$
@@ -197,7 +198,7 @@ begin
      or new.subject is distinct from old.subject
      or new.from_address is distinct from old.from_address
      or new.raw_path is distinct from old.raw_path
-     or new.source_id is distinct from old.source_id
+     or (new.source_id is distinct from old.source_id and old.source_id is not null)
      or (new.clean_text is distinct from old.clean_text and old.clean_text <> '') then
     raise exception 'issue text in news_issues never changes';
   end if;
@@ -344,6 +345,27 @@ begin
     where id = p_id and status = 'failed';
     get diagnostics changed = row_count;
   end if;
+  return changed > 0;
+end;
+$$;
+
+-- Owner-only like news_retry. Held-back mail keeps any source it matched; one with no source takes the picked one.
+create function public.news_release_issue(p_id uuid, p_source text) returns boolean
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  changed int;
+begin
+  if pg_catalog.current_setting('role', true) is distinct from 'authenticated' or not public.is_owner() then
+    return false;
+  end if;
+  if p_source = 'shared' or not exists (select 1 from public.news_sources where id = p_source) then
+    return false;
+  end if;
+  update public.news_issues
+  set source_id = p_source, status = 'pending', attempts = 0, next_attempt_at = null, claimed_at = null
+  where id = p_id and status = 'quarantined' and (source_id is null or source_id = p_source);
+  get diagnostics changed = row_count;
   return changed > 0;
 end;
 $$;
@@ -502,6 +524,8 @@ grant execute on function public.news_claim(text, int, interval), public.news_re
   to service_role;
 revoke execute on function public.news_retry(uuid) from public, anon, authenticated, service_role;
 grant execute on function public.news_retry(uuid) to authenticated;
+revoke execute on function public.news_release_issue(uuid, text) from public, anon, authenticated, service_role;
+grant execute on function public.news_release_issue(uuid, text) to authenticated;
 
 alter table public.news_sources enable row level security;
 alter table public.news_issues enable row level security;

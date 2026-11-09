@@ -73,7 +73,7 @@ export type NewsJobStore = {
   fail(kind: WorkKind, id: string, attempts: number, nextAttemptAt: string, error: string): Promise<void>;
   /** Hands an untouched claim back as pending, so a deadline stop costs no attempt. */
   release(kind: WorkKind, id: string): Promise<void>;
-  /** Current-run news stories from the week before `now` still waiting for a cluster. */
+  /** Current-run news stories from daily runs in the week before `now` still waiting for a cluster; backfill and rerun stories wait for the backfill script. */
   unclustered(now: Date): Promise<StoryDate[]>;
   cluster(storyIds: number[]): Promise<void>;
   refreshTrends(from: string, to: string): Promise<void>;
@@ -231,7 +231,11 @@ export async function runNewsJob(deps: NewsJobDeps): Promise<NewsJobResult> {
 async function refreshDates(store: NewsJobStore, stories: StoryDate[]): Promise<void> {
   if (stories.length === 0) return;
   const dates = stories.map((s) => s.storyDate).sort();
-  await store.refreshTrends(dates[0], dates[dates.length - 1]);
+  try {
+    await store.refreshTrends(dates[0], dates[dates.length - 1]);
+  } catch (e) {
+    console.error(`news trend refresh failed, the next run with new stories redoes it: ${(e as Error).message}`);
+  }
 }
 
 /** Clusters new and leftover stories a few at a time, so a slow or failing dedupe never holds up trends or alerts. */
@@ -268,7 +272,7 @@ async function extractAndStore(
   input: ExtractInput,
   charge: (c: ModelCharge) => Promise<number>,
   row: Omit<StoryInsert, "headline" | "kind" | "sentiment" | "topics" | "suggested_topic" | "company_ids" | "link">,
-): Promise<{ stories: StoryDate[]; spent: number }> {
+): Promise<{ stories: StoryDate[]; spent: number; found: number }> {
   let spent = 0;
   let extracted;
   try {
@@ -292,7 +296,7 @@ async function extractAndStore(
     });
   }
   const stories = rows.length > 0 ? await store.insertStories(rows) : [];
-  return { stories, spent };
+  return { stories, spent, found: extracted.stories.length };
 }
 
 const MAX_ATTEMPTS = 3;
@@ -319,13 +323,14 @@ async function processIssue(
   const issue = await store.loadIssue(id);
   if (!issue) return { ok: false, spent: 0 };
   try {
-    if (!issue.sourceId) throw new PermanentError("issue has no newsletter source, so its stories have nowhere to go; set source_id and retry");
+    if (!issue.sourceId) throw new PermanentError("issue has no newsletter source, so its stories have nowhere to go; held-back mail gets one with Release on /hub/news");
+    if (issue.text.trim() === "") throw new PermanentError("empty text; run reclean");
     // A crash after the insert but before `done` would otherwise double every story under the same run.
     if (await store.hasStories("issue", id, runId)) {
       await store.finish("issue", id, runId);
       return { ok: true, stories: [], spent: 0 };
     }
-    const { stories, spent } = await extractAndStore(
+    const { stories, spent, found } = await extractAndStore(
       store,
       anthropic,
       deps,
@@ -334,6 +339,7 @@ async function processIssue(
       (c) => store.recordCharge(c, "extract", { newsIssueId: id }),
       { run_id: runId, issue_id: id, shared_id: null, source_id: issue.sourceId, story_date: issue.storyDate },
     );
+    if (found === 0) throw Object.assign(new Error("no stories found"), { spent });
     await store.finish("issue", id, runId);
     return { ok: true, stories, spent };
   } catch (e) {
@@ -578,8 +584,11 @@ export function supabaseNewsJobStore(client: SupabaseClient, anthropic: Anthropi
         const rows = check(
           await client
             .from("news_stories")
-            .select("id, run_id, story_date, issue_id, issue:news_issues(current_run_id), shared:news_shared(current_run_id)")
+            .select(
+              "id, run_id, story_date, issue_id, issue:news_issues(current_run_id), shared:news_shared(current_run_id), run:news_extraction_runs!inner(kind)",
+            )
             .eq("kind", "news")
+            .eq("run.kind", "daily")
             .is("cluster_id", null)
             .gte("created_at", since)
             .order("id")

@@ -98,6 +98,17 @@ describe("askSameEvent", () => {
     log.mockRestore();
   });
 
+  it("prices a model name like constructor at the dedupe model", async () => {
+    const out = await askSameEvent(stubClient(async () => answer(true, { model: "constructor" })).client, base, other);
+    expect(out.charge?.model).toBe("claude-haiku-5-5");
+  });
+
+  it("sends a 90 second timeout with at most one retry", async () => {
+    const { client, create } = stubClient(async () => answer(true));
+    await askSameEvent(client, base, other);
+    expect(create).toHaveBeenCalledWith(expect.anything(), { timeout: 90_000, maxRetries: 1 });
+  });
+
   it("counts a thrown call as not same with no charge", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const out = await askSameEvent(stubClient(async () => Promise.reject(new Error("overloaded"))).client, base, other);

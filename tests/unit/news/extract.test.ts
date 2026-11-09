@@ -104,7 +104,8 @@ describe("buildExtractRequest", () => {
 describe("buildExtractRequest schema", () => {
   it("limits topics to the list and closes every object", () => {
     const req = buildExtractRequest(input, "claude-sonnet-5-5", topics);
-    const schema = (req.output_config?.format as { schema: Record<string, any> }).schema;
+    type Node = { additionalProperties?: boolean; enum?: string[]; items: Node; properties: Record<string, Node> };
+    const schema = (req.output_config?.format as unknown as { schema: Node }).schema;
     expect(schema.additionalProperties).toBe(false);
     const story = schema.properties.stories.items;
     expect(story.additionalProperties).toBe(false);
@@ -237,6 +238,18 @@ describe("extractIssue", () => {
     const { client } = stubClient({ ...reply({ stories: [goodStory] }), model: "claude-opus-5-5" });
     const out = await extractIssue(input, deps(client));
     expect(out.charges.map((c) => c.model)).toEqual(["claude-opus-5-5"]);
+  });
+
+  it("prices a model name like constructor at the requested model, not an inherited key", async () => {
+    const { client } = stubClient({ ...reply({ stories: [goodStory] }), model: "constructor" });
+    const out = await extractIssue(input, deps(client));
+    expect(out.charges.map((c) => c.model)).toEqual(["claude-sonnet-5-5"]);
+  });
+
+  it("sends a 90 second timeout with at most one retry", async () => {
+    const { client, create } = stubClient(reply({ stories: [goodStory] }));
+    await extractIssue(input, deps(client));
+    expect(create).toHaveBeenCalledWith(expect.anything(), { timeout: 90_000, maxRetries: 1 });
   });
 
   it("keeps at most 3 distinct known topics and drops stories with an empty headline instead of failing", async () => {

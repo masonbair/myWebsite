@@ -168,4 +168,30 @@ describe.skipIf(!enabled)("runNewsJob against local Supabase", () => {
     expect(Date.parse(failed!.next_attempt_at) - now.getTime()).toBe(60 * 60_000);
     expect(failed!.last_error).toMatch(/refusal/);
   });
+
+  it("lists daily-run stories as unclustered but leaves backfill stories to the backfill script", async () => {
+    const db = client();
+    async function storyUnder(kind: "daily" | "backfill"): Promise<number> {
+      const run = await db.from("news_extraction_runs").insert({ model: "claude-sonnet-5-5", prompt_version: `test-${randomUUID()}`, kind }).select("id").single();
+      if (run.error) throw run.error;
+      const issue = await db
+        .from("news_issues")
+        .insert({ source_id: "morning-brew", message_id: `<${randomUUID()}@example.test>`, subject: "Synthetic", clean_text: "t", status: "done", current_run_id: run.data.id })
+        .select("id")
+        .single();
+      if (issue.error) throw issue.error;
+      const story = await db
+        .from("news_stories")
+        .insert({ run_id: run.data.id, issue_id: issue.data.id, source_id: "morning-brew", story_date: "2101-01-01", headline: "Synthetic", kind: "news", sentiment: 0 })
+        .select("id")
+        .single();
+      if (story.error) throw story.error;
+      return story.data.id;
+    }
+    const daily = await storyUnder("daily");
+    const backfill = await storyUnder("backfill");
+    const ids = (await supabaseNewsJobStore(db, null, fetch).unclustered(new Date())).map((s) => s.id);
+    expect(ids).toContain(daily);
+    expect(ids).not.toContain(backfill);
+  });
 });

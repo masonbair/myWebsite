@@ -2,7 +2,7 @@ import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PRICES, recordUsage, type ModelId } from "@/lib/ai/claude";
-import type { ModelCharge } from "@/lib/news/extract";
+import { CLAUDE_REQUEST_OPTIONS, type ModelCharge } from "@/lib/news/extract";
 
 /** One story as dedupe sees it; `origin` is the issue or shared article it came from. */
 export type StoryRow = {
@@ -103,12 +103,12 @@ export type SameAnswer = { same: boolean; charge: ModelCharge | null };
 export async function askSameEvent(anthropic: Anthropic, a: StoryRow, b: StoryRow): Promise<SameAnswer> {
   let message: Anthropic.Beta.Messages.BetaMessage;
   try {
-    message = await anthropic.beta.messages.create(buildSameRequest(a, b));
+    message = await anthropic.beta.messages.create(buildSameRequest(a, b), CLAUDE_REQUEST_OPTIONS);
   } catch (err) {
     console.error(`news dedupe: call for stories ${a.id} and ${b.id} failed: ${err instanceof Error ? err.message : String(err)}`);
     return { same: false, charge: null };
   }
-  const model = message.model && message.model in PRICES ? (message.model as ModelId) : DEDUPE_MODEL;
+  const model = message.model && Object.hasOwn(PRICES, message.model) ? (message.model as ModelId) : DEDUPE_MODEL;
   const u = message.usage;
   const charge: ModelCharge = {
     model,
