@@ -22,8 +22,8 @@ import { ACCENT, BACKGROUND, ERROR } from './src/screen/theme';
 function askAtPrivatePlace(): Promise<FirstSendAnswer> {
   return new Promise((resolve) => {
     Alert.alert(
-      'Private place',
-      'Are you at a private place (home or family) right now?',
+      'Are you at home or with family right now?',
+      'Only home and family places are private. Anywhere else shows your city.',
       [
         { text: 'Mark private first', onPress: () => resolve('mark-first') },
         { text: 'No, send', onPress: () => resolve('send') },

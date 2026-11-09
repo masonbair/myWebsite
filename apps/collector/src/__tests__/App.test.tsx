@@ -136,7 +136,12 @@ describe('first-send question', () => {
     (syncPlaceTask as jest.Mock).mockClear();
     await fireEvent(screen.getByRole('switch'), 'valueChange', true);
     await screen.findByPlaceholderText('Name for this place');
-    expect(ask).toHaveBeenCalledWith('Private place', 'Are you at a private place (home or family) right now?', expect.any(Array), expect.anything());
+    expect(ask).toHaveBeenCalledWith(
+      'Are you at home or with family right now?',
+      'Only home and family places are private. Anywhere else shows your city.',
+      expect.any(Array),
+      expect.anything(),
+    );
     expect(screen.getByRole('switch').props.value).toBe(false);
     expect(await AsyncStorage.getItem('place-task-wanted')).toBeNull();
     expect(syncPlaceTask).not.toHaveBeenCalledWith('on');
