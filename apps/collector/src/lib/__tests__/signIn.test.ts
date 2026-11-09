@@ -53,6 +53,15 @@ describe('signInWithGitHub', () => {
     expect(auth.signOut).not.toHaveBeenCalled();
   });
 
+  it('reads the GitHub id from identities when metadata has none', async () => {
+    openAuth.mockResolvedValue({ type: 'success', url: `${REDIRECT_URL}?code=abc123` });
+    (auth.exchangeCodeForSession as jest.Mock).mockResolvedValue({
+      data: { session: { user: { user_metadata: {}, identities: [{ provider: 'github', id: OWNER_GITHUB_ID }] } } },
+      error: null,
+    });
+    expect(await signInWithGitHub()).toBe('ok');
+  });
+
   it.each(['cancel', 'dismiss'])('returns cancelled on %s', async (type) => {
     openAuth.mockResolvedValue({ type });
     expect(await signInWithGitHub()).toBe('cancelled');
