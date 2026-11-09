@@ -122,8 +122,8 @@ describe.skipIf(!enabled)("backfill dry run against local Supabase", () => {
       expect(outcome).toBe("sent");
       expect(sent).toEqual(expect.arrayContaining(ids));
 
-      await collect(store, client, { log: quiet });
-      await collect(store, client, { log: quiet });
+      await collect(store, client, { log: quiet, ask: async () => "yes" });
+      await collect(store, client, { log: quiet, ask: async () => "yes" });
 
       const { data: issues } = await db.from("news_issues").select("status, current_run_id").in("id", ids);
       expect(issues!.every((i) => i.status === "done" && i.current_run_id !== null)).toBe(true);

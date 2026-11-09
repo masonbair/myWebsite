@@ -8,6 +8,12 @@ function startsWithFrom(line: Uint8Array, offset: number): boolean {
   return true;
 }
 
+const FROM_LINE = /^From \S+ +(Mon|Tue|Wed|Thu|Fri|Sat|Sun) /;
+
+function isFromLine(line: Uint8Array): boolean {
+  return startsWithFrom(line, 0) && FROM_LINE.test(new TextDecoder("latin1").decode(line.subarray(0, 200)));
+}
+
 function isEscapedFrom(line: Uint8Array): boolean {
   let i = 0;
   while (line[i] === 0x3e) i++;
@@ -52,12 +58,17 @@ async function* lines(chunks: AsyncIterable<Uint8Array>): AsyncGenerator<Uint8Ar
 /** Splits a byte stream in mbox format into raw messages, undoing the ">From " escape; for tests and readMbox. */
 export async function* splitMbox(chunks: AsyncIterable<Uint8Array>): AsyncGenerator<Uint8Array> {
   let message: Uint8Array[] | null = null;
+  let afterBlank = true;
   for await (const line of lines(chunks)) {
-    if (startsWithFrom(line, 0)) {
+    const blank = stripLineEnd(line).length === 0;
+    // An unescaped "From " in a body only splits when it also follows a blank line and looks like a real From_ line.
+    if ((afterBlank || !message) && isFromLine(line)) {
       if (message) yield trimSeparator(message);
       message = [];
+      afterBlank = false;
       continue;
     }
+    afterBlank = blank;
     if (!message) continue;
     message.push(isEscapedFrom(line) ? line.subarray(1) : line);
   }

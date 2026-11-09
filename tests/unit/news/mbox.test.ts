@@ -56,6 +56,39 @@ describe("splitMbox", () => {
   });
 });
 
+describe("splitMbox edge cases", () => {
+  it("keeps an unescaped body line starting with From in its message", async () => {
+    const mbox = [
+      "From 1@xxx Mon Jan 05 10:00:00 +0000 2026",
+      "Subject: one",
+      "",
+      "Intro",
+      "From here on, prices rise.",
+      "",
+      "From here on too, after a blank line.",
+      "",
+      "From 2@xxx Tue Jan 06 10:00:00 +0000 2026",
+      "Subject: two",
+      "",
+      "Body",
+      "",
+    ].join("\n");
+    const messages = await collect(splitMbox(chunked(mbox, 9)));
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toContain("Intro\nFrom here on, prices rise.\n\nFrom here on too, after a blank line.\n");
+  });
+
+  it("does not split on a From_ line that does not follow a blank line", async () => {
+    const mbox = "From 1@xxx Mon Jan 05 10:00:00 +0000 2026\nSubject: one\n\nText\nFrom 2@xxx Tue Jan 06 10:00:00 +0000 2026\n";
+    expect(await collect(splitMbox(chunked(mbox, 4)))).toHaveLength(1);
+  });
+
+  it("keeps the last line when the file has no trailing newline", async () => {
+    const messages = await collect(splitMbox(chunked("From 1@xxx Mon Jan 05 10:00:00 +0000 2026\nSubject: one\n\nLast line", 6)));
+    expect(messages).toEqual(["Subject: one\n\nLast line"]);
+  });
+});
+
 describe("readMbox", () => {
   it("streams messages from a file", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mbox-"));

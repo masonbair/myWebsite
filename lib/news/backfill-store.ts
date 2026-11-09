@@ -54,7 +54,7 @@ export function supabaseBackfillStore(client: SupabaseClient, anthropic: Anthrop
         let query = client.from("news_issues").select(ISSUE_COLUMNS).not("source_id", "is", null);
         query =
           scope.kind === "backfill"
-            ? query.eq("status", "backfill").neq("clean_text", "")
+            ? query.eq("status", "backfill")
             : query.eq("status", "done").gte("published_on", scope.from).lte("published_on", scope.to);
         const page = rows(await query.order("received_at").order("id").range(from, from + PAGE - 1)) as unknown as IssueRow[];
         out.push(...page.map(toIssue));
@@ -118,6 +118,21 @@ export function supabaseBackfillStore(client: SupabaseClient, anthropic: Anthrop
       return data.map((r: { id: number }) => r.id);
     },
 
+    async usageRecorded(issueId, purpose, since) {
+      const { data, error } = await client
+        .from("ai_usage")
+        .select("id")
+        .eq("feature", "news")
+        .eq("news_issue_id", issueId)
+        .eq("purpose", purpose)
+        .gte("at", since)
+        .limit(1);
+      // 42703: ai_usage.news_issue_id does not exist until migration 0010 is pushed.
+      if (error && (error as { code?: string }).code === "42703") return false;
+      if (error) throw error;
+      return (data ?? []).length > 0;
+    },
+
     async markDone(issueId, runId) {
       check(
         await client
@@ -132,7 +147,8 @@ export function supabaseBackfillStore(client: SupabaseClient, anthropic: Anthrop
         await client
           .from("news_issues")
           .update({ status: "failed", last_error: error, attempts: 0, next_attempt_at: null, claimed_at: null })
-          .eq("id", issueId),
+          .eq("id", issueId)
+          .eq("status", "backfill"),
       );
     },
 

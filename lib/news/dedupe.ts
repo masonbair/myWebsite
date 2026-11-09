@@ -17,7 +17,7 @@ export type StoryRow = {
 
 export const DEDUPE_MODEL: ModelId = "claude-haiku-5-5";
 const WINDOW_DAYS = 3;
-const MAX_CANDIDATES = 5;
+export const MAX_CANDIDATES = 5;
 const MIN_OVERLAP = 0.3;
 const DAY_MS = 24 * 60 * 60 * 1000;
 

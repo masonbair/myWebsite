@@ -35,7 +35,7 @@ type MemStory = StoryWrite & { id: number; runId: number; issueId: string };
 function memoryStore(issues: IssueForExtract[]) {
   const state: { batches: BatchState | null; runs: { id: number; kind: string; model: string }[] } = { batches: null, runs: [] };
   const stories: MemStory[] = [];
-  const usage: (UsageRow & { newsIssueId?: string | null })[] = [];
+  const usage: (UsageRow & { newsIssueId?: string | null; at?: string })[] = [];
   const clustered: { ids: number[]; purpose: string }[] = [];
   const refreshed: [string, string][] = [];
   const byId = new Map(issues.map((i) => [i.id, i]));
@@ -75,10 +75,14 @@ function memoryStore(issues: IssueForExtract[]) {
       Object.assign(byId.get(issueId)!, { status: "done", currentRunId: runId });
     },
     async markFailed(issueId, error) {
-      Object.assign(byId.get(issueId)!, { status: "failed", lastError: error });
+      const target = byId.get(issueId)!;
+      if (target.status === "backfill") Object.assign(target, { status: "failed", lastError: error });
     },
     async recordUsage(row) {
-      usage.push(row);
+      usage.push({ ...row, at: new Date().toISOString() });
+    },
+    async usageRecorded(issueId, purpose, since) {
+      return usage.some((u) => u.newsIssueId === issueId && u.purpose === purpose && u.at! >= since);
     },
     async unclusteredStoryIds(runId) {
       return stories.filter((s) => s.runId === runId && s.kind === "news").map((s) => s.id);
@@ -149,6 +153,8 @@ function stubClient(opts: { results?: Record<string, unknown[]>; status?: string
 }
 
 const quiet = () => {};
+const yes = async () => "yes";
+const SUBMITTED = "2000-01-01T00:00:00.000Z";
 
 describe("runEstimate", () => {
   it("prints the count, per-source counts and a batch-price estimate, and sends nothing on 'no'", async () => {
@@ -160,7 +166,8 @@ describe("runEstimate", () => {
 
     expect(outcome).toBe("cancelled");
     expect(ask).toHaveBeenCalledWith("Type yes to submit: ");
-    expect(calls.countTokens).toHaveBeenCalledTimes(3);
+    // 3 sampled issues plus one "same story?" pair for the clustering bound.
+    expect(calls.countTokens).toHaveBeenCalledTimes(4);
     expect(calls.create).not.toHaveBeenCalled();
     expect(mem.state.batches).toBeNull();
     const out = lines.join("\n");
@@ -170,13 +177,63 @@ describe("runEstimate", () => {
     expect(out).toContain("2,500 output tokens per issue");
     // 3 x 8,000 input at $2/M plus 3 x 2,500 output at $10/M, halved for batch.
     expect(out).toContain("$0.06");
+    // 3 issues x 10 stories x 5 calls, each 8,000 input at $0.10/M plus 256 output at $0.50/M.
+    expect(out).toContain("Clustering at collect, at most $0.14");
+    expect(out).toContain("assumes 10 news stories per issue");
+  });
+
+  it("leaves out issues with empty text and says how many", async () => {
+    const mem = memoryStore([
+      issue(1, { status: "done", currentRunId: 7 }),
+      issue(2, { status: "done", currentRunId: 7, cleanText: "" }),
+    ]);
+    const { client, calls } = stubClient();
+    const lines: string[] = [];
+    await runEstimate(mem.store, client, {
+      scope: { kind: "rerun", from: "2026-01-01", to: "2026-01-31" },
+      model: "claude-sonnet-5-5",
+      ask: async () => "yes",
+      log: (l) => lines.push(l),
+    });
+    expect(lines.join("\n")).toContain("Skipped 1 issues whose text is empty");
+    expect(calls.create.mock.calls[0][0].requests.map((r) => r.custom_id)).toEqual(["issue-1"]);
+  });
+
+  it("logs each batch id at once and, when saving keeps failing, says how to add it by hand", async () => {
+    const mem = memoryStore([issue(1)]);
+    let saves = 0;
+    mem.store.setBatches = async () => {
+      saves += 1;
+      throw new Error("db down");
+    };
+    const { client } = stubClient();
+    const lines: string[] = [];
+    await expect(
+      runEstimate(mem.store, client, { scope: { kind: "backfill" }, model: "claude-sonnet-5-5", ask: yes, log: (l) => lines.push(l) }),
+    ).rejects.toThrow("db down");
+    expect(saves).toBe(3);
+    expect(lines.findIndex((l) => l.includes("Sent batch batch-1"))).toBeGreaterThanOrEqual(0);
+    expect(lines.join("\n")).toMatch(/Batches already sent: batch-1[\s\S]*news:batches/);
+  });
+
+  it("retries a failed save of the batch ids", async () => {
+    const mem = memoryStore([issue(1)]);
+    const realSave = mem.store.setBatches;
+    let saves = 0;
+    mem.store.setBatches = async (value) => {
+      if (++saves === 1) throw new Error("blip");
+      await realSave(value);
+    };
+    const { client } = stubClient();
+    await runEstimate(mem.store, client, { scope: { kind: "backfill" }, model: "claude-sonnet-5-5", ask: yes, log: quiet });
+    expect(mem.state.batches?.submissions[0].batchIds).toEqual(["batch-1"]);
   });
 
   it("samples at most 10 issues for the token count", async () => {
     const mem = memoryStore(Array.from({ length: 25 }, (_, n) => issue(n + 1)));
     const { client, calls } = stubClient();
     await runEstimate(mem.store, client, { scope: { kind: "backfill" }, model: "claude-sonnet-5-5", ask: async () => "nope", log: quiet });
-    expect(calls.countTokens).toHaveBeenCalledTimes(10);
+    expect(calls.countTokens).toHaveBeenCalledTimes(11);
     const params = (calls.countTokens.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
     expect(params).not.toHaveProperty("max_tokens");
   });
@@ -208,7 +265,7 @@ describe("runEstimate", () => {
   it("refuses to send while an earlier submission is not collected", async () => {
     const mem = memoryStore([issue(1)]);
     mem.state.batches = {
-      submissions: [{ kind: "backfill", model: "claude-sonnet-5-5", promptVersion: "v1", batchIds: ["b"], collected: [], runId: null, submittedAt: "x" }],
+      submissions: [{ kind: "backfill", model: "claude-sonnet-5-5", promptVersion: "v1", batchIds: ["b"], collected: [], runId: null, submittedAt: SUBMITTED }],
     };
     const { client, calls } = stubClient();
     await expect(
@@ -221,7 +278,7 @@ describe("runEstimate", () => {
 describe("collect", () => {
   function submitted(mem: ReturnType<typeof memoryStore>, kind: "backfill" | "rerun", batchIds: string[]) {
     mem.state.batches = {
-      submissions: [{ kind, model: "claude-sonnet-5-5", promptVersion: "v1", batchIds, collected: [], runId: null, submittedAt: "x" }],
+      submissions: [{ kind, model: "claude-sonnet-5-5", promptVersion: "v1", batchIds, collected: [], runId: null, submittedAt: SUBMITTED }],
     };
   }
 
@@ -231,7 +288,7 @@ describe("collect", () => {
     const { client } = stubClient({
       results: { "batch-1": [succeeded("issue-3", "Three"), succeeded("issue-1", "One"), succeeded("issue-2", "Two")] },
     });
-    const summary = await collect(mem.store, client, { log: quiet });
+    const summary = await collect(mem.store, client, { log: quiet, ask: yes });
 
     expect(summary).toMatchObject({ done: 3, failed: 0, pending: 0 });
     const news = mem.stories.filter((s) => s.kind === "news");
@@ -253,20 +310,77 @@ describe("collect", () => {
     const mem = memoryStore([1, 2].map((n) => issue(n)));
     submitted(mem, "backfill", ["batch-1"]);
     const { client } = stubClient({ results: { "batch-1": [succeeded("issue-1", "One"), succeeded("issue-2", "Two")] } });
-    await collect(mem.store, client, { log: quiet });
+    await collect(mem.store, client, { log: quiet, ask: yes });
     // Simulate a crash before the batch was marked collected.
     mem.state.batches!.submissions[0].collected = [];
-    await collect(mem.store, client, { log: quiet });
+    await collect(mem.store, client, { log: quiet, ask: yes });
     expect(mem.stories).toHaveLength(4);
     expect(mem.usage).toHaveLength(2);
     expect(mem.state.runs).toHaveLength(1);
+  });
+
+  it("asks before clustering; 'no' skips it but still rebuilds trends", async () => {
+    const mem = memoryStore([issue(1)]);
+    submitted(mem, "backfill", ["batch-1"]);
+    const { client } = stubClient({ results: { "batch-1": [succeeded("issue-1", "One")] } });
+    const ask = vi.fn(async () => "no");
+    const lines: string[] = [];
+    await collect(mem.store, client, { log: (l) => lines.push(l), ask });
+    expect(ask).toHaveBeenCalledWith("Type yes to cluster: ");
+    expect(lines.join("\n")).toMatch(/1 stories of run 100 need clustering: at most \$/);
+    expect(lines.join("\n")).toContain("Run collect again");
+    expect(mem.clustered).toEqual([]);
+    expect(mem.refreshed).toEqual([["2026-01-01", "2026-01-01"]]);
+  });
+
+  it("resumes clustering and the trend refresh when every batch is already collected", async () => {
+    const mem = memoryStore([1, 2, 3].map((n) => issue(n, { status: "done", currentRunId: 100 })));
+    for (const n of [1, 2, 3]) {
+      await mem.store.writeStories(100, mem.byId.get(`issue-${n}`)!, [
+        { sourceId: "morning-brew", storyDate: `2026-01-0${n}`, headline: `S${n}`, kind: "news", sentiment: 0, topics: [], suggestedTopic: null, companies: [], link: null },
+      ]);
+    }
+    mem.state.batches = {
+      submissions: [{ kind: "backfill", model: "claude-sonnet-5-5", promptVersion: "v1", batchIds: ["b1"], collected: ["b1"], runId: 100, submittedAt: SUBMITTED }],
+    };
+    const { client, calls } = stubClient();
+    const ask = vi.fn(yes);
+    await collect(mem.store, client, { log: quiet, ask });
+    expect(calls.retrieve).not.toHaveBeenCalled();
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(mem.clustered).toEqual([{ ids: [1, 2, 3], purpose: "backfill" }]);
+    expect(mem.refreshed).toEqual([["2026-01-01", "2026-01-03"]]);
+  });
+
+  it("charges a zero-story issue once even when collect stops before marking it done", async () => {
+    const mem = memoryStore([issue(1)]);
+    submitted(mem, "backfill", ["batch-1"]);
+    const empty = succeeded("issue-1", "x");
+    (empty.result.message.content[0] as { text: string }).text = '{"stories":[]}';
+    const { client } = stubClient({ results: { "batch-1": [empty] } });
+    await collect(mem.store, client, { log: quiet, ask: yes });
+    // Simulate a crash after the charge but before done and the batch being marked collected.
+    Object.assign(mem.byId.get("issue-1")!, { status: "backfill", currentRunId: null });
+    mem.state.batches!.submissions[0].collected = [];
+    await collect(mem.store, client, { log: quiet, ask: yes });
+    expect(mem.usage).toHaveLength(1);
+    expect(mem.stories).toHaveLength(0);
+    expect(mem.byId.get("issue-1")).toMatchObject({ status: "done", currentRunId: 100 });
+  });
+
+  it("does not mark failed an issue the daily job has already taken", async () => {
+    const mem = memoryStore([issue(1, { status: "processing" })]);
+    submitted(mem, "backfill", ["batch-1"]);
+    const { client } = stubClient({ results: { "batch-1": [{ custom_id: "issue-1", result: { type: "expired" } }] } });
+    await collect(mem.store, client, { log: quiet, ask: yes });
+    expect(mem.byId.get("issue-1")!.status).toBe("processing");
   });
 
   it("only processes ended batches", async () => {
     const mem = memoryStore([issue(1)]);
     submitted(mem, "backfill", ["batch-1"]);
     const { client, calls } = stubClient({ status: "in_progress" });
-    const summary = await collect(mem.store, client, { log: quiet });
+    const summary = await collect(mem.store, client, { log: quiet, ask: yes });
     expect(summary.pending).toBe(1);
     expect(calls.results).not.toHaveBeenCalled();
     expect(mem.stories).toHaveLength(0);
@@ -280,7 +394,7 @@ describe("collect", () => {
     const { client } = stubClient({
       results: { "batch-1": [{ custom_id: "issue-1", result: { type: "errored", error: { type: "error", error: { type: "overloaded_error", message: "busy" } } } }, bad] },
     });
-    const summary = await collect(mem.store, client, { log: quiet });
+    const summary = await collect(mem.store, client, { log: quiet, ask: yes });
     expect(summary).toMatchObject({ done: 0, failed: 2 });
     expect(mem.byId.get("issue-1")!.status).toBe("failed");
     expect(mem.byId.get("issue-2")!.status).toBe("failed");
@@ -295,7 +409,7 @@ describe("collect", () => {
     ]);
     submitted(mem, "rerun", ["batch-1"]);
     const { client } = stubClient({ results: { "batch-1": [succeeded("issue-1", "New")] } });
-    await collect(mem.store, client, { log: quiet });
+    await collect(mem.store, client, { log: quiet, ask: yes });
 
     expect(mem.stories.map((s) => [s.runId, s.headline])).toEqual([
       [7, "Old"],
@@ -311,7 +425,7 @@ describe("collect", () => {
     const mem = memoryStore([issue(1, { status: "done", currentRunId: 7 })]);
     submitted(mem, "rerun", ["batch-1"]);
     const { client } = stubClient({ results: { "batch-1": [{ custom_id: "issue-1", result: { type: "expired" } }] } });
-    await collect(mem.store, client, { log: quiet });
+    await collect(mem.store, client, { log: quiet, ask: yes });
     expect(mem.byId.get("issue-1")).toMatchObject({ status: "done", currentRunId: 7 });
   });
 });

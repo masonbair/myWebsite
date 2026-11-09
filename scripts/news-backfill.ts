@@ -17,7 +17,7 @@ const USAGE = `usage: npm run news:backfill -- <command> [--local]
   import --mbox <path> --since <YYYY-MM-DD>
   estimate [--model <id>] [--rerun --from <YYYY-MM-DD> --to <YYYY-MM-DD>]   (asks "Type yes to submit")
   submit   (same as estimate)
-  collect
+  collect  (asks "Type yes to cluster"; run again to resume clustering)
   reclean`;
 
 class UsageError extends Error {}
@@ -117,7 +117,7 @@ async function main(argv: string[]): Promise<void> {
   }
   if (command === "collect") {
     const client = anthropic();
-    await collect(supabaseBackfillStore(supabase(local), client), client, { log });
+    await collect(supabaseBackfillStore(supabase(local), client), client, { log, ask });
     return;
   }
   if (command === "reclean") {

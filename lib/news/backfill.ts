@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { costOf, type ModelId, type UsageRow } from "@/lib/ai/claude";
 import { cleanText, matchSource, parseEmail } from "@/lib/news/email";
+import { buildSameRequest, DEDUPE_MODEL, MAX_CANDIDATES } from "@/lib/news/dedupe";
 import { buildExtractRequest, readExtractMessage, type ExtractedStory } from "@/lib/news/extract";
 import { ingestEmail, type IngestDeps } from "@/lib/news/ingest";
 import { PROMPT_VERSION, type Topic } from "@/lib/news/prompt";
@@ -53,7 +54,7 @@ export type BackfillUsage = UsageRow & { newsIssueId?: string };
 
 /** Storage the import, estimate, collect and reclean steps need; `supabaseBackfillStore` is the real one. */
 export type BackfillStore = {
-  /** Backfill: every `backfill` issue with text. Re-run: `done` issues published in the range. */
+  /** Backfill: every `backfill` issue. Re-run: `done` issues published in the range. Empty text included; callers skip it. */
   issues(scope: Scope): Promise<IssueForExtract[]>;
   issue(id: string): Promise<IssueForExtract | null>;
   topics(): Promise<Topic[]>;
@@ -61,8 +62,11 @@ export type BackfillStore = {
   setBatches(state: BatchState): Promise<void>;
   createRun(kind: RunKind, model: ModelId, promptVersion: string): Promise<number>;
   storiesExist(issueId: string, runId: number): Promise<boolean>;
+  /** Whether a charge for this issue and purpose was logged at or after `since`. */
+  usageRecorded(issueId: string, purpose: RunKind, since: string): Promise<boolean>;
   writeStories(runId: number, issue: IssueForExtract, stories: StoryWrite[]): Promise<number[]>;
   markDone(issueId: string, runId: number): Promise<void>;
+  /** Only moves an issue that is still `backfill`, so a row the daily job already took is left alone. */
   markFailed(issueId: string, error: string): Promise<void>;
   recordUsage(row: BackfillUsage): Promise<void>;
   /** The run's news stories with no cluster yet, oldest first. */
@@ -82,6 +86,8 @@ const MAX_BATCH_BYTES = 200 * 1024 * 1024;
 const SAMPLE_SIZE = 10;
 /** The spec's per-issue output figure; the real number is only known after a run. */
 export const OUTPUT_TOKENS_PER_ISSUE = 2_500;
+/** Assumed news stories per issue, only for the clustering upper bound in the estimate. */
+export const STORIES_PER_ISSUE = 10;
 
 export type ImportSummary = {
   bySource: Record<string, number>;
@@ -137,9 +143,11 @@ export type Estimate = {
   issues: IssueForExtract[];
   bySource: Record<string, number>;
   sampled: number;
+  skippedEmpty: number;
   inputTokens: number;
   outputTokens: number;
   usd: number;
+  clusterUsdMax: number;
 };
 
 function requestFor(issue: IssueForExtract, model: ModelId, topics: Topic[]) {
@@ -156,9 +164,21 @@ function sample<T>(list: T[], size: number): T[] {
   return Array.from({ length: size }, (_, i) => list[Math.floor((i * list.length) / size)]);
 }
 
+const PROBE = { origin: "a", storyDate: "2026-01-01", topics: [], companyIds: [], clusterId: null };
+
+/** Most one "same story?" Haiku call can cost: counted input of a typical pair plus the full max_tokens of output. */
+export async function clusterCallUsd(client: Anthropic): Promise<number> {
+  const headline = "A company announced a new product and its shares moved after the news";
+  const request = buildSameRequest({ ...PROBE, id: 1, headline }, { ...PROBE, id: 2, origin: "b", headline });
+  const { model, system, messages, output_config } = request;
+  const counted = await client.beta.messages.countTokens({ model, system, messages, output_config });
+  return costOf(DEDUPE_MODEL, { input_tokens: counted.input_tokens, output_tokens: request.max_tokens });
+}
+
 /** Counts input tokens on up to 10 evenly spaced issues and scales up; output assumes OUTPUT_TOKENS_PER_ISSUE. */
 export async function estimateCost(store: BackfillStore, client: Anthropic, scope: Scope, model: ModelId): Promise<Estimate> {
-  const [issues, topics] = await Promise.all([store.issues(scope), store.topics()]);
+  const [all, topics] = await Promise.all([store.issues(scope), store.topics()]);
+  const issues = all.filter((i) => i.cleanText !== "");
   const bySource: Record<string, number> = {};
   for (const i of issues) bySource[i.sourceName] = (bySource[i.sourceName] ?? 0) + 1;
   const picked = sample(issues, SAMPLE_SIZE);
@@ -171,7 +191,8 @@ export async function estimateCost(store: BackfillStore, client: Anthropic, scop
   const inputTokens = picked.length ? Math.round((sampledInput / picked.length) * issues.length) : 0;
   const outputTokens = OUTPUT_TOKENS_PER_ISSUE * issues.length;
   const usd = costOf(model, { input_tokens: inputTokens, output_tokens: outputTokens }, { batch: true });
-  return { issues, bySource, sampled: picked.length, inputTokens, outputTokens, usd };
+  const clusterUsdMax = issues.length ? issues.length * STORIES_PER_ISSUE * MAX_CANDIDATES * (await clusterCallUsd(client)) : 0;
+  return { issues, bySource, skippedEmpty: all.length - issues.length, sampled: picked.length, inputTokens, outputTokens, usd, clusterUsdMax };
 }
 
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -185,7 +206,11 @@ export function formatEstimate(e: Estimate, scope: Scope, model: ModelId): strin
       .map(([name, n]) => `  ${name}: ${fmt(n)}`),
     `Input: about ${fmt(e.inputTokens)} tokens (counted on ${e.sampled} sampled issues, scaled up).`,
     `Output: about ${fmt(e.outputTokens)} tokens (assumed ${fmt(OUTPUT_TOKENS_PER_ISSUE)} output tokens per issue, the spec's figure).`,
-    `Estimated cost at batch (half) price: $${e.usd.toFixed(2)}, plus a few cents to a few dollars of Haiku dedupe calls at collect.`,
+    `Estimated extraction cost at batch (half) price: $${e.usd.toFixed(2)}.`,
+    `Clustering at collect, at most $${e.clusterUsdMax.toFixed(2)} (assumes ${STORIES_PER_ISSUE} news stories per issue, ${MAX_CANDIDATES} Haiku calls per story at full price; collect asks again before it spends this).`,
+    ...(e.skippedEmpty
+      ? [`Skipped ${fmt(e.skippedEmpty)} issues whose text is empty; run reclean first to include them.`]
+      : []),
   ];
 }
 
@@ -247,12 +272,29 @@ export async function runEstimate(
   const next: BatchState = { submissions: [...(state?.submissions ?? []), submission] };
   for (const chunk of chunkRequests(requests)) {
     const batch = await client.beta.messages.batches.create({ requests: chunk });
+    opts.log(`Sent batch ${batch.id} with ${fmt(chunk.length)} requests.`);
     submission.batchIds.push(batch.id);
     // Saved after each batch so a crash part way still leaves every sent batch collectable.
-    await store.setBatches(next);
-    opts.log(`Sent batch ${batch.id} with ${fmt(chunk.length)} requests.`);
+    await saveWithRetry(store, next, submission.batchIds, opts.log);
   }
   return "sent";
+}
+
+const SAVE_TRIES = 3;
+
+async function saveWithRetry(store: BackfillStore, state: BatchState, sent: string[], log: Log): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await store.setBatches(state);
+      return;
+    } catch (e) {
+      if (attempt >= SAVE_TRIES) {
+        log(`Could not save the batch ids (${e instanceof Error ? e.message : String(e)}). Batches already sent: ${sent.join(", ")}.`);
+        log(`Add them by hand to hub_state "${BATCH_STATE_KEY}" (submissions[-1].batchIds) before running estimate again, or they are paid for and never collected.`);
+        throw e;
+      }
+    }
+  }
 }
 
 export type CollectSummary = { done: number; failed: number; skipped: number; pending: number };
@@ -274,8 +316,8 @@ async function collectBatch(
   const fail = async (issue: IssueForExtract, reason: string) => {
     summary.failed += 1;
     log(`${issue.id}: ${reason}`);
-    // A failed re-run keeps the issue on its earlier run; only backfill mail goes to the daily job.
-    if (submission.kind === "backfill") await store.markFailed(issue.id, reason.slice(0, 500));
+    // A failed re-run keeps the issue on its earlier run; only mail still waiting as backfill goes to the daily job.
+    if (submission.kind === "backfill" && issue.status === "backfill") await store.markFailed(issue.id, reason.slice(0, 500));
   };
 
   for await (const { custom_id, result } of await client.beta.messages.batches.results(batchId)) {
@@ -284,9 +326,8 @@ async function collectBatch(
       log(`${custom_id}: no such issue, skipped`);
       continue;
     }
-    if (issue.currentRunId === runId || (await store.storiesExist(issue.id, runId))) {
+    if (issue.currentRunId === runId) {
       summary.skipped += 1;
-      if (issue.currentRunId !== runId) await store.markDone(issue.id, runId);
       continue;
     }
     if (result.type !== "succeeded") {
@@ -294,9 +335,17 @@ async function collectBatch(
       continue;
     }
     const { outcome, charges } = readExtractMessage(result.message, submission.model, topics);
-    if (!outcome.ok) {
+    // Usage goes first and is checked on a repeat, so a crash at any point neither loses nor doubles a charge.
+    if (!(await store.usageRecorded(issue.id, submission.kind, submission.submittedAt))) {
       for (const c of charges) await recordCharge(store, submission.kind, c, issue.id);
+    }
+    if (!outcome.ok) {
       await fail(issue, `extraction failed (${outcome.reason}): ${outcome.detail}`);
+      continue;
+    }
+    if (await store.storiesExist(issue.id, runId)) {
+      await store.markDone(issue.id, runId);
+      summary.skipped += 1;
       continue;
     }
     await store.writeStories(
@@ -314,7 +363,6 @@ async function collectBatch(
         link: s.link,
       })),
     );
-    for (const c of charges) await recordCharge(store, submission.kind, c, issue.id);
     await store.markDone(issue.id, runId);
     summary.done += 1;
   }
@@ -324,8 +372,12 @@ async function recordCharge(store: BackfillStore, kind: RunKind, c: { model: Mod
   await store.recordUsage({ feature: "news", model: c.model, itemId: null, purpose: kind, usage: c.usage, batch: true, newsIssueId: issueId });
 }
 
-/** Writes stories for every ended batch, then clusters the run's new stories and rebuilds trends over its dates; safe to repeat. */
-export async function collect(store: BackfillStore, client: Anthropic, opts: { log: Log }): Promise<CollectSummary> {
+/** Writes stories for every ended batch, then (after a typed yes) clusters the run's unclustered stories and rebuilds trends over its dates; safe to repeat. */
+export async function collect(
+  store: BackfillStore,
+  client: Anthropic,
+  opts: { log: Log; ask: (question: string) => Promise<string> },
+): Promise<CollectSummary> {
   const summary: CollectSummary = { done: 0, failed: 0, skipped: 0, pending: 0 };
   const state = await store.getBatches();
   if (!state) {
@@ -335,7 +387,7 @@ export async function collect(store: BackfillStore, client: Anthropic, opts: { l
   const topics = await store.topics();
   for (const submission of state.submissions) {
     const open = submission.batchIds.filter((id) => !submission.collected.includes(id));
-    if (open.length === 0) continue;
+    if (open.length === 0 && submission.runId === null) continue;
     if (submission.runId === null) {
       submission.runId = await store.createRun(submission.kind, submission.model, submission.promptVersion);
       await store.setBatches(state);
@@ -356,8 +408,13 @@ export async function collect(store: BackfillStore, client: Anthropic, opts: { l
 
     const fresh = await store.unclusteredStoryIds(runId);
     if (fresh.length) {
-      opts.log(`Clustering ${fmt(fresh.length)} stories.`);
-      await store.cluster(fresh, submission.kind);
+      const most = fresh.length * MAX_CANDIDATES * (await clusterCallUsd(client));
+      opts.log(`${fmt(fresh.length)} stories of run ${runId} need clustering: at most $${most.toFixed(2)} of Haiku calls (${MAX_CANDIDATES} per story, full price).`);
+      if ((await opts.ask("Type yes to cluster: ")).trim() === "yes") {
+        await store.cluster(fresh, submission.kind);
+      } else {
+        opts.log("Clustering skipped. Run collect again to be asked again; trends are rebuilt without it for now.");
+      }
     }
     const range = await store.runDateRange(runId);
     if (range) await store.refreshTrends(range.from, range.to);
