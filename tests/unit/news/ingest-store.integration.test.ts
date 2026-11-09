@@ -27,6 +27,7 @@ describe.skipIf(!enabled)("news ingest store against local Supabase", () => {
     cleanText: "synthetic",
     publicUrl: null,
     status: "quarantined",
+    lastError: "parse failed",
   });
 
   it("lists only active sources, mapped to camelCase", async () => {
@@ -48,6 +49,8 @@ describe.skipIf(!enabled)("news ingest store against local Supabase", () => {
     expect(first?.id).toBeTruthy();
     expect(await deps().insertIssue(row(messageId))).toBeNull();
     expect(await deps().findIssueId(messageId)).toBe(first?.id);
+    const { data } = await client().from("news_issues").select("last_error").eq("id", first?.id).single();
+    expect(data?.last_error).toBe("parse failed");
     expect(await deps().findIssueId(`<${randomUUID()}@example.test>`)).toBeNull();
   });
 });

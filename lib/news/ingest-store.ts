@@ -55,6 +55,7 @@ export function createIngestDeps(
           clean_text: row.cleanText,
           public_url: row.publicUrl,
           status: row.status,
+          last_error: row.lastError ?? null,
         })
         .select("id")
         .single();
