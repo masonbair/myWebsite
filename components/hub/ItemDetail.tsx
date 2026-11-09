@@ -64,7 +64,7 @@ export function ItemDetail({ item, comments, mergedFrom, mergedInto, history, wo
       )}
 
       {archived && (
-        <div className="mt-5 rounded-tile bg-accent/10 px-5 py-4 ring-1 ring-accent/30">
+        <div className="mt-5 rounded-tile border-[2.5px] border-dashed border-line bg-surface px-5 py-4 shadow-sticker-sm">
           <p className="text-sm text-mute">Archived. It stays here for the record and cannot be changed.</p>
           {mergedInto && (
             <p className="mt-1 text-base font-semibold text-ink">
@@ -116,7 +116,7 @@ export function ItemDetail({ item, comments, mergedFrom, mergedInto, history, wo
           </ul>
         )
       ) : (
-        <dl className={`${panel} mt-8 divide-y divide-ink/[0.06]`}>
+        <dl className={`${panel} mt-8 divide-y-2 divide-dashed divide-line/20`}>
           <Field label={<label htmlFor="item-list">List</label>}>
             <ListPicker item={item} />
           </Field>

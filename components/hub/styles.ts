@@ -1,12 +1,15 @@
 export const focusRing =
-  "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink";
 
-export const panel = "rounded-tile bg-surface shadow-tile ring-1 ring-ink/5";
+export const panel = "rounded-tile border-[2.5px] border-line bg-surface shadow-tile";
 
-export const primaryButton = `inline-flex h-10 items-center gap-2 rounded-full bg-accent px-5 text-sm font-semibold text-night transition-[opacity,transform] duration-300 ease-spring hover:opacity-90 active:scale-[0.98] disabled:opacity-60 ${focusRing}`;
+/** Small sticker for rows and chips inside a page. */
+export const sticker = "rounded-2xl border-[2.5px] border-line shadow-sticker-sm";
 
-export const quietButton = `inline-flex h-10 items-center gap-2 rounded-full bg-ink/5 px-5 text-sm font-semibold text-ink transition-[background-color,transform] duration-300 ease-spring hover:bg-ink/10 active:scale-[0.98] disabled:opacity-60 ${focusRing}`;
+export const primaryButton = `inline-flex h-10 items-center gap-2 rounded-full border-[2.5px] border-line bg-accent px-5 text-sm font-bold text-night shadow-sticker-sm transition-[translate,box-shadow] duration-200 ease-spring active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-60 ${focusRing}`;
 
-export const smallButton = `inline-flex h-9 items-center rounded-full bg-ink/5 px-3.5 text-sm font-medium text-ink transition-colors duration-300 ease-spring hover:bg-ink/10 disabled:opacity-60 ${focusRing}`;
+export const quietButton = `inline-flex h-10 items-center gap-2 rounded-full border-2 border-line bg-surface px-5 text-sm font-semibold text-ink transition-[translate,background-color] duration-200 ease-spring hover:bg-canvas active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-60 ${focusRing}`;
 
-export const field = `h-9 rounded-xl border-0 bg-canvas px-3 text-sm text-ink ring-1 ring-ink/10 placeholder:text-mute focus-visible:ring-2 focus-visible:ring-accent outline-none`;
+export const smallButton = `inline-flex h-9 items-center rounded-full border-2 border-line bg-surface px-3.5 text-sm font-semibold text-ink transition-colors duration-200 ease-spring hover:bg-canvas disabled:opacity-60 ${focusRing}`;
+
+export const field = `h-9 rounded-xl border-2 border-line bg-canvas px-3 text-sm text-ink placeholder:text-mute focus-visible:ring-2 focus-visible:ring-accent-ink outline-none`;

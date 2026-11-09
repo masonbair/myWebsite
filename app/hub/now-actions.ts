@@ -4,9 +4,11 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { requireOwner } from "@/lib/auth/require-owner";
+import { ASSET_ID } from "@/lib/collector-photos";
 import { NowInputError, parseBakeInput, privacyRow } from "@/lib/hub/now-input";
 import { readNowRows, type NowRows } from "@/lib/now";
 import { serviceClient, sessionClient } from "@/lib/supabase/server";
+import { RPC } from "@/shared/collector-contract";
 
 export type NowActionResult = { ok: true } | { ok: false; error: string };
 
@@ -50,8 +52,21 @@ export async function setPlacePrivateAction(makePrivate: boolean): Promise<NowAc
   if (!place) return { ok: false, error: "There is no place in the database yet, so there is nothing to mark." };
   if (place.private === makePrivate) return { ok: true };
   if (!makePrivate && place.sentPrivate) return { ok: false, error: "The phone sent this place as private, so it stays private." };
-  const { error } = await (await sessionClient()).from("now_place_privacy").insert(privacyRow(place, makePrivate));
+  const city = place.city;
+  if (!city) return { ok: false, error: "This place has no city, so there is nothing to mark." };
+  const { error } = await (await sessionClient()).from("now_place_privacy").insert(privacyRow({ ...place, city }, makePrivate));
   if (error) return { ok: false, error: "Could not save. Try again." };
+  refreshNow();
+  return { ok: true };
+}
+
+/** Hides a phone photo from the board, or shows it again; runs as Mason's session, so the database checks he is the owner. */
+export async function setPhotoHiddenAction(assetId: string, hidden: boolean): Promise<NowActionResult> {
+  await requireOwner();
+  if (typeof assetId !== "string" || !ASSET_ID.test(assetId) || typeof hidden !== "boolean") return { ok: false, error: "Bad request." };
+  const { data, error } = await (await sessionClient()).rpc(RPC.setPhotoHidden, { p_asset_id: assetId, p_hidden: hidden });
+  if (error) return { ok: false, error: "Could not save. Try again." };
+  if (data !== true) return { ok: false, error: "That photo is not in the database." };
   refreshNow();
   return { ok: true };
 }

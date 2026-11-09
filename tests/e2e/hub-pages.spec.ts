@@ -186,7 +186,7 @@ test.describe("hub pages", () => {
     await page.goto("/hub");
     await expect(page.getByRole("navigation", { name: "Main" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "About", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Hub", exact: true })).toHaveAttribute("href", "/hub");
+    await expect(page.getByRole("link", { name: "Mason's hub", exact: true })).toHaveAttribute("href", "/hub");
     await expect(page.getByRole("link", { name: "Site" })).toHaveAttribute("href", "/");
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/hub\/login$/);

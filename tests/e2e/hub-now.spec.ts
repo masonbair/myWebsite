@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import sharp from "sharp";
 import { seededOwner, serviceClient, signInAs, supabase } from "./hub-session";
 
 // Runs on the hub server, whose `/` reads local Supabase. Rows can never be deleted, so names are unique per run and each test adds the newest row.
@@ -75,6 +76,38 @@ test.describe("now page", () => {
       await expect(toggle).toHaveAttribute("aria-checked", "false");
       await page.goto("/");
       await expect(page.getByText(`${city}, United States`)).toBeVisible();
+    });
+
+    test("a phone photo shows on the board until it is hidden in the hub, and comes back when shown", async ({ page, request }) => {
+      const assetId = `e2e${randomUUID().slice(0, 8)}`;
+      const jpeg = await sharp({ create: { width: 300, height: 400, channels: 3, background: "teal" } }).jpeg().toBuffer();
+      // Stands in for the phone, which uploads the object and then adds the row.
+      const upload = await serviceClient().storage.from("photos").upload(`collector/${assetId}.jpg`, jpeg, { contentType: "image/jpeg" });
+      expect(upload.error).toBeNull();
+      const added = await serviceClient()
+        .from("collector_photo")
+        .insert({ path: `collector/${assetId}.jpg`, asset_id: assetId, taken_at: new Date().toISOString(), width: 300, height: 400 });
+      expect(added.error).toBeNull();
+      const route = `/photos/${assetId}`;
+      const boardHtml = async () => (await request.get("/")).text();
+
+      await page.goto("/");
+      await expect(page.getByRole("group", { name: "Photo slideshow" }).locator(`img[src^="${route}?w="]`)).toHaveAttribute("alt", /^Photo from Mason's phone, /);
+      const served = await request.get(route);
+      expect(served.status()).toBe(200);
+      expect(served.headers()["content-type"]).toBe("image/jpeg");
+
+      await page.goto("/hub/now");
+      const card = page.getByRole("region", { name: "Photos from the phone" }).getByRole("listitem").filter({ has: page.locator(`img[src*="${assetId}"]`) });
+      await card.getByRole("button", { name: /^Hide photo from / }).click();
+      await expect(card.getByRole("button", { name: /^Show photo from / })).toBeVisible();
+      await expect(card.getByText("Hidden", { exact: true })).toBeVisible();
+      expect(await boardHtml()).not.toContain(route);
+      expect((await request.get(route)).status()).toBe(404);
+
+      await card.getByRole("button", { name: /^Show photo from / }).click();
+      await expect(card.getByRole("button", { name: /^Hide photo from / })).toBeVisible();
+      expect(await boardHtml()).toContain(route);
     });
 
     test("a photo that is not on the site is refused", async ({ page }) => {
