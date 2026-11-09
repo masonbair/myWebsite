@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
-import { runNewsJob, supabaseNewsJobStore } from "@/lib/news/job";
+import { runNewsJob, supabaseNewsJobStore, type NewsJobDeps, type NewsJobResult } from "@/lib/news/job";
 
 vi.mock("server-only", () => ({}));
 
@@ -17,6 +17,18 @@ if (enabled && !/^(127\.0\.0\.1|localhost)$/.test(new URL(apiUrl || "http://inva
 
 describe.skipIf(!enabled)("runNewsJob against local Supabase", () => {
   const client = () => createClient(apiUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+
+  // Other tests leave pending rows on the shared stack and a run claims only the oldest few, so run until ours are handled.
+  async function runUntilHandled(deps: NewsJobDeps, ids: string[]): Promise<NewsJobResult> {
+    const all: NewsJobResult = { extracted: [], failed: [], clustered: 0, paused: false, alerts: [] };
+    for (let i = 0; i < 10 && !ids.every((id) => all.extracted.includes(id) || all.failed.includes(id)); i++) {
+      const r = await runNewsJob(deps);
+      all.extracted.push(...r.extracted);
+      all.failed.push(...r.failed);
+      all.paused ||= r.paused;
+    }
+    return all;
+  }
 
   it("extracts two pending issues into stories and trends, leaving the sponsor out of trends", async () => {
     const db = client();
@@ -66,7 +78,7 @@ describe.skipIf(!enabled)("runNewsJob against local Supabase", () => {
     const fetchFn = (async () => new Response("", { status: 503 })) as unknown as typeof fetch;
     const store = { ...supabaseNewsJobStore(db, anthropic, fetchFn), fetchReadable: async () => null };
 
-    const result = await runNewsJob({
+    const result = await runUntilHandled({
       client: db,
       anthropic,
       model: "claude-sonnet-5-5",
@@ -77,7 +89,7 @@ describe.skipIf(!enabled)("runNewsJob against local Supabase", () => {
       fetchFn,
       timeZone: "UTC",
       store,
-    });
+    }, ids);
 
     expect(result.paused).toBe(false);
     expect(result.extracted).toEqual(expect.arrayContaining(ids));
@@ -129,7 +141,7 @@ describe.skipIf(!enabled)("runNewsJob against local Supabase", () => {
     const anthropic = { beta: { messages: { create } } } as unknown as Anthropic;
     const fetchFn = (async () => new Response("", { status: 503 })) as unknown as typeof fetch;
     const now = new Date();
-    const result = await runNewsJob({
+    const result = await runUntilHandled({
       client: db,
       anthropic,
       model: "claude-sonnet-5-5",
@@ -140,7 +152,7 @@ describe.skipIf(!enabled)("runNewsJob against local Supabase", () => {
       fetchFn,
       timeZone: "UTC",
       store: { ...supabaseNewsJobStore(db, anthropic, fetchFn), fetchReadable: async () => null },
-    });
+    }, [shared.id, bad.id]);
 
     expect(result.extracted).toContain(shared.id);
     expect(result.failed).toContain(bad.id);

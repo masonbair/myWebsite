@@ -172,7 +172,7 @@ describe("runNewsJob issues", () => {
     expect(f.charges.map((c) => [c.purpose, c.ref.newsIssueId])).toEqual([["extract", "issue-1"], ["extract", "issue-2"]]);
     expect(f.clusterCalls).toEqual([[1, 2, 3, 4]]);
     expect(result.clustered).toBe(4);
-    expect(f.trends).toEqual([["2026-11-06", "2026-11-08"]]);
+    expect(f.trends).toEqual([["2026-11-06", "2026-11-08"], ["2026-11-06", "2026-11-08"]]);
   });
 
   it("an ExtractError marks the issue failed with attempts 1 and a 60-minute retry, and records the spend", async () => {
@@ -333,5 +333,111 @@ describe("runNewsJob alerts", () => {
     const result = await runNewsJob(d);
     expect(result.alerts).toEqual([]);
     expect(f.state.get("news:silent:morning-brew")).toBeUndefined();
+  });
+});
+
+describe("runNewsJob fix round 1", () => {
+  const at = (iso: string) => () => new Date(iso);
+  const quiet = [{ id: "morning-brew", name: "Morning Brew", newestAt: "2026-11-01T12:00:00Z" }];
+
+  it("refreshes trends before clustering and still alerts when clustering throws", async () => {
+    const f = fakeStore({ issues: [issue(1)], silence: quiet });
+    const order: string[] = [];
+    f.store.refreshTrends = async () => void order.push("trends");
+    f.store.cluster = async () => {
+      order.push("cluster");
+      throw new Error("dedupe down");
+    };
+    const { d, fetched } = deps(f.store);
+    const result = await runNewsJob(d);
+    expect(order).toEqual(["trends", "cluster"]);
+    expect(result.extracted).toEqual(["issue-1"]);
+    expect(result.clustered).toBe(0);
+    expect(fetched).toHaveLength(1);
+  });
+
+  it("clusters in chunks of 5, stops past the clustering deadline, and refreshes trends over what got clustered", async () => {
+    const f = fakeStore({ issues: [issue(1)] });
+    let t = NOW.getTime();
+    const leftovers = Array.from({ length: 12 }, (_, i) => ({ id: 100 + i, storyDate: i < 5 ? "2026-11-03" : "2026-11-04" }));
+    f.store.unclustered = async () => leftovers;
+    const chunks: number[][] = [];
+    f.store.cluster = async (ids) => {
+      chunks.push(ids);
+      t += 200_000;
+    };
+    const { d } = deps(f.store, { now: () => new Date(t), deadlineMs: 180_000 });
+    const result = await runNewsJob(d);
+    expect(chunks.map((c) => c.length)).toEqual([5, 5]);
+    expect(result.clustered).toBe(10);
+    expect(f.trends).toEqual([
+      ["2026-11-08", "2026-11-08"],
+      ["2026-11-03", "2026-11-08"],
+    ]);
+  });
+
+  it("still sends daily alerts while paused", async () => {
+    const f = fakeStore({ spend: 30, silence: quiet });
+    const { d, fetched } = deps(f.store, { now: at("2026-11-09T19:00:00Z") });
+    const result = await runNewsJob(d);
+    expect(result.paused).toBe(true);
+    expect(result.alerts).toEqual(["paused", "silent:morning-brew"]);
+    expect(fetched).toHaveLength(2);
+  });
+
+  it("retries the paused alert next run when ntfy failed, while the page flag stays the month", async () => {
+    const f = fakeStore({ spend: 30 });
+    let up = false;
+    const sent: string[] = [];
+    const fetchFn = (async (_url: string, init: RequestInit) => {
+      if (!up) return new Response("", { status: 500 });
+      sent.push(JSON.parse(init.body as string).title);
+      return new Response("{}");
+    }) as unknown as typeof fetch;
+    const { d } = deps(f.store, { fetchFn });
+    expect((await runNewsJob(d)).alerts).toEqual([]);
+    expect(f.state.get("news:paused")).toBe(MONTH);
+    up = true;
+    expect((await runNewsJob(d)).alerts).toEqual(["paused"]);
+    expect((await runNewsJob(d)).alerts).toEqual([]);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("fails an issue with no source for good at once", async () => {
+    const f = fakeStore({ issues: [issue(1, { sourceId: null })] });
+    const claude = stubClaude();
+    const { d } = deps(f.store, { anthropic: claude.client });
+    await runNewsJob(d);
+    expect(f.rows.get("issue-1")).toMatchObject({ status: "failed", attempts: 3 });
+    expect(f.rows.get("issue-1")!.lastError).toMatch(/no newsletter source/);
+    expect(claude.create).not.toHaveBeenCalled();
+  });
+
+  it("does not fetch a shared page again when its stories already landed under today's run", async () => {
+    const f = fakeStore({
+      shared: [{ id: "shared-1", itemId: "item-1", url: "https://example.com/a", title: "T", description: "", fetchedText: null, storyDate: "2026-11-09", attempts: 0 }],
+    });
+    f.stories.push({ run_id: 7, issue_id: null, shared_id: "shared-1", source_id: "shared", story_date: "2026-11-09", headline: "h", kind: "news", sentiment: 0, topics: [], suggested_topic: null, company_ids: [], link: null, id: 1, cluster: false });
+    const { d } = deps(f.store);
+    await runNewsJob(d);
+    expect(f.store.fetchReadable).not.toHaveBeenCalled();
+    expect(f.rows.get("shared-1")).toMatchObject({ status: "done", thin: true });
+  });
+
+  it("hands back the rest of the claims when a store call throws mid-loop", async () => {
+    const f = fakeStore({ issues: [issue(1), issue(2), issue(3)] });
+    const finish = f.store.finish;
+    f.store.fail = async () => {
+      throw new Error("db down");
+    };
+    f.store.finish = async (kind, id, runId, extra) => {
+      if (id === "issue-2") throw new Error("db down");
+      return finish(kind, id, runId, extra);
+    };
+    const { d } = deps(f.store);
+    await expect(runNewsJob(d)).rejects.toThrow("db down");
+    expect(f.rows.get("issue-1")!.status).toBe("done");
+    expect(f.rows.get("issue-2")!.status).toBe("pending");
+    expect(f.rows.get("issue-3")!.status).toBe("pending");
   });
 });

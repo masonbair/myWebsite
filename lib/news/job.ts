@@ -73,8 +73,8 @@ export type NewsJobStore = {
   fail(kind: WorkKind, id: string, attempts: number, nextAttemptAt: string, error: string): Promise<void>;
   /** Hands an untouched claim back as pending, so a deadline stop costs no attempt. */
   release(kind: WorkKind, id: string): Promise<void>;
-  /** Current-run news stories from the last week still waiting for a cluster. */
-  unclustered(): Promise<StoryDate[]>;
+  /** Current-run news stories from the week before `now` still waiting for a cluster. */
+  unclustered(now: Date): Promise<StoryDate[]>;
   cluster(storyIds: number[]): Promise<void>;
   refreshTrends(from: string, to: string): Promise<void>;
   failedRows(): Promise<{ sourceName: string; date: string; error: string | null }[]>;
@@ -88,6 +88,7 @@ export type NewsJobDeps = {
   anthropic: Anthropic | null;
   model: ModelId;
   now: () => Date;
+  /** No extraction starts after this; clustering chunks may start for CLUSTER_EXTRA_MS more. */
   deadlineMs: number;
   cap: number;
   ntfyTopic: string | undefined;
@@ -107,6 +108,9 @@ const SILENT_MS = 3 * 24 * 60 * 60_000;
 const REPORT_HOUR = 13;
 const NEWS_URL = "https://masonbair.com/hub/news";
 const PAUSED_KEY = "news:paused";
+const PAUSED_ALERT_KEY = "news:paused-alerted";
+const CLUSTER_EXTRA_MS = 60_000;
+const CLUSTER_CHUNK = 5;
 const REPORT_KEY = "news:failure-report";
 const silentKey = (id: string) => `news:silent:${id}`;
 const MAX_ERROR = 500;
@@ -130,7 +134,9 @@ export async function runNewsJob(deps: NewsJobDeps): Promise<NewsJobResult> {
   const store = deps.store ?? supabaseNewsJobStore(deps.client, deps.anthropic, deps.fetchFn);
   const result: NewsJobResult = { extracted: [], failed: [], clustered: 0, paused: false, alerts: [] };
   const started = deps.now().getTime();
-  const timeLeft = () => deps.now().getTime() - started < deps.deadlineMs;
+  const elapsed = () => deps.now().getTime() - started;
+  const timeLeft = () => elapsed() < deps.deadlineMs;
+  const clusterTimeLeft = () => elapsed() < deps.deadlineMs + CLUSTER_EXTRA_MS;
 
   async function alert(key: string, value: string, label: string, msg: Message): Promise<void> {
     if (!deps.ntfyTopic) return;
@@ -154,13 +160,15 @@ export async function runNewsJob(deps: NewsJobDeps): Promise<NewsJobResult> {
   let spend = await store.capSpend(deps.now());
   if (spend >= deps.cap) {
     result.paused = true;
-    if ((await store.getState(PAUSED_KEY)) !== month) {
-      await store.setState(PAUSED_KEY, month);
-      await alert(PAUSED_KEY, month, "paused", {
+    if ((await store.getState(PAUSED_KEY)) !== month) await store.setState(PAUSED_KEY, month);
+    // Its own key, set only after a good send, so a failed ntfy is retried next run while the page still shows the pause.
+    if ((await store.getState(PAUSED_ALERT_KEY)) !== month) {
+      await alert(PAUSED_ALERT_KEY, month, "paused", {
         title: "News extraction paused",
         message: `This month's Claude spend reached the $${deps.cap} cap. New issues wait until next month or a higher cap.`,
       });
     }
+    await sendDailyAlerts(store, deps, alert);
     return result;
   }
   if ((await store.getState(PAUSED_KEY)) === month) await store.setState(PAUSED_KEY, false);
@@ -180,41 +188,74 @@ export async function runNewsJob(deps: NewsJobDeps): Promise<NewsJobResult> {
       ...(await store.claim("issue", ISSUES_PER_RUN)).map((id): [WorkKind, string] => ["issue", id]),
       ...(await store.claim("shared", SHARED_PER_RUN)).map((id): [WorkKind, string] => ["shared", id]),
     ];
-    for (const [kind, id] of work) {
-      if (!timeLeft() || spend >= deps.cap) {
-        await store.release(kind, id);
-        continue;
+    let next = 0;
+    try {
+      for (; next < work.length; next++) {
+        const [kind, id] = work[next];
+        if (!timeLeft() || spend >= deps.cap) {
+          await store.release(kind, id);
+          continue;
+        }
+        const { topics: t, runId: run } = await prepare();
+        const outcome =
+          kind === "issue"
+            ? await processIssue(store, anthropic, deps, id, t, run)
+            : await processShared(store, anthropic, deps, id, t, run);
+        spend += outcome.spent;
+        if (outcome.ok) {
+          result.extracted.push(id);
+          newStories.push(...outcome.stories);
+        } else {
+          result.failed.push(id);
+        }
       }
-      const { topics: t, runId: run } = await prepare();
-      const outcome =
-        kind === "issue"
-          ? await processIssue(store, anthropic, deps, id, t, run)
-          : await processShared(store, anthropic, deps, id, t, run);
-      spend += outcome.spent;
-      if (outcome.ok) {
-        result.extracted.push(id);
-        newStories.push(...outcome.stories);
-      } else {
-        result.failed.push(id);
+    } finally {
+      for (const [kind, id] of work.slice(next)) {
+        await store.release(kind, id).catch((e: unknown) => console.error(`news release of ${kind} ${id} failed: ${(e as Error).message}`));
       }
-    }
-
-    const toCluster = [...newStories, ...(await store.unclustered()).filter((s) => !newStories.some((n) => n.id === s.id))];
-    // assignClusters does not check the cap itself, so dedupe waits for a run with room under it.
-    if (toCluster.length > 0 && timeLeft() && (await store.capSpend(deps.now())) < deps.cap) {
-      await store.cluster(toCluster.map((s) => s.id));
-      result.clustered = toCluster.length;
-      newStories.push(...toCluster.filter((s) => !newStories.some((n) => n.id === s.id)));
     }
   }
 
-  if (newStories.length > 0) {
-    const dates = newStories.map((s) => s.storyDate).sort();
-    await store.refreshTrends(dates[0], dates[dates.length - 1]);
+  await refreshDates(store, newStories);
+
+  if (deps.anthropic) {
+    const clustered = await clusterInChunks(store, deps, newStories, clusterTimeLeft);
+    result.clustered = clustered.length;
+    await refreshDates(store, clustered);
   }
 
   await sendDailyAlerts(store, deps, alert);
   return result;
+}
+
+async function refreshDates(store: NewsJobStore, stories: StoryDate[]): Promise<void> {
+  if (stories.length === 0) return;
+  const dates = stories.map((s) => s.storyDate).sort();
+  await store.refreshTrends(dates[0], dates[dates.length - 1]);
+}
+
+/** Clusters new and leftover stories a few at a time, so a slow or failing dedupe never holds up trends or alerts. */
+async function clusterInChunks(
+  store: NewsJobStore,
+  deps: NewsJobDeps,
+  newStories: StoryDate[],
+  timeLeft: () => boolean,
+): Promise<StoryDate[]> {
+  const done: StoryDate[] = [];
+  try {
+    const seen = new Set(newStories.map((s) => s.id));
+    const todo = [...newStories, ...(await store.unclustered(deps.now())).filter((s) => !seen.has(s.id))];
+    // assignClusters does not check the cap itself, so dedupe waits for a run with room under it.
+    if (todo.length === 0 || (await store.capSpend(deps.now())) >= deps.cap) return done;
+    for (let i = 0; i < todo.length && timeLeft(); i += CLUSTER_CHUNK) {
+      const chunk = todo.slice(i, i + CLUSTER_CHUNK);
+      await store.cluster(chunk.map((s) => s.id));
+      done.push(...chunk);
+    }
+  } catch (e) {
+    console.error(`news clustering stopped, the rest waits for the next run: ${(e as Error).message}`);
+  }
+  return done;
 }
 
 type Outcome = { ok: true; stories: StoryDate[]; spent: number } | { ok: false; spent: number };
@@ -254,8 +295,12 @@ async function extractAndStore(
   return { stories, spent };
 }
 
+const MAX_ATTEMPTS = 3;
+
+class PermanentError extends Error {}
+
 async function failRow(store: NewsJobStore, deps: NewsJobDeps, kind: WorkKind, id: string, attempts: number, e: unknown): Promise<Outcome> {
-  const next = attempts + 1;
+  const next = e instanceof PermanentError ? MAX_ATTEMPTS : attempts + 1;
   const at = new Date(deps.now().getTime() + RETRY_BASE_MS * 2 ** next).toISOString();
   const message = (e instanceof Error ? e.message : String(e)).slice(0, MAX_ERROR);
   console.error(`news ${kind} ${id} failed (try ${next}): ${message}`);
@@ -274,7 +319,7 @@ async function processIssue(
   const issue = await store.loadIssue(id);
   if (!issue) return { ok: false, spent: 0 };
   try {
-    if (!issue.sourceId) throw new Error("issue has no newsletter source");
+    if (!issue.sourceId) throw new PermanentError("issue has no newsletter source, so its stories have nowhere to go; set source_id and retry");
     // A crash after the insert but before `done` would otherwise double every story under the same run.
     if (await store.hasStories("issue", id, runId)) {
       await store.finish("issue", id, runId);
@@ -307,6 +352,10 @@ async function processShared(
   const shared = await store.loadShared(id);
   if (!shared) return { ok: false, spent: 0 };
   try {
+    if (await store.hasStories("shared", id, runId)) {
+      await store.finish("shared", id, runId, { thin: shared.fetchedText === null });
+      return { ok: true, stories: [], spent: 0 };
+    }
     let text = shared.fetchedText;
     if (text === null) {
       const page = await store.fetchReadable(shared.url);
@@ -316,10 +365,6 @@ async function processShared(
       }
     }
     const thin = text === null;
-    if (await store.hasStories("shared", id, runId)) {
-      await store.finish("shared", id, runId, { thin });
-      return { ok: true, stories: [], spent: 0 };
-    }
     const { stories, spent } = await extractAndStore(
       store,
       anthropic,
@@ -404,6 +449,7 @@ const table = (kind: WorkKind) => (kind === "issue" ? "news_issues" : "news_shar
 const ownerColumn = (kind: WorkKind) => (kind === "issue" ? "issue_id" : "shared_id");
 const DAY_MS = 24 * 60 * 60_000;
 const UNCLUSTERED_LIMIT = 200;
+const UNCLUSTERED_PAGE = 1000;
 
 function check<T>({ data, error }: { data: T; error: unknown }): T {
   if (error) throw error;
@@ -524,28 +570,34 @@ export function supabaseNewsJobStore(client: SupabaseClient, anthropic: Anthropi
     async release(kind, id) {
       check(await client.from(table(kind)).update({ status: "pending", claimed_at: null }).eq("id", id).eq("status", "processing"));
     },
-    async unclustered() {
-      const since = new Date(Date.now() - 7 * DAY_MS).toISOString();
-      const rows = check(
-        await client
-          .from("news_stories")
-          .select("id, run_id, story_date, issue_id, shared_id, issue:news_issues(current_run_id), shared:news_shared(current_run_id)")
-          .eq("kind", "news")
-          .is("cluster_id", null)
-          .gte("created_at", since)
-          .order("id")
-          .limit(UNCLUSTERED_LIMIT),
-      ) as unknown as {
-        id: number;
-        run_id: number;
-        story_date: string;
-        issue_id: string | null;
-        issue: { current_run_id: number | null } | null;
-        shared: { current_run_id: number | null } | null;
-      }[];
-      return (rows ?? [])
-        .filter((r) => (r.issue_id ? r.issue?.current_run_id : r.shared?.current_run_id) === r.run_id)
-        .map((r) => ({ id: r.id, storyDate: r.story_date }));
+    async unclustered(now) {
+      const since = new Date(now.getTime() - 7 * DAY_MS).toISOString();
+      const out: StoryDate[] = [];
+      // PostgREST cannot compare run_id with the joined current_run_id, so pages are filtered here until enough are found.
+      for (let from = 0; out.length < UNCLUSTERED_LIMIT; from += UNCLUSTERED_PAGE) {
+        const rows = check(
+          await client
+            .from("news_stories")
+            .select("id, run_id, story_date, issue_id, issue:news_issues(current_run_id), shared:news_shared(current_run_id)")
+            .eq("kind", "news")
+            .is("cluster_id", null)
+            .gte("created_at", since)
+            .order("id")
+            .range(from, from + UNCLUSTERED_PAGE - 1),
+        ) as unknown as {
+          id: number;
+          run_id: number;
+          story_date: string;
+          issue_id: string | null;
+          issue: { current_run_id: number | null } | null;
+          shared: { current_run_id: number | null } | null;
+        }[];
+        for (const r of rows ?? []) {
+          if ((r.issue_id ? r.issue?.current_run_id : r.shared?.current_run_id) === r.run_id) out.push({ id: r.id, storyDate: r.story_date });
+        }
+        if ((rows ?? []).length < UNCLUSTERED_PAGE) break;
+      }
+      return out.slice(0, UNCLUSTERED_LIMIT);
     },
     async cluster(storyIds) {
       if (!anthropic) return;

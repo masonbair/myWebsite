@@ -12,8 +12,8 @@ import { serviceClient } from "@/lib/supabase/server";
 // The ideas run stops starting reviews 90 seconds before its 270-second budget, inside this limit.
 export const maxDuration = 300;
 const IDEAS_DEADLINE_MS = 270_000;
-// One extraction can take about a minute, so none starts past 240 seconds.
-const NEWS_DEADLINE_MS = 240_000;
+// One extraction can take about a minute, so none starts past 180 s; clustering chunks may start until 240 s.
+const NEWS_DEADLINE_MS = 180_000;
 
 function ideasRunner() {
   const anthropic = anthropicClient("ideas");
