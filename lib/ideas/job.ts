@@ -1,10 +1,13 @@
 import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
 import { APIConnectionError } from "@anthropic-ai/sdk";
+import { parseMemo } from "@/lib/hub/memo-split";
 import type { Message } from "@/lib/hub/notify";
+import type { ClaudeUsage, ModelId } from "@/lib/ai/claude";
+import { detectIdeas, sameIdea } from "./detect";
 import { reviewIdea } from "./review";
-import { ClaimLost, type IdeasJobStore } from "./store";
-import { CapReached, ReviewFailed } from "./types";
+import { ClaimLost, type ClaimedSource, type IdeasJobStore } from "./store";
+import { CapReached, DetectFailed, ReviewFailed, type SourceKind } from "./types";
 
 export type IdeasJobDeps = {
   store: IdeasJobStore;
@@ -17,8 +20,6 @@ export type IdeasJobDeps = {
   deadlineMs: number;
   /** This month's ideas spend in USD, read fresh before every review. */
   spend: () => Promise<number>;
-  /** Task 6 fills this in; returns how many ideas it found. */
-  detect?: () => Promise<number>;
   /** Task 8 fills this in; returns how many calendar returns it handled. */
   resurface?: () => Promise<number>;
 };
@@ -34,6 +35,10 @@ const ABORT_MARGIN_MS = 15_000;
 const REVIEW_ROOM_MS = 200_000;
 // Rate limits, overload, timeouts and conflicts pass on their own; they must not use up an idea's two attempts.
 const PASSING_STATUSES = new Set([408, 409, 429]);
+// Reviews may only start in the first 55 seconds of a 270-second run, so detection hands over well before that.
+const DETECT_BUDGET_MS = 40_000;
+// A detection call still running this far into the run is cut off, so it cannot eat the reviews' start window.
+const DETECT_ABORT_MS = 50_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const IDEAS_URL = "https://masonbair.com/hub/ideas";
 
@@ -70,7 +75,7 @@ function isPassing(e: unknown, signal: AbortSignal): boolean {
 
 function failCode(e: unknown, signal: AbortSignal): string {
   if (signal.aborted) return "deadline";
-  if (e instanceof ReviewFailed) return e.code;
+  if (e instanceof ReviewFailed || e instanceof DetectFailed) return e.code;
   if (e instanceof SpendUnreadable) return "spend";
   if (e instanceof APIConnectionError) return "connection";
   const status = statusOf(e);
@@ -118,26 +123,17 @@ async function reviewOne(
     }
     const others = (await store.openIdeaTitles()).filter((o) => o.id !== id);
     let cost = 0;
+    const hooks = paidHooks(deps, id, (spend) => capState(spend, deps.budgetUsd).reviews);
     const { review, model } = await reviewIdea({
       client: anthropic,
-      idea: { id, title: idea.title, description: idea.description, quote: null },
+      idea: { id, title: idea.title, description: idea.description, quote: await store.ideaQuote(id) },
       others,
       note: settings.reviewNote,
       webSearch: !deps.webSearchOff && !settings.noWebSearch,
       signal,
-      beforeCall: async () => {
-        const spend = await deps.spend().catch(() => {
-          throw new SpendUnreadable();
-        });
-        if (!capState(spend, deps.budgetUsd).reviews) throw new CapReached();
-      },
+      beforeCall: hooks.beforeCall,
       record: async (call) => {
-        try {
-          cost += await store.recordUsage({ model: call.model, itemId: id, purpose: call.purpose, usage: call.usage });
-        } catch (e) {
-          console.error(`ideas usage not recorded ${id} ${call.model} in=${call.usage.input_tokens} out=${call.usage.output_tokens}`);
-          throw e;
-        }
+        cost += await hooks.record(call);
       },
     });
     await store.saveReview(id, review, model, cost, settings.reviewNote);
@@ -164,6 +160,103 @@ async function reviewOne(
     result.failed.push(id);
     return signal.aborted ? "stop" : "next";
   }
+}
+
+/** Spend checked before every paid call and usage recorded after it, against one item. */
+function paidHooks(deps: IdeasJobDeps, itemId: string, allowed: (spend: number) => boolean) {
+  return {
+    beforeCall: async () => {
+      const spend = await deps.spend().catch(() => {
+        throw new SpendUnreadable();
+      });
+      if (!allowed(spend)) throw new CapReached();
+    },
+    record: async (call: { purpose: string; model: ModelId; usage: ClaudeUsage }) => {
+      try {
+        return await deps.store.recordUsage({ model: call.model, itemId, purpose: call.purpose, usage: call.usage });
+      } catch (e) {
+        console.error(`ideas usage not recorded ${itemId} ${call.model} in=${call.usage.input_tokens} out=${call.usage.output_tokens}`);
+        throw e;
+      }
+    },
+  };
+}
+
+/** Finds the ideas in one claimed source and files them: a mention, a moved capture, or new idea items. */
+async function detectOne(
+  deps: IdeasJobDeps,
+  anthropic: Anthropic,
+  source: ClaimedSource,
+  signal: AbortSignal,
+): Promise<{ outcome: Outcome; found: number }> {
+  const { store } = deps;
+  const id = source.itemId;
+  try {
+    const item = await store.getIdea(id);
+    if (!item) throw new Error("missing");
+    // Mason filed or closed it himself before the job got to it.
+    if (item.state !== "open" || item.list === "ideas" || item.labels.includes("idea")) {
+      await store.finishSource(id, [], [], null);
+      return { outcome: "next", found: 0 };
+    }
+    const memo = source.kind === "memo" ? parseMemo(item, await store.listComments(id)) : null;
+    const text = memo ? memo.transcript : [item.title, item.description].filter((t) => t.trim()).join("\n\n");
+    const origin = { itemId: id, url: item.url, recorded: memo ? memo.recorded : item.createdAt };
+    const hooks = paidHooks(deps, id, (spend) => capState(spend, deps.budgetUsd).detection);
+    const ctx = {
+      client: anthropic,
+      signal,
+      beforeCall: hooks.beforeCall,
+      record: async (call: Parameters<typeof hooks.record>[0]) => {
+        await hooks.record(call);
+      },
+    };
+    const { ideas, model } = await detectIdeas({ ...ctx, text, kind: source.kind });
+    const open = ideas.length ? await store.openIdeaTitles() : [];
+    const moveWhole = source.kind === "capture" && ideas.length === 1 && ideas[0].whole_item && ideas[0].sure;
+    const ideaIds: string[] = [];
+    for (const [n, idea] of ideas.entries()) {
+      const { matchId } = open.length ? await sameIdea({ ...ctx, candidate: `${idea.title}\n${idea.quote}`, open }) : { matchId: null };
+      if (matchId) await store.mentionAgain(matchId, item.url, origin.recorded.slice(0, 10), idea.quote);
+      else if (moveWhole) await store.moveCaptureToIdeas(id);
+      ideaIds.push(matchId ?? (moveWhole ? id : await store.addIdeaFrom(origin, n, idea.title, idea.quote)));
+    }
+    await store.finishSource(id, ideaIds, ideas.map((i) => i.quote), model);
+    return { outcome: "next", found: ideaIds.length };
+  } catch (e) {
+    // At the detection cap the source stays pending for next month or a higher cap; nothing is lost.
+    if (e instanceof CapReached) return { outcome: "stop", found: 0 };
+    if (e instanceof ClaimLost) {
+      console.error(`ideas detection for ${id} lost its claim before saving`);
+      return { outcome: "next", found: 0 };
+    }
+    const code = failCode(e, signal);
+    console.error(`ideas detection failed for ${id}: ${code}`);
+    if (isPassing(e, signal)) return { outcome: "stop", found: 0 };
+    await store.failSource(id, code);
+    return { outcome: signal.aborted ? "stop" : "next", found: 0 };
+  }
+}
+
+async function detectStep(deps: IdeasJobDeps, startedAt: number): Promise<number> {
+  const anthropic = deps.anthropic;
+  if (!anthropic) return 0;
+  const kinds: SourceKind[] = deps.memoDetection ? ["capture", "memo"] : ["capture"];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(0, startedAt + DETECT_ABORT_MS - deps.now().getTime()));
+  let found = 0;
+  try {
+    while (deps.now().getTime() < startedAt + DETECT_BUDGET_MS) {
+      const source = await deps.store.claimSource(kinds);
+      if (!source) break;
+      const done = await detectOne(deps, anthropic, source, controller.signal);
+      found += done.found;
+      if (done.outcome === "stop") break;
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+  return found;
 }
 
 async function reviewStep(deps: IdeasJobDeps, startedAt: number, result: IdeasRunResult): Promise<void> {
@@ -212,7 +305,7 @@ async function notifyFailures(deps: IdeasJobDeps): Promise<void> {
 export async function runIdeasJob(deps: IdeasJobDeps): Promise<IdeasRunResult> {
   const startedAt = deps.now().getTime();
   const result: IdeasRunResult = { detected: 0, reviewed: [], failed: [], paused: false, resurfaced: 0 };
-  if (deps.detect) result.detected = await deps.detect();
+  result.detected = await detectStep(deps, startedAt);
   await reviewStep(deps, startedAt, result);
   if (deps.resurface) result.resurfaced = await deps.resurface();
   await notifyFailures(deps);

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { handleMemo, memoItem } from "@/lib/hub/memo";
 import type { HubStore } from "@/lib/hub/types";
 import { createFakeStore, type FakeStore } from "./fake-store";
@@ -16,12 +16,20 @@ const request = (body: unknown, token: string | null = TOKEN) =>
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 
-type SendOpts = { store?: HubStore; token?: string | null; serverToken?: string };
+type SendOpts = {
+  store?: HubStore;
+  token?: string | null;
+  serverToken?: string;
+  memoDetection?: boolean;
+  queueIdeas?: (itemId: string) => Promise<void>;
+};
 
 async function send(body: unknown, opts: SendOpts = {}) {
   const res = await handleMemo(request(body, opts.token === undefined ? TOKEN : opts.token), {
     token: "serverToken" in opts ? opts.serverToken : TOKEN,
     store: opts.store ?? relay(),
+    memoDetection: opts.memoDetection,
+    queueIdeas: opts.queueIdeas,
   });
   return { status: res.status, json: await res.json() };
 }
@@ -114,6 +122,38 @@ describe("handleMemo", () => {
       `transcript (part 1 of 2):\n${"b".repeat(15_000)}`,
       `transcript (part 2 of 2):\n${"b".repeat(5_000)}`,
     ]);
+  });
+
+  it("queues no ideas detection while IDEAS_MEMO_DETECTION is off", async () => {
+    const queued: string[] = [];
+    const res = await send(BODY, { memoDetection: false, queueIdeas: async (id) => void queued.push(id) });
+    expect(res.status).toBe(201);
+    expect(queued).toEqual([]);
+  });
+
+  it("with the switch on, queues the new memo once and not its duplicate", async () => {
+    const store = relay();
+    const queued: string[] = [];
+    const queueIdeas = async (id: string) => void queued.push(id);
+    const first = await send(BODY, { store, memoDetection: true, queueIdeas });
+    await send({ ...BODY, device: "mac" }, { store, memoDetection: true, queueIdeas });
+    expect(queued).toEqual([first.json.id]);
+  });
+
+  it("still answers 201 when queueing detection fails, logging only the id", async () => {
+    const store = relay();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await send(BODY, {
+      store,
+      memoDetection: true,
+      queueIdeas: async () => {
+        throw new Error("Call the dentist tomorrow.");
+      },
+    });
+    expect(res.status).toBe(201);
+    expect(itemsOf(store)).toHaveLength(1);
+    expect(log.mock.calls.flat().join(" ")).toBe(`memo ${res.json.id}: ideas detection not queued`);
+    log.mockRestore();
   });
 
   it("answers 502 and files nothing when the database fails", async () => {

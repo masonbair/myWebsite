@@ -51,3 +51,23 @@ export class CapReached extends Error {
     this.name = "CapReached";
   }
 }
+
+export const DETECT_SCHEMA = z.object({
+  ideas: z
+    .array(z.object({ title: z.string(), quote: z.string(), whole_item: z.boolean(), sure: z.boolean() }))
+    .max(10),
+});
+
+export type DetectedIdea = z.infer<typeof DETECT_SCHEMA>["ideas"][number];
+
+export const SAME_IDEA_SCHEMA = z.object({ match_id: z.string().nullable() });
+
+export type SourceKind = "capture" | "memo";
+
+/** A detection that cannot be used; `code` is safe to log and store, it never holds idea text. */
+export class DetectFailed extends Error {
+  constructor(readonly code: "refusal" | "schema" | "max_tokens") {
+    super(`detection failed: ${code}`);
+    this.name = "DetectFailed";
+  }
+}

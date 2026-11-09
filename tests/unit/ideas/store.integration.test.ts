@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import { createHubStore } from "@/lib/hub/store";
-import { ClaimLost, createIdeasJobStore } from "@/lib/ideas/store";
+import { ClaimLost, createIdeasJobStore, ideasFiledFrom, queueMemoIdeas } from "@/lib/ideas/store";
 import { validReview } from "./fake-anthropic";
 
 // Run against the Ideas Lab's own stack (scripts/ideas-local-stack.sh) with the same env as tests/unit/hub/store.integration.test.ts.
@@ -125,5 +125,126 @@ describe.skipIf(!enabled)("ideas job store against local Supabase", () => {
     const { data: reviews } = await client().from("idea_reviews").select("version").eq("item_id", idea.id);
     expect(reviews).toEqual([]);
     expect((await store.settings(idea.id))?.reviewStatus).toBe("working");
+  });
+});
+
+describe.skipIf(!enabled)("ideas detection store against local Supabase", () => {
+  const client = () => createClient(apiUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const hub = () => createHubStore(client(), { kind: "worker", runId: "integration" });
+
+  /** An inbox capture; the intake trigger gives it a pending detection row. */
+  const newCapture = (title = "integration capture") =>
+    hub().addItem({ title, description: "kept as typed", source: "capture", clientKey: randomUUID() });
+
+  async function source(id: string) {
+    const { data, error } = await client().from("idea_sources").select("*").eq("source_item_id", id).maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+
+  async function settingsRow(id: string) {
+    const { data, error } = await client().from("idea_settings").select("*").eq("item_id", id).maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+
+  /** Claims and closes every pending source left by other tests, leased or not, so the next claim sees only ours. */
+  async function drain() {
+    const store = createIdeasJobStore(client(), 0);
+    for (let claimed = await store.claimSource(["capture", "memo"]); claimed; claimed = await store.claimSource(["capture", "memo"])) {
+      await store.finishSource(claimed.itemId, [], [], null);
+    }
+  }
+
+  it("never hands one source to two parallel claims, and a finish needs the claim", async () => {
+    await drain();
+    const capture = await newCapture();
+    expect(await source(capture.id)).toMatchObject({ kind: "capture", status: "pending", attempts: 0 });
+    const [a, b] = await Promise.all([
+      createIdeasJobStore(client()).claimSource(["capture"]),
+      createIdeasJobStore(client()).claimSource(["capture"]),
+    ]);
+    expect([a, b].filter((c) => c?.itemId === capture.id)).toHaveLength(1);
+    expect(await createIdeasJobStore(client()).claimSource(["capture"])).toBeNull();
+    await expect(createIdeasJobStore(client()).finishSource(capture.id, [], [], null)).rejects.toBeInstanceOf(ClaimLost);
+  });
+
+  it("counts failures and marks the third failed", async () => {
+    await drain();
+    const store = createIdeasJobStore(client());
+    const capture = await newCapture();
+    expect(await store.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture" });
+    expect(await store.failSource(capture.id, "schema")).toBe("pending");
+    // A failed source waits out the lease before a later run retries it.
+    expect(await store.claimSource(["capture"])).toBeNull();
+    const noLease = createIdeasJobStore(client(), 0);
+    expect(await noLease.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture" });
+    expect(await noLease.failSource(capture.id, "schema")).toBe("pending");
+    expect(await noLease.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture" });
+    expect(await noLease.failSource(capture.id, "refusal")).toBe("failed");
+    expect(await source(capture.id)).toMatchObject({ status: "failed", attempts: 3, last_error: "refusal" });
+    expect(await noLease.claimSource(["capture"])).toBeNull();
+    expect((await store.failureCounts(new Date(Date.now() - 60_000))).detections).toBeGreaterThanOrEqual(1);
+  });
+
+  it("moves a capture to ideas as typed, enrolled and marked moved from the inbox", async () => {
+    const store = createIdeasJobStore(client());
+    const capture = await newCapture("integration move");
+    await store.moveCaptureToIdeas(capture.id);
+    expect(await hub().getItem(capture.id)).toMatchObject({ title: "integration move", description: "kept as typed", list: "ideas", labels: ["idea"] });
+    expect(await settingsRow(capture.id)).toMatchObject({
+      enrolled: true,
+      review_status: "waiting",
+      moved_from_inbox: true,
+      schedule_from: capture.createdAt.slice(0, 10),
+    });
+  });
+
+  it("adds a new idea once per client key, with no detection row of its own", async () => {
+    const store = createIdeasJobStore(client());
+    const capture = await newCapture();
+    const origin = { itemId: capture.id, url: capture.url, recorded: capture.createdAt };
+    const first = await store.addIdeaFrom(origin, 0, "Sourdough timer", "a timer for sourdough");
+    expect(await store.addIdeaFrom(origin, 0, "Sourdough timer", "a timer for sourdough")).toBe(first);
+    const idea = await hub().getItem(first);
+    expect(idea).toMatchObject({
+      title: "Sourdough timer",
+      list: "ideas",
+      labels: ["idea"],
+      source: "ideas-lab",
+      description: `> a timer for sourdough\n\nSource: ${capture.url}, recorded ${capture.createdAt}`,
+    });
+    const { data: keyed } = await client().from("items").select("id").eq("client_key", `idea:${capture.id}#0`);
+    expect(keyed).toEqual([{ id: first }]);
+    expect(await source(first)).toBeNull();
+    expect(await settingsRow(first)).toMatchObject({ enrolled: true, review_status: "waiting", moved_from_inbox: false, mention_count: 1 });
+  });
+
+  it("stores quotes for the review and counts a mention with a comment", async () => {
+    await drain();
+    const store = createIdeasJobStore(client());
+    const capture = await newCapture();
+    const origin = { itemId: capture.id, url: capture.url, recorded: capture.createdAt };
+    const idea = await store.addIdeaFrom(origin, 0, "Bakery map", "a map of bakeries");
+    expect(await store.claimSource(["capture"])).toEqual({ itemId: capture.id, kind: "capture" });
+    await store.finishSource(capture.id, [idea], ["a map of bakeries"], "claude-haiku-5-5");
+    expect(await source(capture.id)).toMatchObject({ status: "done", idea_item_ids: [idea], quotes: ["a map of bakeries"], model: "claude-haiku-5-5" });
+    expect(await store.ideaQuote(idea)).toBe("a map of bakeries");
+
+    await store.mentionAgain(idea, "https://masonbair.com/hub/item/x", "2026-11-09", "bakery map again");
+    expect((await settingsRow(idea))?.mention_count).toBe(2);
+    expect((await hub().listComments(idea)).map((c) => c.body)).toEqual([
+      "Mentioned again in https://masonbair.com/hub/item/x on 2026-11-09\n\n> bakery map again",
+    ]);
+    expect((await hub().getItem(idea))?.description).toBe(`> a map of bakeries\n\nSource: ${capture.url}, recorded ${capture.createdAt}`);
+  });
+
+  it("queues a memo once and reports the ideas filed from it", async () => {
+    const memo = await hub().addItem({ title: "HiDock memo x", labels: ["hidock-memo"], source: "memo:phone", clientKey: randomUUID() });
+    expect(await source(memo.id)).toBeNull();
+    await queueMemoIdeas(client(), memo.id);
+    await queueMemoIdeas(client(), memo.id);
+    expect(await source(memo.id)).toMatchObject({ kind: "memo", status: "pending" });
+    expect(await ideasFiledFrom(client(), [memo.id])).toEqual(new Map([[memo.id, []]]));
   });
 });

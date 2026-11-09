@@ -11,7 +11,14 @@ export const TRANSCRIPT_PART = /^transcript \(part (\d+) of \d+\):\n/;
 
 type Upload = { file: string; recorded: string; transcript: string; device: "phone" | "mac" };
 
-export type MemoDeps = { token: string | undefined; store: HubStore };
+export type MemoDeps = {
+  token: string | undefined;
+  store: HubStore;
+  /** IDEAS_MEMO_DETECTION=on; off, the relay does exactly what it did before the Ideas Lab. */
+  memoDetection?: boolean;
+  /** Queues a new memo item for the Ideas Lab's detection step. */
+  queueIdeas?: (itemId: string) => Promise<void>;
+};
 
 const json = (status: number, body: unknown) => Response.json(body, { status });
 const fail = (status: number, error: string, message: string) => json(status, { error, message });
@@ -61,6 +68,15 @@ export function memoItem(m: { file: string; recorded: string; transcript: string
   };
 }
 
+// The memo is already filed; a lost detection row only costs its ideas, never the memo, so the upload still succeeds.
+async function queueIdeas(queue: (itemId: string) => Promise<void>, itemId: string): Promise<void> {
+  try {
+    await queue(itemId);
+  } catch {
+    console.error(`memo ${itemId}: ideas detection not queued`);
+  }
+}
+
 /** HiDock memo upload: one `hidock-memo` inbox item per device file name, however often it is sent. */
 export async function handleMemo(request: Request, deps: MemoDeps): Promise<Response> {
   if (!deps.token) return fail(503, "misconfigured", "memo upload is not configured");
@@ -78,6 +94,7 @@ export async function handleMemo(request: Request, deps: MemoDeps): Promise<Resp
     const accepted = await deps.store.acceptMemo(memo);
     // status and taskId keep todo-hub's reply, which the HiDock uploaders on the phone and Mac check.
     if (accepted.duplicate) return json(200, { status: "duplicate", duplicate: true, id: accepted.id, taskId: accepted.id });
+    if (deps.memoDetection && deps.queueIdeas && accepted.id) await queueIdeas(deps.queueIdeas, accepted.id);
     return json(201, { status: "created", id: accepted.id, taskId: accepted.id });
   } catch (e) {
     console.error(`memo ${upload.file}: ${(e as Error).message}`);

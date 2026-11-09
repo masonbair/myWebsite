@@ -41,7 +41,10 @@ type Harness = {
 };
 
 /** The real route handler over a fake store, reached through the real HTTP client with an in-process fetch. */
-export function workerHarness(overrides: Partial<HubStore> = {}, server: { token?: string } = { token: TOKEN }): Harness {
+export function workerHarness(
+  overrides: Partial<HubStore> = {},
+  server: { token?: string; ideasFiled?: Record<string, string[]> } = { token: TOKEN },
+): Harness {
   const token = server.token;
   const rows = createFakeStore({ kind: "mason" }).rows;
   const log: string[] = [];
@@ -67,7 +70,12 @@ export function workerHarness(overrides: Partial<HubStore> = {}, server: { token
   const fetchFn = (async (input: string | URL | Request, init?: RequestInit) => {
     const request = new Request(input, init);
     const path = new URL(request.url).pathname.replace(/^\/api\/hub\/worker\//, "");
-    return handleWorkerRequest(request, path.split("/").map(decodeURIComponent), { token, storeFor, now: () => NOW });
+    return handleWorkerRequest(request, path.split("/").map(decodeURIComponent), {
+      token,
+      storeFor,
+      now: () => NOW,
+      ideasFiled: async () => new Map(Object.entries(server.ideasFiled ?? {})),
+    });
   }) as typeof fetch;
   return { rows, log, fetchFn, hub: createHttpStore(BASE_URL, TOKEN, "run-1", fetchFn) };
 }

@@ -9,6 +9,8 @@ import type { Comment, HubStore, Item, ItemPatch, ItemQuery } from "./types";
 
 export type WorkerView = "inbox" | "approved" | "laptop" | "to-schedule" | "memos" | "hidock" | "dated";
 export type Outcome = "finish" | "block";
+/** A memo as the `memos` view returns it: the item plus the ideas the Ideas Lab already filed from it. */
+export type MemoItem = Item & { ideasFiled: string[] };
 export type NewWorkerItem = { title: string; description?: string; labels?: string[]; due?: Item["due"]; clientKey?: string };
 
 /** Everything the worker may do; there is deliberately no complete, reopen or delete. */
@@ -33,6 +35,8 @@ export type WorkerApiDeps = {
   token: string | undefined;
   storeFor: (runId: string) => HubStore;
   now: () => Date;
+  /** Idea item ids the Ideas Lab filed from each memo id; absent, every memo reports none. */
+  ideasFiled?: (memoIds: string[]) => Promise<Map<string, string[]>>;
 };
 
 // Room for a full-length comment even when every character takes 4 bytes in UTF-8.
@@ -66,6 +70,7 @@ class ApiError extends Error {
 type Method = "GET" | "POST" | "PATCH" | "PUT";
 type Context = {
   store: HubStore;
+  ideasFiled: NonNullable<WorkerApiDeps["ideasFiled"]>;
   params: Record<string, string>;
   body: () => Promise<Record<string, unknown>>;
   now: Date;
@@ -139,8 +144,12 @@ async function seedMemoFiles(ctx: Context): Promise<Response> {
 const viewRoutes: Route[] = (Object.keys(VIEWS) as WorkerView[]).map((name) => ({
   method: "GET",
   path: [name],
-  async run({ store, now }) {
+  async run({ store, now, ideasFiled }) {
     const items = await store.listItems({ ...VIEWS[name], limit: VIEW_LIMIT });
+    if (name === "memos") {
+      const filed = await ideasFiled(items.map((item) => item.id));
+      return json(items.map((item): MemoItem => ({ ...item, ideasFiled: filed.get(item.id) ?? [] })));
+    }
     return json(name === "approved" ? items.filter((item) => isClaimable(item, now)) : items);
   },
 }));
@@ -270,6 +279,7 @@ export async function handleWorkerRequest(request: Request, segments: string[], 
   try {
     return await found.route.run({
       store: deps.storeFor(runId),
+      ideasFiled: deps.ideasFiled ?? (async () => new Map()),
       params: found.params,
       body: () => readBody(request),
       now: deps.now(),

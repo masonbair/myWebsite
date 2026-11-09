@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createHttpStore, HubApiError } from "./http-store";
 import { LABEL_PATTERN, MAX_WORKER_COMMENT } from "./input";
 import { lateTasks, migrateLate } from "./late-migrate";
-import { listMemos, parsePieces, splitMemo } from "./memo-split";
+import { ideasFiledOf, listMemos, parsePieces, splitMemo } from "./memo-split";
 import { notify, type Message } from "./notify";
 import { applySchedule, offsetMinutesAt, parsePlan, scheduleInput } from "./schedule";
 import type { Item } from "./types";
@@ -215,9 +215,10 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
       case "memo-split": {
         const file = flag(rest, "--pieces");
         if (!id || !file) break;
+        const listed = (await deps.hub.view("memos")).find((m) => m.id === id);
         let pieces;
         try {
-          pieces = parsePieces(JSON.parse(readFileSync(file, "utf8")), deps.projects());
+          pieces = parsePieces(JSON.parse(readFileSync(file, "utf8")), deps.projects(), listed ? ideasFiledOf(listed) : []);
         } catch (e) {
           deps.err(`bad pieces: ${(e as Error).message}`);
           return 2;

@@ -1,7 +1,19 @@
 import { costOf } from "@/lib/ai/claude";
 import { ClaimLost, type IdeasJobStore } from "@/lib/ideas/store";
-import type { IdeaReview, IdeaSettings, ReviewStatus } from "@/lib/ideas/types";
-import type { Item } from "@/lib/hub/types";
+import type { IdeaReview, IdeaSettings, ReviewStatus, SourceKind } from "@/lib/ideas/types";
+import type { Comment, Item } from "@/lib/hub/types";
+
+export type FakeSource = {
+  itemId: string;
+  kind: SourceKind;
+  status: "pending" | "done" | "failed";
+  ideaIds: string[];
+  quotes: string[];
+  attempts: number;
+  model: string | null;
+  lastError: string | null;
+  claimed: boolean;
+};
 
 export type FakeIdeasRows = {
   items: Map<string, Item>;
@@ -10,6 +22,10 @@ export type FakeIdeasRows = {
   usage: { itemId: string; model: string; purpose: string; cost: number }[];
   flags: Map<string, unknown>;
   failedDetections: number;
+  sources: Map<string, FakeSource>;
+  comments: Comment[];
+  mentions: Map<string, number>;
+  moved: Set<string>;
 };
 
 let counter = 0;
@@ -42,6 +58,10 @@ export function createFakeIdeasStore() {
     usage: [],
     flags: new Map(),
     failedDetections: 0,
+    sources: new Map(),
+    comments: [],
+    mentions: new Map(),
+    moved: new Set(),
   };
   const calls: string[] = [];
 
@@ -104,7 +124,68 @@ export function createFakeIdeasStore() {
     async setFlag(key, value) {
       rows.flags.set(key, value);
     },
+    async ideaQuote(id) {
+      const source = [...rows.sources.values()].find((s) => s.ideaIds.includes(id));
+      return source ? (source.quotes[source.ideaIds.indexOf(id)] ?? null) : null;
+    },
+    async claimSource(kinds) {
+      const next = [...rows.sources.values()].find((s) => s.status === "pending" && s.attempts < 3 && !s.claimed && kinds.includes(s.kind));
+      if (!next) return null;
+      next.claimed = true;
+      return { itemId: next.itemId, kind: next.kind };
+    },
+    listComments: async (id) => rows.comments.filter((c) => c.itemId === id),
+    async finishSource(id, ideaIds, quotes, model) {
+      const source = rows.sources.get(id)!;
+      if (source.status !== "pending" || !source.claimed) throw new ClaimLost(id);
+      Object.assign(source, { status: "done", ideaIds, quotes, model, claimed: false });
+    },
+    async failSource(id, code) {
+      const source = rows.sources.get(id)!;
+      source.attempts += 1;
+      source.status = source.attempts >= 3 ? "failed" : "pending";
+      source.lastError = code;
+      source.claimed = false;
+      return source.status;
+    },
+    async moveCaptureToIdeas(id) {
+      const item = rows.items.get(id)!;
+      rows.items.set(id, { ...item, list: "ideas", labels: [...item.labels, "idea"] });
+      rows.moved.add(id);
+      seedSettings(id);
+    },
+    async addIdeaFrom(origin, n, title, quote) {
+      const key = `idea:${origin.itemId}#${n}`;
+      const existing = [...rows.items.values()].find((i) => i.description.endsWith(`key:${key}`));
+      if (existing) return existing.id;
+      const item = ideaItem({
+        title,
+        source: "ideas-lab",
+        description: `> ${quote}\n\nSource: ${origin.url}, recorded ${origin.recorded}\nkey:${key}`,
+      });
+      rows.items.set(item.id, item);
+      seedSettings(item.id);
+      return item.id;
+    },
+    async mentionAgain(ideaId, sourceUrl, date, quote) {
+      rows.comments.push({ id: `c${rows.comments.length}`, itemId: ideaId, body: `Mentioned again in ${sourceUrl} on ${date}\n\n> ${quote}`, author: "worker", createdAt: date });
+      rows.mentions.set(ideaId, (rows.mentions.get(ideaId) ?? 1) + 1);
+    },
   };
+
+  function seedSettings(id: string) {
+    if (rows.settings.has(id)) return;
+    rows.settings.set(id, {
+      itemId: id,
+      enrolled: true,
+      noWebSearch: false,
+      reviewStatus: "waiting",
+      reviewRequestedAt: "2026-11-09T12:00:00Z",
+      reviewNote: null,
+      reviewAttempts: 0,
+      lastError: null,
+    });
+  }
 
   const store = new Proxy(impl, {
     get(target, prop) {
@@ -135,5 +216,13 @@ export function createFakeIdeasStore() {
     return seeded;
   }
 
-  return { store, rows, calls, seed };
+  /** An inbox item with a pending detection row, as the intake trigger (or the memo relay) leaves it. */
+  function seedSource(item: Partial<Item> = {}, kind: SourceKind = "capture"): Item {
+    const seeded = ideaItem({ labels: [], list: "inbox", ...item });
+    rows.items.set(seeded.id, seeded);
+    rows.sources.set(seeded.id, { itemId: seeded.id, kind, status: "pending", ideaIds: [], quotes: [], attempts: 0, model: null, lastError: null, claimed: false });
+    return seeded;
+  }
+
+  return { store, rows, calls, seed, seedSource };
 }

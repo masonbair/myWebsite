@@ -1,9 +1,11 @@
 import { isCalendarDate, isClockTime } from "./input";
 import { TRANSCRIPT_PART } from "./memo";
 import type { Comment, Item } from "./types";
-import type { HubWorker } from "./worker-api";
+import type { HubWorker, MemoItem } from "./worker-api";
 
 export type Memo = { id: string; file: string; recorded: string; transcript: string };
+/** A memo for the worker, with the idea items the Ideas Lab already filed from it. */
+export type ListedMemo = Memo & { ideasFiled: string[] };
 
 export type Pieces = {
   todos: { text: string; source: string; date: string | null; time: string | null; project: string | null }[];
@@ -50,8 +52,14 @@ function list(data: Record<string, unknown>, key: keyof Pieces): Record<string, 
   });
 }
 
-/** Check the worker's pieces JSON. A note for an unknown project becomes an idea; a to-do loses an unknown project. */
-export function parsePieces(json: unknown, projects: string[]): Pieces {
+/** The Ideas Lab owns ideas: once it has filed any from a memo, the memo split files none. */
+export const ideasFiledOf = (item: Item) => (item as Partial<MemoItem>).ideasFiled ?? [];
+
+/**
+ * Check the worker's pieces JSON. A note for an unknown project becomes an idea; a to-do loses an unknown project.
+ * @param ideasFiled idea items the Ideas Lab already filed from this memo; any at all empties the ideas list.
+ */
+export function parsePieces(json: unknown, projects: string[], ideasFiled: string[] = []): Pieces {
   if (typeof json !== "object" || json === null) throw new Error("pieces must be an object");
   const data = json as Record<string, unknown>;
   const known = (p: unknown) => (typeof p === "string" && projects.includes(p) ? p : null);
@@ -74,6 +82,7 @@ export function parsePieces(json: unknown, projects: string[]): Pieces {
   list(data, "ideas").forEach((d, i) =>
     out.ideas.push({ text: text(d.text, `ideas[${i}].text`), source: text(d.source, `ideas[${i}].source`) }),
   );
+  if (ideasFiled.length > 0) out.ideas = [];
   return out;
 }
 
@@ -100,12 +109,12 @@ export function planPieces(memo: Memo, pieces: Pieces): PlannedPiece[] {
 }
 
 /** Open memos, plus the ids of memo items that can't be read, so one edited item doesn't block the rest. */
-export async function listMemos(hub: HubWorker): Promise<{ memos: Memo[]; skipped: string[] }> {
-  const memos: Memo[] = [];
+export async function listMemos(hub: HubWorker): Promise<{ memos: ListedMemo[]; skipped: string[] }> {
+  const memos: ListedMemo[] = [];
   const skipped: string[] = [];
   for (const item of await hub.view("memos")) {
     try {
-      memos.push(parseMemo(item, await hub.listComments(item.id)));
+      memos.push({ ...parseMemo(item, await hub.listComments(item.id)), ideasFiled: ideasFiledOf(item) });
     } catch {
       skipped.push(item.id);
     }
