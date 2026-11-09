@@ -1,5 +1,5 @@
 import { costOf } from "@/lib/ai/claude";
-import type { IdeasJobStore } from "@/lib/ideas/store";
+import { ClaimLost, type IdeasJobStore } from "@/lib/ideas/store";
 import type { IdeaReview, IdeaSettings, ReviewStatus } from "@/lib/ideas/types";
 import type { Item } from "@/lib/hub/types";
 
@@ -72,6 +72,7 @@ export function createFakeIdeasStore() {
       return s ? { ...s } : null;
     },
     async saveReview(id, review, model, costUsd, note) {
+      if (rows.settings.get(id)?.reviewStatus !== "working") throw new ClaimLost(id);
       const version = rows.reviews.filter((r) => r.itemId === id).length + 1;
       rows.reviews.push({ itemId: id, version, review, model, costUsd, note });
       Object.assign(rows.settings.get(id)!, { reviewStatus: "done", reviewAttempts: 0, lastError: null, reviewNote: null });

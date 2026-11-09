@@ -89,28 +89,39 @@ function servedBy(message: BetaMessage): ModelId {
 const textOf = (message: BetaMessage) =>
   message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
 
+type StreamParams = Parameters<Anthropic["beta"]["messages"]["stream"]>[0];
+
+/** One paid call; on our own abort the partial usage is still recorded so the cap sees it. */
+async function paidCall(input: ReviewInput, purpose: ReviewCall["purpose"], params: StreamParams): Promise<BetaMessage> {
+  await input.beforeCall();
+  const stream = input.client.beta.messages.stream(params, { signal: input.signal });
+  let message: BetaMessage;
+  try {
+    message = await stream.finalMessage();
+  } catch (e) {
+    const partial = stream.currentMessage;
+    if (input.signal?.aborted && partial) await input.record({ purpose, model: servedBy(partial), usage: partial.usage });
+    throw e;
+  }
+  await input.record({ purpose, model: servedBy(message), usage: message.usage });
+  return message;
+}
+
 async function findSimilar(input: ReviewInput): Promise<string> {
   const messages: BetaMessageParam[] = [{ role: "user", content: ideaBlock(input.idea) }];
   const texts: string[] = [];
   for (let resends = 0; ; resends += 1) {
-    await input.beforeCall();
-    const message = await input.client.beta.messages
-      .stream(
-        {
-          model: REVIEW_MODEL,
-          max_tokens: 16000,
-          betas: [FALLBACK_BETA],
-          fallbacks: "default",
-          thinking: { type: "adaptive" },
-          system: SEARCH_SYSTEM,
-          tools: [WEB_SEARCH_TOOL],
-          output_config: { effort: "medium" },
-          messages,
-        },
-        { signal: input.signal },
-      )
-      .finalMessage();
-    await input.record({ purpose: "similar", model: servedBy(message), usage: message.usage });
+    const message = await paidCall(input, "similar", {
+      model: REVIEW_MODEL,
+      max_tokens: 16000,
+      betas: [FALLBACK_BETA],
+      fallbacks: "default",
+      thinking: { type: "adaptive" },
+      system: SEARCH_SYSTEM,
+      tools: [WEB_SEARCH_TOOL],
+      output_config: { effort: "medium" },
+      messages,
+    });
     if (message.stop_reason === "refusal") throw new ReviewFailed("refusal");
     texts.push(textOf(message));
     if (message.stop_reason !== "pause_turn") return texts.join("\n").trim();
@@ -146,24 +157,17 @@ const REVIEW_FORMAT = { type: "json_schema" as const, schema: betaZodOutputForma
 /** One honest review of an idea; with web search on, a search call runs first and feeds the review as data. */
 export async function reviewIdea(input: ReviewInput): Promise<{ review: IdeaReview; model: ModelId }> {
   const searchNotes = input.webSearch ? await findSimilar(input) : null;
-  await input.beforeCall();
-  const message = await input.client.beta.messages
-    .stream(
-      {
-        model: REVIEW_MODEL,
-        max_tokens: 32000,
-        betas: [FALLBACK_BETA],
-        fallbacks: "default",
-        thinking: { type: "adaptive" },
-        system: [{ type: "text", text: ABOUT_MASON, cache_control: { type: "ephemeral" } }],
-        output_config: { effort: "high", format: REVIEW_FORMAT },
-        messages: [{ role: "user", content: reviewPrompt(input, searchNotes) }],
-      },
-      { signal: input.signal },
-    )
-    .finalMessage();
+  const message = await paidCall(input, "review", {
+    model: REVIEW_MODEL,
+    max_tokens: 32000,
+    betas: [FALLBACK_BETA],
+    fallbacks: "default",
+    thinking: { type: "adaptive" },
+    system: [{ type: "text", text: ABOUT_MASON, cache_control: { type: "ephemeral" } }],
+    output_config: { effort: "high", format: REVIEW_FORMAT },
+    messages: [{ role: "user", content: reviewPrompt(input, searchNotes) }],
+  });
   const model = servedBy(message);
-  await input.record({ purpose: "review", model, usage: message.usage });
   if (message.stop_reason === "refusal") throw new ReviewFailed("refusal");
   if (message.stop_reason === "max_tokens") throw new ReviewFailed("max_tokens");
 

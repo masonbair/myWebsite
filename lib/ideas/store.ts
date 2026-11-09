@@ -6,6 +6,14 @@ import { createHubStore } from "@/lib/hub/store";
 import type { Actor, Item } from "@/lib/hub/types";
 import { PROMPT_VERSION, type IdeaReview, type IdeaSettings, type ReviewStatus } from "./types";
 
+/** The idea is no longer claimed by this run (a stale re-claim or Mason's change); its review must not be saved. */
+export class ClaimLost extends Error {
+  constructor(id: string) {
+    super(`claim lost for ${id}`);
+    this.name = "ClaimLost";
+  }
+}
+
 export const IDEAS_ACTOR: Actor = { kind: "worker", runId: "ideas-lab" };
 const MAX_FAILED_ATTEMPTS = 2;
 const OPEN_IDEAS_LIMIT = 200;
@@ -57,6 +65,18 @@ function toSettings(row: SettingsRow): IdeaSettings {
 /** The ideas job's store over the service client, writing as worker:ideas-lab. */
 export function createIdeasJobStore(client: SupabaseClient): IdeasJobStore {
   const hub = createHubStore(client, IDEAS_ACTOR);
+  // The claim time this run holds per idea; a stale re-claim by another run changes it, which is how a save notices.
+  const claims = new Map<string, string>();
+
+  /** Refreshes or finishes our claim in one guarded update; throws ClaimLost when the row is no longer ours. */
+  async function updateOwnClaim(id: string, columns: Record<string, unknown>): Promise<void> {
+    let query = client.from("idea_settings").update(columns).eq("item_id", id).eq("review_status", "working");
+    const held = claims.get(id);
+    if (held) query = query.eq("review_claimed_at", held);
+    const { data, error } = await query.select("item_id");
+    if (error) throw error;
+    if ((data ?? []).length === 0) throw new ClaimLost(id);
+  }
 
   async function audit(action: string, itemId: string, detail: Record<string, unknown>) {
     const { error } = await client.from("audit_log").insert({ actor: auditActor(IDEAS_ACTOR), action, item_id: itemId, detail });
@@ -93,7 +113,12 @@ export function createIdeasJobStore(client: SupabaseClient): IdeasJobStore {
     async claimReview() {
       const { data, error } = await client.rpc("ideas_claim_review");
       if (error) throw error;
-      return (data as string | null) ?? null;
+      const id = (data as string | null) ?? null;
+      if (!id) return null;
+      const { data: row, error: readError } = await client.from("idea_settings").select("review_claimed_at").eq("item_id", id).single();
+      if (readError) throw readError;
+      claims.set(id, (row as { review_claimed_at: string }).review_claimed_at);
+      return id;
     },
 
     getIdea: (id) => hub.getItem(id),
@@ -106,6 +131,10 @@ export function createIdeasJobStore(client: SupabaseClient): IdeasJobStore {
     settings: readSettings,
 
     async saveReview(id, review, model, costUsd, note) {
+      // Refreshing the claim first keeps the stale sweep off it while the review row goes in.
+      const refreshed = new Date().toISOString();
+      await updateOwnClaim(id, { review_claimed_at: refreshed });
+      claims.set(id, refreshed);
       const { data: last, error: readError } = await client
         .from("idea_reviews")
         .select("version")
@@ -125,12 +154,8 @@ export function createIdeasJobStore(client: SupabaseClient): IdeasJobStore {
         cost_usd: Math.round(costUsd * 1e6) / 1e6,
       });
       if (insertError) throw insertError;
-      const { error } = await client
-        .from("idea_settings")
-        .update({ review_status: "done", review_attempts: 0, review_claimed_at: null, last_error: null, review_note: null })
-        .eq("item_id", id)
-        .eq("review_status", "working");
-      if (error) throw error;
+      await updateOwnClaim(id, { review_status: "done", review_attempts: 0, review_claimed_at: null, last_error: null, review_note: null });
+      claims.delete(id);
       await audit("idea-review", id, { version, model });
       return version;
     },

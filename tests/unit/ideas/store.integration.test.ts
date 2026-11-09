@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import { createHubStore } from "@/lib/hub/store";
-import { createIdeasJobStore } from "@/lib/ideas/store";
+import { ClaimLost, createIdeasJobStore } from "@/lib/ideas/store";
 import { validReview } from "./fake-anthropic";
 
 // Run against the Ideas Lab's own stack (scripts/ideas-local-stack.sh) with the same env as tests/unit/hub/store.integration.test.ts.
@@ -114,5 +114,16 @@ describe.skipIf(!enabled)("ideas job store against local Supabase", () => {
     await store.failReview(idea.id, "schema");
     await store.releaseClaim(idea.id, "none");
     expect(await store.settings(idea.id)).toMatchObject({ reviewStatus: "done", reviewAttempts: 0, lastError: null });
+  });
+
+  it("refuses to save a review after another run re-claimed the idea, before writing any review row", async () => {
+    const store = createIdeasJobStore(client());
+    const idea = await newIdea();
+    expect(await store.claimReview()).toBe(idea.id);
+    await client().from("idea_settings").update({ review_claimed_at: "2001-01-01T00:00:00Z" }).eq("item_id", idea.id);
+    await expect(store.saveReview(idea.id, validReview(), "claude-opus-5-5", 0.1, null)).rejects.toBeInstanceOf(ClaimLost);
+    const { data: reviews } = await client().from("idea_reviews").select("version").eq("item_id", idea.id);
+    expect(reviews).toEqual([]);
+    expect((await store.settings(idea.id))?.reviewStatus).toBe("working");
   });
 });
