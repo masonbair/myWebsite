@@ -3,7 +3,7 @@ import * as TaskManager from 'expo-task-manager';
 import { RPC, type HeartbeatArgs } from '../../../../shared/collector-contract';
 import { runDaylioJob } from '../daylio/daylioJob';
 import { collectHealth, evaluateHealth, type HealthItem } from '../health/health';
-import { supabase } from '../lib/supabase';
+import { signedIn, supabase } from '../lib/supabase';
 import { writeJson } from '../lib/store';
 import { JOB_LAST_OK_KEY } from '../lib/storageKeys';
 import { runPhotoJob } from '../photos/photoJob';
@@ -20,6 +20,7 @@ export function heartbeatKey(key: string): string {
 /** Tells the server which checks pass. Sends keys and ok flags only, never labels. A failure is ignored. */
 export async function sendHeartbeat(items: HealthItem[], now: number): Promise<void> {
   try {
+    if (!(await signedIn())) return;
     const args = {
       p_status: {
         at: new Date(now).toISOString(),

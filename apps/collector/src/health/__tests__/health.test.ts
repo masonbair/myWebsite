@@ -24,6 +24,7 @@ const good: HealthInput = {
   batteryUnrestricted: true,
   standbyBucket: 10,
   lastOk: { place: NOW - HOUR, photos: NOW - HOUR, daylio: NOW - HOUR },
+  placeWanted: true,
   now: NOW,
 };
 
@@ -40,6 +41,12 @@ describe('evaluateHealth', () => {
     const items = evaluateHealth({ ...good, batteryUnrestricted: null, standbyBucket: null }, true);
     expect(items.every((i) => !i.ok || i.fix === null)).toBe(true);
     expect(items.find((i) => i.key === 'battery')).toMatchObject({ ok: true, fix: null });
+  });
+
+  it('hides the place staleness item when place reporting is switched off', () => {
+    const stale = { ...good, lastOk: { ...good.lastOk, place: null } };
+    expect(find(stale, 'place-recent')).toMatchObject({ ok: false });
+    expect(find({ ...stale, placeWanted: false }, 'place-recent')).toBeUndefined();
   });
 
   it('shows only the sign-in item when signed out', () => {

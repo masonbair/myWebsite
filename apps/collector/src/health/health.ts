@@ -2,7 +2,7 @@ import * as Location from 'expo-location';
 import * as MediaLibrary from 'expo-media-library/legacy';
 import { isIgnoringBatteryOptimizations, standbyBucket } from '../../modules/battery-status';
 import { readJson } from '../lib/store';
-import { DAYLIO_FOLDER_KEY, JOB_LAST_OK_KEY } from '../lib/storageKeys';
+import { DAYLIO_FOLDER_KEY, JOB_LAST_OK_KEY, PLACE_TASK_WANTED_KEY } from '../lib/storageKeys';
 import { signedIn } from '../lib/supabase';
 
 export type JobName = 'place' | 'photos' | 'daylio';
@@ -17,6 +17,8 @@ export type HealthInput = {
   /** Null when the phone could not be asked; -1 when Android is too old to have buckets. */
   standbyBucket: number | null;
   lastOk: Record<JobName, number | null>;
+  /** False when the user switched off place reporting, so a quiet place job is expected. */
+  placeWanted: boolean;
   now: number;
 };
 
@@ -119,7 +121,7 @@ function buildItems(input: HealthInput, dev: boolean): HealthItem[] {
     batteryItem(input.batteryUnrestricted, dev),
   ];
   items.push(standbyItem(input.standbyBucket, dev));
-  items.push(recency('place-recent', 'Place', 'report', input.lastOk.place, input.now, PLACE_STALE_MS));
+  if (input.placeWanted) items.push(recency('place-recent', 'Place', 'report', input.lastOk.place, input.now, PLACE_STALE_MS));
   items.push(recency('photos-recent', 'Photos', 'upload', input.lastOk.photos, input.now, PHOTOS_STALE_MS));
   if (input.daylioFolder) {
     items.push(recency('daylio-recent', 'Daylio', 'check', input.lastOk.daylio, input.now, DAYLIO_STALE_MS));
@@ -146,7 +148,7 @@ function photosAccess(p: { granted: boolean; accessPrivileges?: string } | null)
  * Expo Go) counts as unknown (null); evaluateHealth decides whether unknown is acceptable.
  */
 export async function collectHealth(now = Date.now()): Promise<HealthInput> {
-  const [isSignedIn, location, photos, folder, place, photosOk, daylio] = await Promise.all([
+  const [isSignedIn, location, photos, folder, place, photosOk, daylio, placeWanted] = await Promise.all([
     settled(signedIn, false),
     settled<string>(async () => (await Location.getBackgroundPermissionsAsync()).status, 'undetermined'),
     settled(() => MediaLibrary.getPermissionsAsync(false, ['photo']), null),
@@ -154,6 +156,7 @@ export async function collectHealth(now = Date.now()): Promise<HealthInput> {
     readJson<number | null>(JOB_LAST_OK_KEY.place, null),
     readJson<number | null>(JOB_LAST_OK_KEY.photos, null),
     readJson<number | null>(JOB_LAST_OK_KEY.daylio, null),
+    readJson<boolean>(PLACE_TASK_WANTED_KEY, true),
   ]);
   return {
     signedIn: isSignedIn,
@@ -163,6 +166,7 @@ export async function collectHealth(now = Date.now()): Promise<HealthInput> {
     batteryUnrestricted: await settled(isIgnoringBatteryOptimizations, null),
     standbyBucket: await settled(standbyBucket, null),
     lastOk: { place, photos: photosOk, daylio },
+    placeWanted,
     now,
   };
 }

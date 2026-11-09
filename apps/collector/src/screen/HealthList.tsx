@@ -1,5 +1,6 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type { HealthFix, HealthItem } from '../health/health';
+import { Button } from './Button';
 import { ACCENT, ERROR } from './theme';
 
 const FIX_LABEL: Record<HealthFix, string> = {
@@ -10,14 +11,6 @@ const FIX_LABEL: Record<HealthFix, string> = {
   'grant-location': 'Allow location all the time',
   'grant-photos': 'Allow all photos',
 };
-
-export function Button({ title, onPress }: { title: string; onPress: () => void }) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.button}>
-      <Text style={styles.buttonText}>{title}</Text>
-    </Pressable>
-  );
-}
 
 export function HealthList({ items, onFix }: { items: HealthItem[]; onFix: (fix: HealthFix) => void }) {
   const sorted = [...items].sort((a, b) => Number(a.ok) - Number(b.ok));
@@ -41,6 +34,4 @@ const styles = StyleSheet.create({
   good: { fontSize: 18, fontWeight: '600', color: ACCENT },
   ok: { color: '#333' },
   bad: { color: ERROR, fontWeight: '600' },
-  button: { backgroundColor: ACCENT, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8, alignSelf: 'flex-start' },
-  buttonText: { color: '#fff', fontWeight: '600' },
 });

@@ -7,7 +7,7 @@ import { runFix } from '../health/fix';
 import { collectHealth, type HealthInput } from '../health/health';
 import { runPeriodic, registerPeriodic } from '../jobs/periodicTask';
 import { signInWithGitHub, signOut } from '../lib/signIn';
-import { syncPlaceTask } from '../place/placeTask';
+import { runPlaceTask, syncPlaceTask } from '../place/placeTask';
 
 jest.mock('../lib/supabase', () => ({ supabase: {}, signedIn: jest.fn() }));
 jest.mock('../../modules/battery-status', () => ({
@@ -24,7 +24,7 @@ jest.mock('../health/health', () => ({ ...jest.requireActual('../health/health')
 jest.mock('../health/fix', () => ({ runFix: jest.fn() }));
 jest.mock('../daylio/daylioJob', () => ({ pickDaylioFolder: jest.fn() }));
 jest.mock('../jobs/periodicTask', () => ({ runPeriodic: jest.fn(), registerPeriodic: jest.fn() }));
-jest.mock('../place/placeTask', () => ({ syncPlaceTask: jest.fn() }));
+jest.mock('../place/placeTask', () => ({ syncPlaceTask: jest.fn(), runPlaceTask: jest.fn() }));
 jest.mock('../lib/signIn', () => ({ signInWithGitHub: jest.fn(), signOut: jest.fn() }));
 
 const NOW = Date.now();
@@ -36,6 +36,7 @@ const good: HealthInput = {
   daylioFolder: true,
   batteryUnrestricted: true,
   standbyBucket: 10,
+  placeWanted: true,
   lastOk: { place: NOW - HOUR, photos: NOW - 2 * HOUR, daylio: NOW - 3 * 60_000 },
   now: NOW,
 };
@@ -95,6 +96,43 @@ it('Run now runs the periodic job and the place sync, then refreshes health', as
   await waitFor(() => expect(collect.mock.calls.length).toBeGreaterThan(before));
   expect(runPeriodic).toHaveBeenCalled();
   expect(syncPlaceTask).toHaveBeenCalledWith('on');
+});
+
+it('Run now sends one coarse place report when tracking is allowed and wanted', async () => {
+  const fix = { coords: { latitude: 38.7223, longitude: -9.1393 } };
+  (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+  (Location.getCurrentPositionAsync as jest.Mock).mockResolvedValue(fix);
+  await show();
+  await fireEvent.press(screen.getByText('Run now'));
+  await waitFor(() => expect(runPlaceTask).toHaveBeenCalledTimes(1));
+  expect((runPlaceTask as jest.Mock).mock.calls[0][0]).toEqual([{ coords: fix.coords }]);
+  expect(Location.getCurrentPositionAsync).toHaveBeenCalledWith({ accuracy: Location.Accuracy.Lowest });
+});
+
+it('Run now sends no place report when not allowed or switched off, and survives a location failure', async () => {
+  await show({ ...good, backgroundLocation: 'denied' });
+  await fireEvent.press(screen.getByText('Run now'));
+  await waitFor(() => expect(runPeriodic).toHaveBeenCalled());
+  expect(runPlaceTask).not.toHaveBeenCalled();
+  await fireEvent(screen.getByRole('switch'), 'valueChange', false);
+});
+
+it('Run now still finishes when the location fix fails', async () => {
+  (Location.requestForegroundPermissionsAsync as jest.Mock).mockRejectedValue(new Error('x'));
+  await show();
+  const before = collect.mock.calls.length;
+  await fireEvent.press(screen.getByText('Run now'));
+  await waitFor(() => expect(collect.mock.calls.length).toBeGreaterThan(before));
+  expect(runPlaceTask).not.toHaveBeenCalled();
+});
+
+it('Run now sends no place report when the switch is off', async () => {
+  (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+  await show();
+  await fireEvent(screen.getByRole('switch'), 'valueChange', false);
+  await fireEvent.press(screen.getByText('Run now'));
+  await waitFor(() => expect(runPeriodic).toHaveBeenCalled());
+  expect(runPlaceTask).not.toHaveBeenCalled();
 });
 
 it('the location switch stops and starts the place task', async () => {

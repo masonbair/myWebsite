@@ -1,17 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
-import * as Location from 'expo-location';
+import { coarseFix } from '../place/coarseFix';
 import { addPrivatePlace, loadPrivatePlaces, removePrivatePlace } from '../place/privatePlaces';
-import { Button } from './HealthList';
+import { Button } from './Button';
 import { ERROR } from './theme';
-
-/** One coarse fix, used once and dropped: only addPrivatePlace stores it. */
-async function coarseFix(): Promise<{ latitude: number; longitude: number } | null> {
-  const { status } = await Location.requestForegroundPermissionsAsync();
-  if (status !== 'granted') return null;
-  const { coords } = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest });
-  return { latitude: coords.latitude, longitude: coords.longitude };
-}
 
 export function PrivatePlaces() {
   const [labels, setLabels] = useState<string[]>([]);
@@ -19,9 +11,9 @@ export function PrivatePlaces() {
   const [label, setLabel] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const reload = useCallback(async () => {
+  async function reload() {
     setLabels((await loadPrivatePlaces()).map((p) => p.label));
-  }, []);
+  }
 
   useEffect(() => {
     let live = true;
@@ -50,6 +42,12 @@ export function PrivatePlaces() {
     }
   }
 
+  function cancel() {
+    setAsking(false);
+    setLabel('');
+    setError(null);
+  }
+
   async function remove(name: string) {
     await removePrivatePlace(name);
     await reload();
@@ -68,6 +66,7 @@ export function PrivatePlaces() {
         <>
           <TextInput placeholder="Name for this place" value={label} onChangeText={setLabel} style={styles.input} />
           <Button title="Save place" onPress={save} />
+          <Button title="Cancel" onPress={cancel} />
         </>
       ) : (
         <Button title="Mark this place private" onPress={() => setAsking(true)} />

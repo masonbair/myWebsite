@@ -11,8 +11,10 @@ import { readJson, writeJson } from './src/lib/store';
 import { PLACE_TASK_WANTED_KEY } from './src/lib/storageKeys';
 import { signInWithGitHub, signOut, type SignInResult } from './src/lib/signIn';
 import { ABOUT } from './src/place/nearestPlace';
-import { syncPlaceTask } from './src/place/placeTask';
-import { Button, HealthList } from './src/screen/HealthList';
+import { coarseFix } from './src/place/coarseFix';
+import { runPlaceTask, syncPlaceTask } from './src/place/placeTask';
+import { Button } from './src/screen/Button';
+import { HealthList } from './src/screen/HealthList';
 import { PrivatePlaces } from './src/screen/PrivatePlaces';
 import { ACCENT, BACKGROUND, ERROR } from './src/screen/theme';
 
@@ -64,6 +66,14 @@ export default function App() {
     setRunning(true);
     try {
       await runPeriodic();
+      if (canTrack && locationWanted) {
+        try {
+          const at = await coarseFix();
+          if (at) await runPlaceTask([{ coords: at }], Date.now());
+        } catch {
+          // A location failure must not block the rest of the run.
+        }
+      }
       await syncPlaceTask(canTrack && locationWanted ? 'on' : 'off');
     } finally {
       setRunning(false);
@@ -74,6 +84,7 @@ export default function App() {
   async function handleLocationSwitch(next: boolean) {
     setLocationWanted(next);
     await writeJson(PLACE_TASK_WANTED_KEY, next);
+    await refresh();
   }
 
   async function handlePickFolder() {

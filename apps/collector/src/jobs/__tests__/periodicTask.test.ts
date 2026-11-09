@@ -3,7 +3,7 @@ import * as BackgroundTask from 'expo-background-task';
 import { runDaylioJob } from '../../daylio/daylioJob';
 import { runPhotoJob } from '../../photos/photoJob';
 import { collectHealth } from '../../health/health';
-import { supabase } from '../../lib/supabase';
+import { signedIn, supabase } from '../../lib/supabase';
 import { heartbeatKey, registerPeriodic, runPeriodic, sendHeartbeat } from '../periodicTask';
 
 jest.mock('expo-task-manager', () => ({ defineTask: jest.fn() }));
@@ -13,7 +13,7 @@ jest.mock('expo-background-task', () => ({
   BackgroundTaskStatus: { Restricted: 1, Available: 2 },
   BackgroundTaskResult: { Success: 1, Failed: 2 },
 }));
-jest.mock('../../lib/supabase', () => ({ supabase: { rpc: jest.fn() } }));
+jest.mock('../../lib/supabase', () => ({ supabase: { rpc: jest.fn() }, signedIn: jest.fn() }));
 jest.mock('../../health/health', () => ({
   ...jest.requireActual('../../health/health'),
   collectHealth: jest.fn(),
@@ -31,6 +31,7 @@ const signedOutInput = { signedIn: false } as never;
 
 beforeEach(async () => {
   await AsyncStorage.clear();
+  (signedIn as jest.Mock).mockReset().mockResolvedValue(true);
   rpc.mockReset().mockResolvedValue({ error: null });
   (collectHealth as jest.Mock).mockReset().mockResolvedValue(signedOutInput);
   photo.mockReset().mockResolvedValue({ uploaded: 0, skipped: 0, error: null });
@@ -103,6 +104,12 @@ describe('heartbeat', () => {
     await sendHeartbeat(many, NOW);
     expect(rpc.mock.calls[0][1].p_status.items).toHaveLength(50);
     for (const item of rpc.mock.calls[0][1].p_status.items) expect(item.key).toMatch(/^[a-z0-9:_-]{1,40}$/);
+  });
+
+  it('sends nothing when signed out', async () => {
+    (signedIn as jest.Mock).mockResolvedValue(false);
+    await runPeriodic(NOW);
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it('does not throw when the RPC errors or rejects', async () => {
