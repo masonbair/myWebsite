@@ -31,7 +31,7 @@ function Section({ title, note, children }: { title: string; note?: string; chil
 }
 
 function Table({ head, rows, empty }: { head: string[]; rows: ReactNode[][]; empty: string }) {
-  if (rows.length === 0) return <p className="text-sm text-mute">{empty}</p>;
+  if (rows.length === 0) return <p className="rounded-tile border-2 border-dashed border-line/40 p-4 text-sm text-mute">{empty}</p>;
   return (
     <div className="-mx-5 overflow-x-auto px-5">
       <table className="w-full text-left text-sm">
@@ -46,7 +46,7 @@ function Table({ head, rows, empty }: { head: string[]; rows: ReactNode[][]; emp
         </thead>
         <tbody>
           {rows.map((cells, r) => (
-            <tr key={r} className="border-t border-ink/5">
+            <tr key={r} className="border-t-2 border-dashed border-line/30">
               {cells.map((cell, i) => (
                 <td key={i} className={`py-2 ${i > 0 ? "whitespace-nowrap" : ""} ${i === cells.length - 1 ? "text-right tabular-nums" : "pr-4 text-ink"}`}>
                   {cell}

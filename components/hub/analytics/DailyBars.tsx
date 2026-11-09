@@ -28,7 +28,7 @@ export function DailyBars({ title, unit, points }: { title: string; unit: string
       </figcaption>
       <div className="relative" onMouseLeave={() => setActive(null)}>
         <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" className="block h-32 w-full" aria-hidden>
-          <line x1="0" x2="100" y1={height - 0.5} y2={height - 0.5} className="stroke-ink/15" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+          <line x1="0" x2="100" y1={height - 0.5} y2={height - 0.5} className="stroke-line/30" strokeWidth="1" vectorEffect="non-scaling-stroke" />
           {points.map((p, i) => {
             const h = p.value === 0 ? 0 : Math.max(2, (p.value / max) * (height - 4));
             return (
