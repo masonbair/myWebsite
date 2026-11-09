@@ -5,3 +5,5 @@ export const JOB_LAST_OK_KEY = {
 } as const;
 
 export const DAYLIO_FOLDER_KEY = 'daylio-folder-uri';
+
+export const PLACE_TASK_WANTED_KEY = 'place-task-wanted';

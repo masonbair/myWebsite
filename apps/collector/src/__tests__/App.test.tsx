@@ -1,0 +1,147 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import * as Location from 'expo-location';
+import App from '../../App';
+import { pickDaylioFolder } from '../daylio/daylioJob';
+import { runFix } from '../health/fix';
+import { collectHealth, type HealthInput } from '../health/health';
+import { runPeriodic, registerPeriodic } from '../jobs/periodicTask';
+import { signInWithGitHub, signOut } from '../lib/signIn';
+import { syncPlaceTask } from '../place/placeTask';
+
+jest.mock('../lib/supabase', () => ({ supabase: {}, signedIn: jest.fn() }));
+jest.mock('../../modules/battery-status', () => ({
+  isIgnoringBatteryOptimizations: jest.fn(),
+  standbyBucket: jest.fn(),
+}));
+jest.mock('expo-status-bar', () => ({ StatusBar: () => null }));
+jest.mock('expo-location', () => ({
+  requestForegroundPermissionsAsync: jest.fn(),
+  getCurrentPositionAsync: jest.fn(),
+  Accuracy: { Lowest: 1, Balanced: 3 },
+}));
+jest.mock('../health/health', () => ({ ...jest.requireActual('../health/health'), collectHealth: jest.fn() }));
+jest.mock('../health/fix', () => ({ runFix: jest.fn() }));
+jest.mock('../daylio/daylioJob', () => ({ pickDaylioFolder: jest.fn() }));
+jest.mock('../jobs/periodicTask', () => ({ runPeriodic: jest.fn(), registerPeriodic: jest.fn() }));
+jest.mock('../place/placeTask', () => ({ syncPlaceTask: jest.fn() }));
+jest.mock('../lib/signIn', () => ({ signInWithGitHub: jest.fn(), signOut: jest.fn() }));
+
+const NOW = Date.now();
+const HOUR = 3_600_000;
+const good: HealthInput = {
+  signedIn: true,
+  backgroundLocation: 'granted',
+  photosAccess: 'all',
+  daylioFolder: true,
+  batteryUnrestricted: true,
+  standbyBucket: 10,
+  lastOk: { place: NOW - HOUR, photos: NOW - 2 * HOUR, daylio: NOW - 3 * 60_000 },
+  now: NOW,
+};
+const collect = collectHealth as jest.Mock;
+
+async function show(input: HealthInput = good) {
+  collect.mockResolvedValue(input);
+  await render(<App />);
+  await waitFor(() => expect(screen.queryByText('Collector')).not.toBeNull());
+}
+
+beforeEach(async () => {
+  await AsyncStorage.clear();
+  (runFix as jest.Mock).mockResolvedValue(true);
+  (runPeriodic as jest.Mock).mockResolvedValue(undefined);
+  (registerPeriodic as jest.Mock).mockResolvedValue(undefined);
+  (syncPlaceTask as jest.Mock).mockResolvedValue(undefined);
+  (signOut as jest.Mock).mockResolvedValue(undefined);
+});
+
+it('shows a healthy screen with the three last-run ages, setup steps and credit', async () => {
+  await show();
+  expect(screen.getByText('Everything is running')).toBeTruthy();
+  expect(screen.getByText('Place: last report 1 hour ago')).toBeTruthy();
+  expect(screen.getByText('Photos: last upload 2 hours ago')).toBeTruthy();
+  expect(screen.getByText('Daylio: last check 3 minutes ago')).toBeTruthy();
+  expect(screen.getByText(/^1\. Open Settings/)).toBeTruthy();
+  expect(screen.getByText(/GeoNames/)).toBeTruthy();
+  expect(registerPeriodic).toHaveBeenCalled();
+});
+
+it('lists a failing item first with its fix button, and pressing it runs the fix', async () => {
+  await show({ ...good, batteryUnrestricted: false });
+  expect(screen.queryByText('Everything is running')).toBeNull();
+  expect(screen.getAllByText(/./)[1].props.children).toBe('Battery: set the app to unrestricted');
+  await fireEvent.press(screen.getByText('Open battery settings'));
+  await waitFor(() => expect(runFix).toHaveBeenCalledWith('battery-optimization'));
+});
+
+it('signs in from the signed-out screen and registers the periodic task', async () => {
+  collect.mockResolvedValue({ ...good, signedIn: false });
+  (signInWithGitHub as jest.Mock).mockImplementation(async () => {
+    collect.mockResolvedValue(good);
+    return 'ok';
+  });
+  await render(<App />);
+  await fireEvent.press(await screen.findByText('Sign in with GitHub'));
+  await waitFor(() => expect(screen.queryByText('Collector')).not.toBeNull());
+  expect(registerPeriodic).toHaveBeenCalled();
+});
+
+it('Run now runs the periodic job and the place sync, then refreshes health', async () => {
+  await show();
+  const before = collect.mock.calls.length;
+  (syncPlaceTask as jest.Mock).mockClear();
+  await fireEvent.press(screen.getByText('Run now'));
+  await waitFor(() => expect(collect.mock.calls.length).toBeGreaterThan(before));
+  expect(runPeriodic).toHaveBeenCalled();
+  expect(syncPlaceTask).toHaveBeenCalledWith('on');
+});
+
+it('the location switch stops and starts the place task', async () => {
+  await show();
+  await waitFor(() => expect(syncPlaceTask).toHaveBeenCalledWith('on'));
+  await fireEvent(screen.getByRole('switch'), 'valueChange', false);
+  await waitFor(() => expect(syncPlaceTask).toHaveBeenLastCalledWith('off'));
+});
+
+it('does not offer the location task before background location is granted', async () => {
+  await show({ ...good, backgroundLocation: 'denied' });
+  await waitFor(() => expect(syncPlaceTask).toHaveBeenCalledWith('off'));
+  expect(syncPlaceTask).not.toHaveBeenCalledWith('on');
+});
+
+it('marks a place private with one coarse fix and shows only its label', async () => {
+  (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+  (Location.getCurrentPositionAsync as jest.Mock).mockResolvedValue({ coords: { latitude: 38.7223, longitude: -9.1393 } });
+  await show();
+  await fireEvent.press(screen.getByText('Mark this place private'));
+  await fireEvent.changeText((await screen.findByPlaceholderText('Name for this place')), 'Lisbon flat');
+  await fireEvent.press(screen.getByText('Save place'));
+  await screen.findByText('Lisbon flat');
+  expect(Location.getCurrentPositionAsync).toHaveBeenCalledTimes(1);
+  expect(Location.getCurrentPositionAsync).toHaveBeenCalledWith({ accuracy: Location.Accuracy.Lowest });
+  expect(screen.queryByText(/38\.72|9\.13/)).toBeNull();
+
+  await fireEvent.press(screen.getByText('Remove Lisbon flat'));
+  await waitFor(() => expect(screen.queryByText('Lisbon flat')).toBeNull());
+});
+
+it('asks for permission and saves nothing when location is refused', async () => {
+  (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'denied' });
+  await show();
+  await fireEvent.press(screen.getByText('Mark this place private'));
+  await fireEvent.changeText((await screen.findByPlaceholderText('Name for this place')), 'Cabin');
+  await fireEvent.press(screen.getByText('Save place'));
+  await screen.findByText(/permission is needed/);
+  expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
+  expect(screen.queryByText('Remove Cabin')).toBeNull();
+});
+
+it('chooses the Daylio folder and signs out', async () => {
+  (pickDaylioFolder as jest.Mock).mockResolvedValue(true);
+  await show();
+  await fireEvent.press(screen.getByText('Choose Daylio folder'));
+  await waitFor(() => expect(pickDaylioFolder).toHaveBeenCalled());
+  await fireEvent.press(screen.getByText('Sign out'));
+  expect(signOut).toHaveBeenCalled();
+});

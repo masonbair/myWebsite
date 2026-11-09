@@ -1,13 +1,41 @@
 import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
+import { RPC, type HeartbeatArgs } from '../../../../shared/collector-contract';
 import { runDaylioJob } from '../daylio/daylioJob';
+import { collectHealth, evaluateHealth, type HealthItem } from '../health/health';
+import { supabase } from '../lib/supabase';
 import { writeJson } from '../lib/store';
 import { JOB_LAST_OK_KEY } from '../lib/storageKeys';
 import { runPhotoJob } from '../photos/photoJob';
 
 export const PERIODIC_TASK = 'collector-periodic';
 
-/** Runs the photo job, then the Daylio job. One failing never stops the other. */
+const MAX_HEARTBEAT_ITEMS = 50;
+
+/** The server only accepts keys of 1-40 of a-z, 0-9, ':', '_', '-'. */
+export function heartbeatKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9:_-]/g, '-').slice(0, 40);
+}
+
+/** Tells the server which checks pass. Sends keys and ok flags only, never labels. A failure is ignored. */
+export async function sendHeartbeat(items: HealthItem[], now: number): Promise<void> {
+  try {
+    const args = {
+      p_status: {
+        at: new Date(now).toISOString(),
+        items: items
+          .map((i) => ({ key: heartbeatKey(i.key), ok: i.ok }))
+          .filter((i) => i.key !== '')
+          .slice(0, MAX_HEARTBEAT_ITEMS),
+      },
+    } satisfies HeartbeatArgs;
+    await supabase.rpc(RPC.heartbeat, args);
+  } catch {
+    // The heartbeat is only a signal; the next run sends another.
+  }
+}
+
+/** Runs the photo job, then the Daylio job, then sends the heartbeat. One failing never stops the others. */
 export async function runPeriodic(now = Date.now()): Promise<void> {
   try {
     await runPhotoJob(now);
@@ -19,6 +47,11 @@ export async function runPeriodic(now = Date.now()): Promise<void> {
     if (!result.error) await writeJson(JOB_LAST_OK_KEY.daylio, now);
   } catch {
     // Same: no new last-ok time.
+  }
+  try {
+    await sendHeartbeat(evaluateHealth(await collectHealth(now)), now);
+  } catch {
+    // Health could not be read; skip this heartbeat.
   }
 }
 

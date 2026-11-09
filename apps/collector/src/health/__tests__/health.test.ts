@@ -36,6 +36,12 @@ describe('evaluateHealth', () => {
     expect(items.every((i) => i.ok && i.fix === null)).toBe(true);
   });
 
+  it('offers no fix for an item that is ok, even an unreadable one in dev', () => {
+    const items = evaluateHealth({ ...good, batteryUnrestricted: null, standbyBucket: null }, true);
+    expect(items.every((i) => !i.ok || i.fix === null)).toBe(true);
+    expect(items.find((i) => i.key === 'battery')).toMatchObject({ ok: true, fix: null });
+  });
+
   it('shows only the sign-in item when signed out', () => {
     const items = evaluateHealth({ ...good, signedIn: false });
     expect(items).toEqual([expect.objectContaining({ key: 'sign-in', ok: false, fix: 'sign-in' })]);

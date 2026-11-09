@@ -1,55 +1,138 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Button, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { signedIn } from './src/lib/supabase';
+import { runFix } from './src/health/fix';
+import type { HealthFix } from './src/health/health';
+import { SAMSUNG_SETUP_STEPS } from './src/health/samsungSetup';
+import { useHealth } from './src/health/useHealth';
+import { pickDaylioFolder } from './src/daylio/daylioJob';
+import { registerPeriodic, runPeriodic } from './src/jobs/periodicTask';
+import { readJson, writeJson } from './src/lib/store';
+import { PLACE_TASK_WANTED_KEY } from './src/lib/storageKeys';
 import { signInWithGitHub, signOut, type SignInResult } from './src/lib/signIn';
+import { ABOUT } from './src/place/nearestPlace';
+import { syncPlaceTask } from './src/place/placeTask';
+import { Button, HealthList } from './src/screen/HealthList';
+import { PrivatePlaces } from './src/screen/PrivatePlaces';
+import { ACCENT, BACKGROUND, ERROR } from './src/screen/theme';
 
 export default function App() {
-  const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null);
+  const { items, input, refresh } = useHealth();
   const [result, setResult] = useState<SignInResult | null>(null);
+  const [locationWanted, setLocationWanted] = useState(true);
+  const [running, setRunning] = useState(false);
+
+  const isSignedIn = input === null ? null : input.signedIn;
+  const canTrack = input?.backgroundLocation === 'granted';
 
   useEffect(() => {
-    signedIn()
-      .then(setIsSignedIn)
-      .catch(() => setIsSignedIn(false));
+    readJson<boolean>(PLACE_TASK_WANTED_KEY, true).then(setLocationWanted);
   }, []);
+
+  useEffect(() => {
+    if (isSignedIn) registerPeriodic().catch(() => {});
+  }, [isSignedIn]);
+
+  useEffect(() => {
+    if (isSignedIn === null) return;
+    syncPlaceTask(isSignedIn && canTrack && locationWanted ? 'on' : 'off');
+  }, [isSignedIn, canTrack, locationWanted]);
 
   async function handleSignIn() {
     const outcome = await signInWithGitHub();
     setResult(outcome);
-    if (outcome === 'ok') setIsSignedIn(true);
+    if (outcome === 'ok') {
+      registerPeriodic().catch(() => {});
+      await refresh();
+    }
+  }
+
+  async function handleFix(fix: HealthFix) {
+    if (fix === 'sign-in') await handleSignIn();
+    else await runFix(fix);
+    await refresh();
   }
 
   async function handleSignOut() {
+    await syncPlaceTask('off');
     await signOut();
     setResult(null);
-    setIsSignedIn(false);
+    await refresh();
+  }
+
+  async function handleRunNow() {
+    setRunning(true);
+    try {
+      await runPeriodic();
+      await syncPlaceTask(canTrack && locationWanted ? 'on' : 'off');
+    } finally {
+      setRunning(false);
+      await refresh();
+    }
+  }
+
+  async function handleLocationSwitch(next: boolean) {
+    setLocationWanted(next);
+    await writeJson(PLACE_TASK_WANTED_KEY, next);
+  }
+
+  async function handlePickFolder() {
+    await pickDaylioFolder();
+    await refresh();
+  }
+
+  if (isSignedIn === null) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  if (!isSignedIn) {
+    return (
+      <View style={styles.center}>
+        <Button title="Sign in with GitHub" onPress={handleSignIn} />
+        {result === 'not-allowed' && <Text style={styles.error}>This GitHub account is not allowed.</Text>}
+        {result === 'error' && <Text style={styles.error}>Sign-in failed. Try again.</Text>}
+        <StatusBar style="auto" />
+      </View>
+    );
   }
 
   return (
-    <View style={styles.container}>
-      {isSignedIn === null ? (
-        <ActivityIndicator />
-      ) : isSignedIn ? (
-        <>
-          <Text style={styles.title}>Collector</Text>
-          <Text>Health list goes here.</Text>
-          <Button title="Sign out" onPress={handleSignOut} />
-        </>
-      ) : (
-        <>
-          <Button title="Sign in with GitHub" onPress={handleSignIn} />
-          {result === 'not-allowed' && <Text style={styles.error}>This GitHub account is not allowed.</Text>}
-          {result === 'error' && <Text style={styles.error}>Sign-in failed. Try again.</Text>}
-        </>
-      )}
+    <ScrollView style={styles.page} contentContainerStyle={styles.content}>
+      <Text style={styles.title}>Collector</Text>
+      <HealthList items={items} onFix={handleFix} />
+      <Button title={running ? 'Running...' : 'Run now'} onPress={handleRunNow} />
+
+      <View style={styles.switchRow}>
+        <Text>Report my place</Text>
+        <Switch value={canTrack && locationWanted} disabled={!canTrack} onValueChange={handleLocationSwitch} trackColor={{ true: ACCENT }} />
+      </View>
+
+      <PrivatePlaces />
+      <Button title="Choose Daylio folder" onPress={handlePickFolder} />
+
+      <Text style={styles.heading}>Setup</Text>
+      {SAMSUNG_SETUP_STEPS.map((step, i) => (
+        <Text key={step}>{`${i + 1}. ${step}`}</Text>
+      ))}
+
+      <Button title="Sign out" onPress={handleSignOut} />
+      <Text style={styles.small}>{ABOUT}</Text>
       <StatusBar style="auto" />
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  page: { flex: 1, backgroundColor: BACKGROUND },
+  content: { padding: 20, paddingTop: 56, gap: 16 },
+  center: { flex: 1, backgroundColor: BACKGROUND, alignItems: 'center', justifyContent: 'center', gap: 12 },
   title: { fontSize: 22, fontWeight: '600' },
-  error: { color: '#b00020' },
+  heading: { fontSize: 16, fontWeight: '600' },
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  small: { fontSize: 11, color: '#666' },
+  error: { color: ERROR },
 });

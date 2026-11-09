@@ -83,6 +83,10 @@ function standbyItem(bucket: number | null, dev: boolean): HealthItem {
 
 /** Turns the raw phone state into a checklist. Signed out shows only the sign-in item. */
 export function evaluateHealth(input: HealthInput, dev: boolean = __DEV__): HealthItem[] {
+  return buildItems(input, dev).map((item) => (item.ok ? { ...item, fix: null } : item));
+}
+
+function buildItems(input: HealthInput, dev: boolean): HealthItem[] {
   // Unreadable settings are fine in dev (Expo Go has no native module); in a real build they mean something is broken.
   if (!input.signedIn) {
     return [{ key: 'sign-in', ok: false, label: 'Sign in with GitHub', fix: 'sign-in' }];
