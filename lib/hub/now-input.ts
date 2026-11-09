@@ -33,6 +33,6 @@ export function parseBakeInput(
 }
 
 /** The now_place_privacy row that marks a place private or public; it is always an insert, never an edit. */
-export function privacyRow(place: Place, makePrivate: boolean) {
+export function privacyRow(place: Place & { city: string }, makePrivate: boolean) {
   return { city: place.city, region: place.region, country: place.country, private: makePrivate };
 }

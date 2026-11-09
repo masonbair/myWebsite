@@ -10,7 +10,8 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "e2e:hub": "E2E_SERVERS=hub playwright test --project=hub",
-    "e2e:site": "E2E_SERVERS=site playwright test --project=desktop --project=mobile"
+    "e2e:site": "E2E_SERVERS=site playwright test --project=desktop --project=mobile",
+    "indexnow": "node scripts/indexnow.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.4.0",
@@ -25,6 +26,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
+    "sharp": "^0.35.5",
     "zod": "^4.6.7"
   },
   "devDependencies": {

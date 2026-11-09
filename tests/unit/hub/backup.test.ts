@@ -19,6 +19,7 @@ import {
   type SnapshotSource,
 } from "@/lib/hub/backup";
 import { createHubStore } from "@/lib/hub/store";
+import { daylioPath } from "@/shared/collector-contract";
 
 const run = promisify(execFile);
 const RESTORE = join(__dirname, "../../../scripts/hub-restore.ts");
@@ -41,6 +42,8 @@ const emptySource: SnapshotSource = {
   nowPlace: async () => [],
   nowPlacePrivacy: async () => [],
   nowBake: async () => [],
+  collectorPhoto: async () => [],
+  collectorDaylioExport: async () => [],
   itemsHistory: async () => [],
   auditLog: async () => [],
 };
@@ -71,11 +74,13 @@ function fakeBlobs(initial: string[]) {
 const dayPath = (daysBefore: number) => backupPath(new Date(Date.UTC(2026, 10, 5) - daysBefore * 86_400_000));
 
 describe("snapshot", () => {
-  it("holds every table, the now place, privacy, bake, history and audit tables included", async () => {
+  it("holds every table, the now place, privacy, bake, collector, history and audit tables included", async () => {
     const place = { id: 7, city: "Kent", region: "Ohio", country: "United States", private: true, timeZone: "America/New_York", updatedAt: "2026-11-01T00:00:00Z" };
     const bake = { id: 3, name: "Sourdough", photo: null, bakedAt: "2026-11-02T00:00:00Z" };
     const privacy = { id: 2, city: "Kent", region: "Ohio", country: "United States", private: true, createdAt: "2026-11-01T01:00:00Z" };
     const version = { id: 4, itemId: "i1", title: "old", description: "old text", changedBy: "service_role", changedAt: "2026-11-03T00:00:00Z" };
+    const photo = { id: 5, path: "collector/123.jpg", assetId: "123", takenAt: "2026-11-01T10:00:00Z", width: 4000, height: 3000, hidden: true, createdAt: "2026-11-01T10:05:00Z" };
+    const daylio = { id: 6, path: "exports/1762000000000-120-daylio.csv", filename: "daylio.csv", sizeBytes: 120, modifiedAt: "2025-11-01T12:26:40Z", createdAt: "2026-11-02T00:00:00Z" };
     const audit = { id: 9, actor: "agent:x", action: "update", itemId: "i1", detail: { fields: ["title"] }, at: "2026-11-03T00:00:00Z" };
     const shot = await snapshot(
       {
@@ -84,6 +89,8 @@ describe("snapshot", () => {
         nowPlace: async () => [place],
         nowPlacePrivacy: async () => [privacy],
         nowBake: async () => [bake],
+        collectorPhoto: async () => [photo],
+        collectorDaylioExport: async () => [daylio],
         itemsHistory: async () => [version],
         auditLog: async () => [audit],
       },
@@ -97,6 +104,8 @@ describe("snapshot", () => {
       nowPlace: [place],
       nowPlacePrivacy: [privacy],
       nowBake: [bake],
+      collectorPhoto: [photo],
+      collectorDaylioExport: [daylio],
       itemsHistory: [version],
       auditLog: [audit],
       takenAt: "2026-11-05T03:00:00.000Z",
@@ -154,13 +163,17 @@ describe("hub-restore guards", () => {
 });
 
 // Run with: HUB_TEST_DB_URL=1 HUB_TEST_SUPABASE_URL=http://127.0.0.1:54321 HUB_TEST_SERVICE_KEY=<SERVICE_ROLE_KEY> (from `supabase status -o env`).
+// HUB_TEST_PG_URL (no database name) points the scratch database at a stack on other ports.
 // The round trip restores into a scratch database it creates and drops in the local Postgres, never the shared one.
 const enabled = Boolean(process.env.HUB_TEST_DB_URL);
 const apiUrl = process.env.HUB_TEST_SUPABASE_URL ?? "";
 const serviceKey = process.env.HUB_TEST_SERVICE_KEY ?? "";
-const LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322";
+const LOCAL_DB = process.env.HUB_TEST_PG_URL || "postgresql://postgres:postgres@127.0.0.1:54322";
 if (enabled && !/^(127\.0\.0\.1|localhost)$/.test(new URL(apiUrl || "http://invalid").hostname)) {
   throw new Error("HUB_TEST_SUPABASE_URL must be a local Supabase (127.0.0.1 or localhost)");
+}
+if (enabled && !/^(127\.0\.0\.1|localhost)$/.test(new URL(LOCAL_DB).hostname)) {
+  throw new Error("HUB_TEST_PG_URL must be a local Postgres (127.0.0.1 or localhost)");
 }
 
 // Just enough of Supabase's auth schema for the hub migrations to apply in a bare database.
@@ -168,6 +181,9 @@ const AUTH_STUB = `
   create schema auth;
   create table auth.users (id uuid primary key);
   create function auth.uid() returns uuid language sql stable as 'select null::uuid';
+  create schema storage;
+  create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
+  create table storage.objects (bucket_id text, name text);
 `;
 
 describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
@@ -195,10 +211,23 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
     await store.archive(newer.id, "merged", older.id, "merged in the backup test");
     await store.updateItem(older.id, { description: "backup rewrite" });
     await store.setHubState(`reminded:${older.id}`, "2026-11-05T09:30:00");
-    const place = await client.from("now_place").insert({ city: "Backupville", region: "Ohio", country: "United States", private: true, time_zone: "America/New_York" });
+    const place = await client.from("now_place").insert([
+      { city: "Backupville", region: "Ohio", country: "United States", private: true, time_zone: "America/New_York" },
+      { city: null, region: "Ohio", country: "United States", private: true },
+    ]);
     const bake = await client.from("now_bake").insert({ name: "backup loaf", photo: "/misc/Mason_traveling.webp" });
     const privacy = await client.from("now_place_privacy").insert({ city: "Backupville", region: "Ohio", country: "United States", private: true });
     if (place.error || bake.error || privacy.error) throw place.error ?? bake.error ?? privacy.error;
+    const assetId = `backup${randomUUID().slice(0, 8)}`;
+    const modifiedMs = Date.parse("2026-11-02T08:00:00.123Z");
+    const photo = await client.from("collector_photo").insert({
+      path: `collector/${assetId}.jpg`, asset_id: assetId, taken_at: "2026-11-01T10:00:00Z", width: 4000, height: 3000, hidden: true,
+    });
+    const daylioName = `backup daylio ${assetId}.csv`;
+    const daylio = await client.from("collector_daylio_export").insert({
+      path: daylioPath(daylioName, 120, modifiedMs), filename: daylioName, size_bytes: 120, modified_at: new Date(modifiedMs).toISOString(),
+    });
+    if (photo.error || daylio.error) throw photo.error ?? daylio.error;
 
     shot = await snapshot(createSnapshotSource(client));
     file = join(await mkdtemp(join(tmpdir(), "hub-backup-")), "snapshot.json");
@@ -206,10 +235,12 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
 
     await withDb(`${LOCAL_DB}/postgres`, (db) => db.query(`create database ${scratch}`));
     const migrations = await Promise.all(
-      ["0002_hub.sql", "0003_hub_memo.sql", "0005_now.sql", "0006_hub_history.sql"].map((name) => readFile(join(__dirname, "../../../supabase/migrations", name), "utf8")),
+      ["0002_hub.sql", "0003_hub_memo.sql", "0005_now.sql", "0006_hub_history.sql", "0007_collector.sql"].map((name) => readFile(join(__dirname, "../../../supabase/migrations", name), "utf8")),
     );
     await withDb(scratchUrl, async (db) => {
       await db.query(AUTH_STUB);
+      // Public buckets made before 0007 runs, so the test below proves 0007 turns them private.
+      await db.query("insert into storage.buckets (id, name, public) values ('photos', 'photos', true), ('daylio', 'daylio', true)");
       for (const sql of migrations) await db.query(sql);
     });
   }, 60_000);
@@ -243,6 +274,19 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
       expect(privacyRows).toEqual(shot.nowPlacePrivacy.map((p) => ({ id: Number(p.id), city: p.city, private: p.private })));
       expect(nowPlace).toEqual(shot.nowPlace.map((p) => ({ id: Number(p.id), city: p.city, private: p.private, time_zone: p.timeZone })));
       expect(shot.nowPlace.some((p) => p.timeZone === "America/New_York")).toBe(true);
+      expect(shot.nowPlace.some((p) => p.city === null && p.private)).toBe(true);
+      expect(shot.collectorPhoto.some((p) => p.hidden)).toBe(true);
+      expect(shot.collectorDaylioExport.length).toBeGreaterThan(0);
+      const photos = (await db.query("select id::int, path, hidden, taken_at from public.collector_photo order by id")).rows;
+      expect(photos.map((p) => ({ ...p, taken_at: p.taken_at.toISOString() }))).toEqual(
+        shot.collectorPhoto.map((p) => ({ id: Number(p.id), path: p.path, hidden: p.hidden, taken_at: new Date(p.takenAt).toISOString() })),
+      );
+      const exports = (await db.query("select id::int, path, size_bytes::int from public.collector_daylio_export order by id")).rows;
+      expect(exports).toEqual(shot.collectorDaylioExport.map((d) => ({ id: Number(d.id), path: d.path, size_bytes: Number(d.sizeBytes) })));
+      const nextPhoto = (
+        await db.query("insert into public.collector_photo (path, asset_id, taken_at, width, height) values ('collector/after.jpg', 'after', now(), 1, 1) returning id::int")
+      ).rows[0];
+      expect(nextPhoto.id).toBeGreaterThan(Math.max(...shot.collectorPhoto.map((p) => Number(p.id))));
       expect(nowBake).toEqual(shot.nowBake.map((b) => ({ id: Number(b.id), name: b.name, photo: b.photo })));
       // The identity sequence moved past the restored ids, so the next bake gets a fresh one.
       const next = (await db.query("insert into public.now_bake (name) values ('after restore') returning id::int")).rows[0];
@@ -261,6 +305,16 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
       expect(items.find((r) => r.id === merged.id)).toMatchObject({ merged_into: merged.mergedInto, archived_reason: "merged" });
     });
   }, 60_000);
+
+  it("0007 makes photos and daylio buckets that already existed as public private, with its limits", async () => {
+    await withDb(scratchUrl, async (db) => {
+      const buckets = (await db.query("select id, public, file_size_limit::int, allowed_mime_types from storage.buckets order by id")).rows;
+      expect(buckets).toEqual([
+        { id: "daylio", public: false, file_size_limit: 26214400, allowed_mime_types: null },
+        { id: "photos", public: false, file_size_limit: 26214400, allowed_mime_types: ["image/jpeg"] },
+      ]);
+    });
+  });
 
   it("refuses to restore into a database whose items table is not empty", async () => {
     const result = await restore([file, "--target", scratchUrl]);

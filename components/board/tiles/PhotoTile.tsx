@@ -3,6 +3,7 @@
 import { Pause, Play } from "@phosphor-icons/react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { collectorPhotoLoader, isCollectorPhotoSrc } from "@/lib/collector-photos";
 import type { Photo } from "@/lib/now";
 import { useReducedMotion } from "@/lib/use-reduced-motion";
 import { Tile } from "../Tile";
@@ -74,6 +75,7 @@ export function PhotoTile({ photos }: { photos: Photo[] }) {
           <Image
             key={p.src}
             src={p.src}
+            loader={isCollectorPhotoSrc(p.src) ? collectorPhotoLoader : undefined}
             alt={p.alt}
             aria-hidden={i !== active}
             fill

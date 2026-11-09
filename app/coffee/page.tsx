@@ -16,7 +16,7 @@ import { Reveal } from "@/components/board/Reveal";
 import { Prompt, Tile } from "@/components/board/Tile";
 import { focusRing, stickerButtonShape, tag } from "@/components/ui/sticker";
 import { JsonLd } from "@/components/JsonLd";
-import { bookingUrl, coffee, type TopicIcon } from "@/content/coffee";
+import { bookingMailto, bookingUrl, coffee, coffeeUpdated, type TopicIcon } from "@/content/coffee";
 import { contact } from "@/content/site";
 import { coffeeJsonLd } from "@/lib/jsonld";
 
@@ -39,6 +39,9 @@ const photo = {
   alt: "Mason smiling in a red bucket hat and sunglasses, taking a selfie on a roadside with green mountains and a river valley behind him",
 };
 
+
+const updated = new Date(coffeeUpdated);
+const updatedLabel = updated.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 
 const elsewhere = [
   { label: "GitHub", href: contact.github, icon: GithubLogo },
@@ -66,6 +69,7 @@ export default function CoffeePage() {
               href={bookingUrl}
               target="_blank"
               rel="noopener noreferrer"
+              aria-label={coffee.bookLabel}
               className={`${stickerButtonShape} mt-8 self-start border-night bg-night text-snow`}
             >
               Book a time
@@ -73,6 +77,12 @@ export default function CoffeePage() {
                 <CalendarPlus weight="light" size={18} aria-hidden />
               </span>
             </a>
+            <p className="mt-4 text-sm font-medium">
+              No calendar access?{" "}
+              <a href="#book-by-email" className={`font-bold underline underline-offset-4 ${focusRing}`}>
+                Book by email
+              </a>
+            </p>
             <dl className="mt-auto flex flex-wrap gap-x-10 gap-y-4 pt-12">
               {coffee.format.map(({ label, value }) => (
                 <div key={label}>
@@ -131,6 +141,43 @@ export default function CoffeePage() {
         </Reveal>
       </div>
 
+      <section aria-labelledby="niches-title" className="mt-24 md:mt-32">
+        <h2 id="niches-title" className="text-4xl leading-none font-bold tracking-[-0.04em] text-ink md:text-5xl">
+          {coffee.nichesHeading}
+        </h2>
+        <div className="mt-10 grid max-w-5xl gap-5 md:grid-cols-2">
+          {coffee.niches.map(({ id, heading, body }) => (
+            <article key={id} id={id} className="scroll-mt-28 rounded-tile border-[2.5px] border-line bg-surface p-6 shadow-sticker-sm">
+              <h3 className="text-xl font-semibold tracking-tight text-ink">
+                {heading}
+              </h3>
+              <div className="mt-3 max-w-[60ch] space-y-3 leading-relaxed text-mute">
+                {body.map((line) => (
+                  <p key={line}>{line}</p>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="book-by-email" aria-labelledby="email-title" className="mt-24 scroll-mt-28 md:mt-32">
+        <h2 id="email-title" className="text-2xl font-bold tracking-tight text-ink">
+          {coffee.emailHeading}
+        </h2>
+        <ol className="mt-6 max-w-[60ch] list-decimal space-y-2 pl-5 leading-relaxed text-mute">
+          {coffee.emailSteps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+        <a
+          href={bookingMailto}
+          className={`mt-6 inline-flex rounded-full border-2 border-line bg-surface px-4 py-2 text-sm font-semibold text-ink shadow-sticker-sm transition-transform duration-200 ease-spring active:translate-x-0.5 active:translate-y-0.5 ${focusRing}`}
+        >
+          {coffee.emailLink}
+        </a>
+      </section>
+
       <section aria-labelledby="faq-title" className="mt-24 md:mt-32">
         <h2 id="faq-title" className="text-4xl leading-none font-bold tracking-[-0.04em] text-ink md:text-5xl">
           {coffee.faqHeading}
@@ -171,6 +218,10 @@ export default function CoffeePage() {
           ))}
         </ul>
       </section>
+
+      <p className="mt-16 text-sm text-mute">
+        Last updated <time dateTime={coffeeUpdated}>{updatedLabel}</time>
+      </p>
     </main>
   );
 }
