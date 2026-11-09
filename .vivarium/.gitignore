@@ -1,0 +1,5 @@
+*
+!vivarium.toml
+!probes/
+!probes/**
+!.gitignore
