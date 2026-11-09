@@ -4,12 +4,16 @@ import { handleEventRequest, readLatestPlaceZone } from "@/lib/hub/events";
 import { notify } from "@/lib/hub/notify";
 import { createHubStore } from "@/lib/hub/store";
 import { budgetFromEnv, runIdeasJob } from "@/lib/ideas/job";
+import { capUsd } from "@/lib/news/budget";
+import { NEWS_MODEL, runNewsJob } from "@/lib/news/job";
 import { createIdeasJobStore } from "@/lib/ideas/store";
 import { serviceClient } from "@/lib/supabase/server";
 
 // The ideas run stops starting reviews 90 seconds before its 270-second budget, inside this limit.
 export const maxDuration = 300;
 const IDEAS_DEADLINE_MS = 270_000;
+// One extraction can take about a minute, so none starts past 240 seconds.
+const NEWS_DEADLINE_MS = 240_000;
 
 function ideasRunner() {
   const anthropic = anthropicClient("ideas");
@@ -32,6 +36,23 @@ function ideasRunner() {
     });
 }
 
+function newsRunner() {
+  const anthropic = anthropicClient("news");
+  if (!anthropic) return null;
+  return () =>
+    runNewsJob({
+      client: serviceClient(),
+      anthropic,
+      model: NEWS_MODEL,
+      now: () => new Date(),
+      deadlineMs: NEWS_DEADLINE_MS,
+      cap: capUsd(process.env),
+      ntfyTopic: process.env.NTFY_TOPIC,
+      fetchFn: fetch,
+      timeZone: process.env.HUB_TIME_ZONE || "UTC",
+    });
+}
+
 // Called by pg_cron and the items trigger through pg_net; the service role still cannot complete or delete anything.
 export async function POST(request: Request, ctx: { params: Promise<{ event: string }> }) {
   const { event } = await ctx.params;
@@ -50,5 +71,6 @@ export async function POST(request: Request, ctx: { params: Promise<{ event: str
       ? () => runBackup({ source: createSnapshotSource(serviceClient()), blobs: vercelBlobs(), now: new Date() })
       : null,
     ideas: ideasRunner(),
+    news: newsRunner(),
   });
 }

@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(92);
+select plan(99);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a9', 'news-owner@example.com'),
@@ -89,7 +89,8 @@ values
   ('90000000-0000-0000-0000-000000000007', 'mindstream', '<g@test>', 'G', 'g@test', 'news/raw/g.eml', 'g', 'failed', 3, now() - interval '1 minute', null, null, null, null),
   ('90000000-0000-0000-0000-000000000008', 'mindstream', '<h@test>', 'H', 'h@test', 'news/raw/h.eml', 'h', 'failed', 1, now() + interval '1 hour', null, null, null, null),
   ('90000000-0000-0000-0000-000000000009', 'superhuman', '<i@test>', 'I', 'i@test', 'news/raw/i.eml', 'i', 'processing', 0, null, now() - interval '1 hour', null, null, null),
-  ('90000000-0000-0000-0000-00000000000a', 'superhuman', '<j@test>', 'J', 'j@test', 'news/raw/j.eml', 'j', 'processing', 0, null, now(), null, null, null);
+  ('90000000-0000-0000-0000-00000000000a', 'superhuman', '<j@test>', 'J', 'j@test', 'news/raw/j.eml', 'j', 'processing', 0, null, now(), null, null, null),
+  ('90000000-0000-0000-0000-00000000000b', 'superhuman', '<k@test>', 'K', 'k@test', 'news/raw/k.eml', 'k', 'processing', 2, null, now() - interval '1 hour', null, null, null);
 
 insert into public.items (id, title, source) values ('91000000-0000-0000-0000-000000000001', 'shared fixture', 'test');
 insert into public.news_shared (id, item_id, url, title, status, current_run_id) values
@@ -213,6 +214,12 @@ select is(
    where id in (select id from claim_first union all select id from claim_second)
      and status = 'processing' and claimed_at = now()),
   5, 'claimed rows are processing with a fresh claimed_at');
+select is(
+  (select attempts from public.news_issues where id = '90000000-0000-0000-0000-000000000009'),
+  1, 'reclaiming a stale row counts the stopped attempt');
+select is(
+  (select status || ' ' || attempts || ' ' || last_error from public.news_issues where id = '90000000-0000-0000-0000-00000000000b'),
+  'failed 3 the job stopped while working on this 3 times', 'a row that stopped the job 3 times ends failed instead of being reclaimed');
 select throws_ok($$ select public.news_claim('bogus', 1) $$, 'P0001', null, 'news_claim refuses an unknown kind');
 
 select lives_ok($$ select public.news_refresh_trends('2001-01-01', '2001-01-03') $$, 'trends refresh runs');
@@ -305,7 +312,7 @@ select throws_ok($$ select * from public.news_public_trends('2001-01-01', '2001-
 
 set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-0000000000a9","role":"authenticated"}';
 select is(
-  (select count(*)::int from public.news_issues where id::text like '90000000-%'), 10, 'the owner reads news_issues');
+  (select count(*)::int from public.news_issues where id::text like '90000000-%'), 11, 'the owner reads news_issues');
 select throws_ok($$ select count(*) from public.news_trends_daily $$, '42501', null, 'the owner gets permission denied on news_trends_daily');
 select throws_ok(
   $$ update public.news_issues set status = 'pending' where id = '90000000-0000-0000-0000-000000000007' $$,
@@ -345,6 +352,22 @@ set local role service_role;
 set local request.jwt.claims = '{"role":"service_role"}';
 select is(
   (select count(*)::int from public.news_claim('shared', 5)), 1, 'news_claim takes pending shared rows');
+
+reset role;
+select results_eq(
+  $$ select schedule, command from cron.job where jobname = 'hub-news' $$,
+  $$ values ('*/30 * * * *'::text, ' select public.hub_post_event(''news'') '::text) $$,
+  'the news job runs every 30 minutes');
+select has_column('public', 'ai_usage', 'news_issue_id', 'ai_usage links a charge to its issue');
+select fk_ok('public', 'ai_usage', 'news_issue_id', 'public', 'news_issues', 'id', 'ai_usage.news_issue_id points at news_issues');
+select is(
+  (select count(*)::int from public.news_topics where active and slug in (
+    'ai-models', 'chips', 'climate-change', 'interest-rates', 'jobs', 'retail', 'crypto', 'ev-batteries', 'streaming',
+    'space', 'cybersecurity', 'healthcare', 'energy', 'housing', 'trade-tariffs', 'earnings', 'ipos', 'mergers',
+    'regulation', 'social-media', 'consumer-tech', 'autos', 'travel', 'food-and-beverage', 'media', 'labor',
+    'inflation', 'banking', 'venture-capital', 'robotics')),
+  30, 'the provisional topic list is seeded');
+select table_privs_are('public', 'ai_usage', 'authenticated', array['SELECT'], 'authenticated still only reads ai_usage');
 
 select * from finish();
 rollback;

@@ -264,39 +264,56 @@ create trigger news_items_share after insert on public.items
   for each row when (new.source = 'share')
   execute function public.news_items_share();
 
+-- A stale claim means the worker stopped mid-row, so it counts as an attempt; the third one ends the row as failed.
 create function public.news_claim(p_kind text, p_limit int, p_stale interval default '15 minutes')
 returns setof uuid
 language plpgsql set search_path = ''
 as $$
+declare
+  gave_up constant text := 'the job stopped while working on this 3 times';
 begin
   if p_kind = 'issue' then
     return query
       with picked as (
-        select i.id from public.news_issues i
+        select i.id, i.status = 'processing' as stale from public.news_issues i
         where i.status = 'pending'
            or (i.status = 'failed' and i.attempts < 3 and coalesce(i.next_attempt_at, now()) <= now())
            or (i.status = 'processing' and i.claimed_at < now() - p_stale)
         order by i.created_at, i.id
         limit greatest(coalesce(p_limit, 0), 0)
         for update skip locked
+      ),
+      claimed as (
+        update public.news_issues n
+        set status = case when picked.stale and n.attempts + 1 >= 3 then 'failed' else 'processing' end,
+            attempts = n.attempts + picked.stale::int,
+            last_error = case when picked.stale and n.attempts + 1 >= 3 then gave_up else n.last_error end,
+            claimed_at = now()
+        from picked where n.id = picked.id
+        returning n.id, n.status
       )
-      update public.news_issues n set status = 'processing', claimed_at = now()
-      from picked where n.id = picked.id
-      returning n.id;
+      select claimed.id from claimed where claimed.status = 'processing';
   elsif p_kind = 'shared' then
     return query
       with picked as (
-        select s.id from public.news_shared s
+        select s.id, s.status = 'processing' as stale from public.news_shared s
         where s.status = 'pending'
            or (s.status = 'failed' and s.attempts < 3 and coalesce(s.next_attempt_at, now()) <= now())
            or (s.status = 'processing' and s.claimed_at < now() - p_stale)
         order by s.created_at, s.id
         limit greatest(coalesce(p_limit, 0), 0)
         for update skip locked
+      ),
+      claimed as (
+        update public.news_shared n
+        set status = case when picked.stale and n.attempts + 1 >= 3 then 'failed' else 'processing' end,
+            attempts = n.attempts + picked.stale::int,
+            last_error = case when picked.stale and n.attempts + 1 >= 3 then gave_up else n.last_error end,
+            claimed_at = now()
+        from picked where n.id = picked.id
+        returning n.id, n.status
       )
-      update public.news_shared n set status = 'processing', claimed_at = now()
-      from picked where n.id = picked.id
-      returning n.id;
+      select claimed.id from claimed where claimed.status = 'processing';
   else
     raise exception 'unknown claim kind %', p_kind;
   end if;

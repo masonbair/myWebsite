@@ -40,6 +40,8 @@ export type UsageRow = {
   purpose: string;
   usage: ClaudeUsage;
   batch?: boolean;
+  /** The news issue a charge belongs to (ai_usage.news_issue_id, migration 0010). */
+  newsIssueId?: string;
 };
 
 /** Inserts one ai_usage row with the computed cost; returns the cost in USD. */
@@ -57,6 +59,7 @@ export async function recordUsage(client: SupabaseClient, row: UsageRow): Promis
     cost_usd: cost,
     item_id: row.itemId,
     purpose: row.purpose,
+    ...(row.newsIssueId ? { news_issue_id: row.newsIssueId } : {}),
   });
   if (error) throw error;
   return cost;
