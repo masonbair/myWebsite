@@ -55,7 +55,7 @@ Mason's phone and Mac upload each voice memo as one inbox item labeled `hidock-m
    - One item per thought: a to-do about a project is one `todos` entry with `project` set, never also a note. Never repeat a to-do or note as an idea.
    - `source` is the exact transcript sentence the piece came from. `text` is a short, clear rewrite in Mason's voice. Skip filler and false starts. Never invent content.
    - Noise or nonsense: all three lists empty.
-   - `ideasOwnedByIdeasLab` true: the Ideas Lab finds this memo's ideas (`ideasFiled` lists the ones filed so far). Leave `ideas` empty; still file its `todos` and `notes`, even a note for no known project.
+   - `ideasOwnedByIdeasLab` true: the Ideas Lab finds this memo's ideas (`ideasFiled` lists the ones filed so far), even when its reading failed and waits for Mason to try again. Leave `ideas` empty; still file its `todos` and `notes`, even a note for no known project.
 3. `hub memo-split <id> --pieces <file>`. It adds each piece as a `hidock` inbox item, skips pieces that already exist, then archives the memo (reason `memo-split`) with a note linking the pieces, or saying there was nothing to file. It never completes the memo. To-dos keep a stated date and get the `to-schedule` label; step 7 dates the rest. Exit 2 means the pieces file is wrong: fix it and run once more. Exit 1: leave the memo; the next run retries it.
 
 ## 6. Sort the inbox

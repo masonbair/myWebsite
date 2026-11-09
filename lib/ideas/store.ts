@@ -409,16 +409,17 @@ export async function queueMemoIdeas(client: SupabaseClient, itemId: string): Pr
   if (error) throw error;
 }
 
-/** Whether the Ideas Lab owns each memo's ideas (its source is pending or done) and which it filed, for the memo split. */
+/** For the memo split: any memo with a source row, failed included, has its ideas owned by the Ideas Lab; plus which it filed. */
 export async function ideasFiledFrom(client: SupabaseClient, memoIds: string[]): Promise<Map<string, MemoIdeas>> {
   const filed = new Map<string, MemoIdeas>();
   // Ids travel in the URL, so ask in batches that stay well under URL length limits.
   for (let start = 0; start < memoIds.length; start += 100) {
     const batch = memoIds.slice(start, start + 100);
-    const { data, error } = await client.from("idea_sources").select("source_item_id, status, idea_item_ids").in("source_item_id", batch);
+    const { data, error } = await client.from("idea_sources").select("source_item_id, idea_item_ids").in("source_item_id", batch);
     if (error) throw error;
-    for (const row of (data ?? []) as { source_item_id: string; status: string; idea_item_ids: string[] }[]) {
-      filed.set(row.source_item_id, { owned: row.status !== "failed", filed: row.idea_item_ids });
+    for (const row of (data ?? []) as { source_item_id: string; idea_item_ids: string[] }[]) {
+      // A failed memo waits for Try again; if the worker filed its ideas meanwhile, the retry would file them twice.
+      filed.set(row.source_item_id, { owned: true, filed: row.idea_item_ids });
     }
   }
   return filed;

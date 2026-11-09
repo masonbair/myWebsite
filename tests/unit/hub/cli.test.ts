@@ -496,11 +496,10 @@ describe("runCli", () => {
       expect([...h.rows.items.values()].filter((i) => i.labels.includes("hidock")).map((i) => i.title).sort()).toEqual(["A costume app", "Call the dentist"]);
     });
 
-    it("memo-split files the worker's ideas when the Ideas Lab does not own them (failed or never queued)", async () => {
+    it("memo-split files the worker's ideas for a memo the Ideas Lab never queued", async () => {
       const ideasFiled: Record<string, { owned: boolean; filed: string[] }> = {};
       const h = harness({ ideasFiled });
       const memo = seedMemo(h);
-      ideasFiled[memo.id] = { owned: false, filed: [] };
       const pieces = { todos: [], notes: [], ideas: [{ text: "A sourdough timer", source: "A sourdough timer." }] };
       expect(await runCli(["memo-split", memo.id, "--pieces", tempFile(JSON.stringify(pieces))], h.deps)).toBe(0);
       expect(h.out).toEqual(["filed 1 pieces"]);

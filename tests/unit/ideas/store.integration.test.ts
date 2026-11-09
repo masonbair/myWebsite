@@ -251,7 +251,7 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
     expect(await ideasFiledFrom(client(), [memo.id])).toEqual(new Map([[memo.id, { owned: true, filed: [] }]]));
   });
 
-  it("reports the Ideas Lab owns a memo's ideas while pending or done, not once failed or never queued", async () => {
+  it("reports the Ideas Lab owns a memo's ideas whenever it has a source row, failed included, and not without one", async () => {
     await drain();
     const memo = () => hub().addItem({ title: "HiDock memo y", labels: ["hidock-memo"], source: "memo:phone", clientKey: randomUUID() });
     const [pending, failed, done, none] = await Promise.all([memo(), memo(), memo(), memo()]);
@@ -260,7 +260,7 @@ describe.skipIf(!enabled)("ideas detection store against local Supabase", () => 
     await client().from("idea_sources").update({ status: "done", idea_item_ids: [pending.id] }).eq("source_item_id", done.id);
     const owned = await ideasFiledFrom(client(), [pending.id, failed.id, done.id, none.id]);
     expect(owned.get(pending.id)).toEqual({ owned: true, filed: [] });
-    expect(owned.get(failed.id)).toEqual({ owned: false, filed: [] });
+    expect(owned.get(failed.id)).toEqual({ owned: true, filed: [] });
     expect(owned.get(done.id)).toEqual({ owned: true, filed: [pending.id] });
     expect(owned.get(none.id)).toBeUndefined();
   });

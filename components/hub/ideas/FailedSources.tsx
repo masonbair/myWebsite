@@ -13,7 +13,7 @@ export function FailedSources({ sources }: { sources: FailedSource[] }) {
       <h2 id="failed-sources" className="text-sm font-semibold text-ink">
         Could not read {sources.length} {noun}
       </h2>
-      <p className="mt-1 text-sm text-mute">The Ideas Lab tried three times. Try again to look for ideas in them.</p>
+      <p className="mt-1 text-sm text-mute">The Ideas Lab tried three times. Tap Try again and it looks for ideas in them again within half an hour.</p>
       <ul className="mt-3 flex flex-col gap-2">
         {sources.map((source) => (
           <li key={source.itemId} className="flex flex-wrap items-center justify-between gap-2">

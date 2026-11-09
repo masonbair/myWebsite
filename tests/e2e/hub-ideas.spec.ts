@@ -117,6 +117,7 @@ test.describe("ideas lab", () => {
     await page.goto("/hub/ideas");
     const section = page.getByRole("region", { name: /Could not read \d+ captures? or memos?/ });
     await expect(section).toBeVisible();
+    await expect(section.getByText("looks for ideas in them again within half an hour")).toBeVisible();
     const row = section.getByRole("listitem").filter({ hasText: title });
     await expect(row.getByRole("link", { name: title })).toHaveAttribute("href", `/hub/item/${id}`);
     await row.getByRole("button", { name: "Try again" }).click();
