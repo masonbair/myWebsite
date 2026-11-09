@@ -134,6 +134,18 @@ export async function askSameEvent(anthropic: Anthropic, a: StoryRow, b: StoryRo
   }
 }
 
+/** Storage the clustering loop needs; `supabaseClusterStore` is the real one. */
+export type ClusterStore = {
+  /** The given stories that are kind news and have no cluster yet. */
+  fresh(storyIds: number[]): Promise<StoryRow[]>;
+  /** Current-run news stories dated between `from` and `to`, inclusive. */
+  pool(from: string, to: string): Promise<StoryRow[]>;
+  newCluster(firstDate: string): Promise<number>;
+  /** Puts a story in a cluster unless it already has one; returns the cluster it ends up in. */
+  setCluster(story: StoryRow, clusterId: number): Promise<number | null>;
+  recordDedupe(charge: ModelCharge): Promise<void>;
+};
+
 type DbStory = {
   id: number;
   run_id: number;
@@ -165,95 +177,117 @@ function shiftDay(date: string, days: number): string {
   return new Date(Date.parse(`${date}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
 }
 
-/** Current-run news stories between two dates, in one paged query. */
-async function loadPool(client: SupabaseClient, from: string, to: string): Promise<StoryRow[]> {
-  const PAGE = 1000;
-  const out: StoryRow[] = [];
-  for (let start = 0; ; start += PAGE) {
-    const { data, error } = await client
-      .from("news_stories")
-      .select(`${STORY_COLUMNS}, issue:news_issues(current_run_id), shared:news_shared(current_run_id)`)
-      .eq("kind", "news")
-      .gte("story_date", from)
-      .lte("story_date", to)
-      .order("id")
-      .range(start, start + PAGE - 1);
-    if (error) throw error;
-    const rows = (data ?? []) as unknown as DbStory[];
-    for (const r of rows) {
-      const currentRun = r.issue_id ? r.issue?.current_run_id : r.shared?.current_run_id;
-      if (currentRun === r.run_id) out.push(toStoryRow(r));
-    }
-    if (rows.length < PAGE) break;
-  }
-  return out;
+/** ClusterStore over Supabase; the pool is one paged query per run. */
+export function supabaseClusterStore(client: SupabaseClient): ClusterStore {
+  return {
+    async fresh(storyIds) {
+      const { data, error } = await client.from("news_stories").select(STORY_COLUMNS).in("id", storyIds);
+      if (error) throw error;
+      return ((data ?? []) as DbStory[]).filter((r) => r.kind === "news" && r.cluster_id === null).map(toStoryRow);
+    },
+
+    async pool(from, to) {
+      const PAGE = 1000;
+      const out: StoryRow[] = [];
+      for (let start = 0; ; start += PAGE) {
+        const { data, error } = await client
+          .from("news_stories")
+          .select(`${STORY_COLUMNS}, issue:news_issues(current_run_id), shared:news_shared(current_run_id)`)
+          .eq("kind", "news")
+          .gte("story_date", from)
+          .lte("story_date", to)
+          .order("id")
+          .range(start, start + PAGE - 1);
+        if (error) throw error;
+        const rows = (data ?? []) as unknown as DbStory[];
+        for (const r of rows) {
+          const currentRun = r.issue_id ? r.issue?.current_run_id : r.shared?.current_run_id;
+          if (currentRun === r.run_id) out.push(toStoryRow(r));
+        }
+        if (rows.length < PAGE) break;
+      }
+      return out;
+    },
+
+    async newCluster(firstDate) {
+      const { data, error } = await client.from("news_clusters").insert({ first_date: firstDate }).select("id").single();
+      if (error) throw error;
+      return data.id as number;
+    },
+
+    async setCluster(story, clusterId) {
+      const { data, error } = await client
+        .from("news_stories")
+        .update({ cluster_id: clusterId })
+        .eq("id", story.id)
+        .is("cluster_id", null)
+        .select("id");
+      if (error) throw error;
+      if ((data ?? []).length > 0) {
+        const { error: dateError } = await client
+          .from("news_clusters")
+          .update({ first_date: story.storyDate })
+          .eq("id", clusterId)
+          .gt("first_date", story.storyDate);
+        if (dateError) throw dateError;
+        return clusterId;
+      }
+      const { data: row, error: readError } = await client.from("news_stories").select("cluster_id").eq("id", story.id).single();
+      if (readError) throw readError;
+      return row.cluster_id as number | null;
+    },
+
+    async recordDedupe(charge) {
+      await recordUsage(client, { feature: "news", model: charge.model, itemId: null, purpose: "dedupe", usage: charge.usage });
+    },
+  };
 }
 
-async function newCluster(client: SupabaseClient, firstDate: string): Promise<number> {
-  const { data, error } = await client.from("news_clusters").insert({ first_date: firstDate }).select("id").single();
-  if (error) throw error;
-  return data.id as number;
+/** Clustered candidates first, so an event already split over several days lands in its existing cluster. */
+function askingOrder(candidates: StoryRow[]): StoryRow[] {
+  return [...candidates.filter((c) => c.clusterId !== null), ...candidates.filter((c) => c.clusterId === null)];
 }
 
-/** Puts a story in a cluster unless another run already did; the story's cluster is whichever won. */
-async function setCluster(client: SupabaseClient, story: StoryRow, clusterId: number): Promise<void> {
-  const { data, error } = await client
-    .from("news_stories")
-    .update({ cluster_id: clusterId })
-    .eq("id", story.id)
-    .is("cluster_id", null)
-    .select("id");
-  if (error) throw error;
-  if ((data ?? []).length > 0) {
-    story.clusterId = clusterId;
-    const { error: dateError } = await client
-      .from("news_clusters")
-      .update({ first_date: story.storyDate })
-      .eq("id", clusterId)
-      .gt("first_date", story.storyDate);
-    if (dateError) throw dateError;
-    return;
-  }
-  const { data: row, error: readError } = await client.from("news_stories").select("cluster_id").eq("id", story.id).single();
-  if (readError) throw readError;
-  story.clusterId = row.cluster_id as number | null;
-}
-
-/** Gives each new news story a cluster: joins the first candidate Haiku calls the same event, else starts a new one. */
-export async function assignClusters(client: SupabaseClient, anthropic: Anthropic, storyIds: number[]): Promise<void> {
+/** The clustering loop over any ClusterStore: joins the first candidate Haiku calls the same event, else starts a new cluster. */
+export async function clusterStories(store: ClusterStore, anthropic: Anthropic, storyIds: number[]): Promise<void> {
   if (storyIds.length === 0) return;
-  const { data, error } = await client.from("news_stories").select(STORY_COLUMNS).in("id", storyIds);
-  if (error) throw error;
-  const fresh = ((data ?? []) as DbStory[]).filter((r) => r.kind === "news" && r.cluster_id === null);
+  const fresh = await store.fresh(storyIds);
   if (fresh.length === 0) return;
 
-  const dates = fresh.map((r) => r.story_date).sort();
-  const pool = await loadPool(client, shiftDay(dates[0], -WINDOW_DAYS), shiftDay(dates[dates.length - 1], WINDOW_DAYS));
+  const dates = fresh.map((s) => s.storyDate).sort();
+  const pool = await store.pool(shiftDay(dates[0], -WINDOW_DAYS), shiftDay(dates[dates.length - 1], WINDOW_DAYS));
   const byId = new Map(pool.map((s) => [s.id, s]));
-  for (const r of fresh) if (!byId.has(r.id)) byId.set(r.id, toStoryRow(r));
+  for (const s of fresh) if (!byId.has(s.id)) byId.set(s.id, s);
   const poolList = [...byId.values()];
 
   const order = new Map(storyIds.map((id, i) => [id, i]));
   fresh.sort((x, y) => (order.get(x.id) ?? 0) - (order.get(y.id) ?? 0));
-  for (const r of fresh) {
-    const story = byId.get(r.id)!;
+  for (const { id } of fresh) {
+    const story = byId.get(id)!;
     if (story.clusterId !== null) continue;
     let match: StoryRow | null = null;
-    for (const candidate of candidatePairs(story, poolList)) {
+    const refused = new Set<number>();
+    for (const candidate of askingOrder(candidatePairs(story, poolList))) {
+      // One "no" for a cluster's member is taken as a "no" for the whole cluster, to save calls.
+      if (candidate.clusterId !== null && refused.has(candidate.clusterId)) continue;
       const answer = await askSameEvent(anthropic, story, candidate);
-      if (answer.charge) {
-        await recordUsage(client, { feature: "news", model: answer.charge.model, itemId: null, purpose: "dedupe", usage: answer.charge.usage });
-      }
+      if (answer.charge) await store.recordDedupe(answer.charge);
       if (answer.same) {
         match = candidate;
         break;
       }
+      if (candidate.clusterId !== null) refused.add(candidate.clusterId);
     }
     if (match && match.clusterId === null) {
-      const clusterId = await newCluster(client, match.storyDate < story.storyDate ? match.storyDate : story.storyDate);
-      await setCluster(client, match, clusterId);
+      const created = await store.newCluster(match.storyDate < story.storyDate ? match.storyDate : story.storyDate);
+      match.clusterId = await store.setCluster(match, created);
     }
-    const clusterId = match?.clusterId ?? (await newCluster(client, story.storyDate));
-    await setCluster(client, story, clusterId);
+    const target = match?.clusterId ?? (await store.newCluster(story.storyDate));
+    story.clusterId = await store.setCluster(story, target);
   }
+}
+
+/** Gives each new news story a cluster; see clusterStories. */
+export async function assignClusters(client: SupabaseClient, anthropic: Anthropic, storyIds: number[]): Promise<void> {
+  await clusterStories(supabaseClusterStore(client), anthropic, storyIds);
 }

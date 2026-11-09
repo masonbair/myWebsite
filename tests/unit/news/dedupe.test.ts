@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
-import { askSameEvent, buildSameRequest, candidatePairs, type StoryRow } from "@/lib/news/dedupe";
+import { askSameEvent, buildSameRequest, candidatePairs, clusterStories, type ClusterStore, type StoryRow } from "@/lib/news/dedupe";
 
 const base: StoryRow = {
   id: 1,
@@ -104,5 +104,111 @@ describe("askSameEvent", () => {
     expect(out).toEqual({ same: false, charge: null });
     expect(log).toHaveBeenCalled();
     log.mockRestore();
+  });
+});
+
+function memoryStore(rows: StoryRow[], fresh: number[] = rows.map((r) => r.id)) {
+  const stories = new Map(rows.map((r) => [r.id, { ...r }]));
+  let nextCluster = 1000;
+  const clusters = new Map<number, string>();
+  const charges: unknown[] = [];
+  const store: ClusterStore = {
+    async fresh(ids) {
+      return ids.flatMap((id) => {
+        const s = stories.get(id);
+        return s && s.clusterId === null && fresh.includes(id) ? [{ ...s }] : [];
+      });
+    },
+    async pool(from, to) {
+      return [...stories.values()].filter((s) => s.storyDate >= from && s.storyDate <= to).map((s) => ({ ...s }));
+    },
+    async newCluster(firstDate) {
+      nextCluster += 1;
+      clusters.set(nextCluster, firstDate);
+      return nextCluster;
+    },
+    async setCluster(story, clusterId) {
+      const s = stories.get(story.id)!;
+      if (s.clusterId === null) s.clusterId = clusterId;
+      return s.clusterId;
+    },
+    async recordDedupe(charge) {
+      charges.push(charge);
+    },
+  };
+  return { store, clusterOf: (id: number) => stories.get(id)!.clusterId, charges, clusters };
+}
+
+function answers(...same: boolean[]) {
+  const create = vi.fn();
+  for (const s of same) create.mockResolvedValueOnce(answer(s));
+  return { anthropic: { beta: { messages: { create } } } as unknown as Anthropic, create };
+}
+
+const asked = (create: ReturnType<typeof vi.fn>) =>
+  create.mock.calls.map(([req]) => (req.messages[0].content as string).match(/<headline_b [^>]*>([^<]*)</)?.[1]);
+
+describe("clusterStories", () => {
+  it("starts a cluster without calling the model when there are no candidates", async () => {
+    const m = memoryStore([story({ id: 1 })]);
+    const { anthropic, create } = answers();
+    await clusterStories(m.store, anthropic, [1]);
+    expect(create).not.toHaveBeenCalled();
+    expect(m.clusterOf(1)).not.toBeNull();
+  });
+
+  it("keeps one event in one cluster when it spans days and the new stories arrive together", async () => {
+    const m = memoryStore(
+      [
+        story({ id: 3, origin: "issue-c", storyDate: "2026-11-08", headline: "C", clusterId: 77 }),
+        story({ id: 1, origin: "issue-a", headline: "A" }),
+        story({ id: 2, origin: "issue-b", headline: "B" }),
+      ],
+      [1, 2],
+    );
+    const { anthropic, create } = answers(true, true);
+    await clusterStories(m.store, anthropic, [1, 2]);
+    expect([m.clusterOf(1), m.clusterOf(2), m.clusterOf(3)]).toEqual([77, 77, 77]);
+    expect(asked(create)[0]).toBe("C");
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(m.charges).toHaveLength(2);
+  });
+
+  it("asks only once per cluster after a no", async () => {
+    const m = memoryStore(
+      [
+        story({ id: 1, origin: "issue-a", headline: "New" }),
+        story({ id: 2, origin: "issue-b", headline: "P1", clusterId: 7 }),
+        story({ id: 3, origin: "issue-c", headline: "P2", clusterId: 7 }),
+        story({ id: 4, origin: "issue-d", headline: "Q" }),
+      ],
+      [1],
+    );
+    const { anthropic, create } = answers(false, false);
+    await clusterStories(m.store, anthropic, [1]);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(asked(create)).toEqual(["P1", "Q"]);
+    expect(m.clusterOf(1)).not.toBe(7);
+    expect(m.clusterOf(4)).toBeNull();
+  });
+
+  it("makes one new cluster for both stories on a yes to an unclustered candidate, dated by the earlier one", async () => {
+    const m = memoryStore([story({ id: 1, origin: "issue-a" }), story({ id: 2, origin: "issue-b", storyDate: "2026-11-07" })], [1]);
+    const { anthropic } = answers(true);
+    await clusterStories(m.store, anthropic, [1]);
+    expect(m.clusterOf(1)).not.toBeNull();
+    expect(m.clusterOf(2)).toBe(m.clusterOf(1));
+    expect(m.clusters.get(m.clusterOf(1)!)).toBe("2026-11-07");
+  });
+
+  it("starts a new cluster when the call fails, without recording a charge", async () => {
+    const m = memoryStore([story({ id: 1, origin: "issue-a" }), story({ id: 2, origin: "issue-b", clusterId: 5 })], [1]);
+    const create = vi.fn().mockRejectedValue(new Error("overloaded"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await clusterStories(m.store, { beta: { messages: { create } } } as unknown as Anthropic, [1]);
+    log.mockRestore();
+    expect(m.clusterOf(1)).not.toBe(5);
+    expect(m.clusterOf(1)).not.toBeNull();
+    expect(m.charges).toHaveLength(0);
   });
 });

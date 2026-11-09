@@ -17,7 +17,7 @@ const EXCHANGE = /^[A-Z][A-Z0-9 .\-]{0,29}$/;
 const SUFFIXES = new Set(["inc", "incorporated", "corp", "corporation", "co", "ltd", "limited", "plc"]);
 const US_EXCHANGES = new Set(["NASDAQ", "NYSE", "NYSEAMERICAN", "NYSEARCA", "NYSEMKT", "AMEX", "CBOE", "BATS", "OTC", "OTCMKTS"]);
 // Company names are shown on the public page, so anything that could be markup or a link is refused.
-const UNSAFE_NAME = /[<>\p{Cc}]|https?:|www\./iu;
+const UNSAFE_NAME = /[<>\p{Cc}\p{Cf}]|https?:|www\.|[\p{L}\p{N}-]\.[a-z]{2,}\//iu;
 
 /** Lowercase key for matching names: punctuation and company suffixes (inc, corp, co, ltd, plc) removed. */
 export function normCompany(name: string): string {
@@ -31,7 +31,7 @@ export function cleanCompany(c: CompanyInput): CompanyInput | null {
   if (typeof c.name !== "string") return null;
   const collapsed = c.name.replace(/\s+/g, " ").trim();
   if (UNSAFE_NAME.test(collapsed)) return null;
-  const name = collapsed.slice(0, MAX_NAME).trim();
+  const name = Array.from(collapsed).slice(0, MAX_NAME).join("").trim();
   if (!name || !normCompany(name)) return null;
   const ticker = c.ticker?.trim().toUpperCase() ?? "";
   const exchange = c.exchange?.replace(/\s+/g, " ").trim().toUpperCase() ?? "";
@@ -151,6 +151,12 @@ export function parseSecTickers(json: unknown): SecTicker[] {
   return [...out.values()];
 }
 
+// A write failure only delays verification, so the job keeps going and the next run tries again.
+function secWriteFailed(error: { message: string }): false {
+  console.error(`news sec tickers: saving the list failed: ${error.message}`);
+  return false;
+}
+
 /** Reloads the SEC ticker list at most once per 7 days; false when a due refresh failed (the old table is kept). */
 export async function refreshSecTickers(client: SupabaseClient, fetchFn: typeof fetch, now: Date): Promise<boolean> {
   const { data: state, error: stateError } = await client.from("hub_state").select("value").eq("key", SEC_STATE_KEY).maybeSingle();
@@ -179,9 +185,9 @@ export async function refreshSecTickers(client: SupabaseClient, fetchFn: typeof 
   for (let i = 0; i < rows.length; i += 1000) {
     const chunk = rows.slice(i, i + 1000).map((r) => ({ ...r, refreshed_at: refreshedAt }));
     const { error } = await client.from("news_sec_tickers").upsert(chunk, { onConflict: "ticker" });
-    if (error) throw error;
+    if (error) return secWriteFailed(error);
   }
   const { error } = await client.from("hub_state").upsert({ key: SEC_STATE_KEY, value: refreshedAt, updated_at: refreshedAt });
-  if (error) throw error;
+  if (error) return secWriteFailed(error);
   return true;
 }

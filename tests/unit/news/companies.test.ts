@@ -29,6 +29,16 @@ describe("cleanCompany", () => {
     expect(cleanCompany({ name: "Visit https://evil.example", ticker: null, exchange: null })).toBeNull();
     expect(cleanCompany({ name: "www.evil.example", ticker: null, exchange: null })).toBeNull();
     expect(cleanCompany({ name: "   ", ticker: null, exchange: null })).toBeNull();
+    expect(cleanCompany({ name: "Zero\u200bWidth", ticker: null, exchange: null })).toBeNull();
+    expect(cleanCompany({ name: "Right\u202eLeft", ticker: null, exchange: null })).toBeNull();
+    expect(cleanCompany({ name: "evil.example/offer", ticker: null, exchange: null })).toBeNull();
+    expect(cleanCompany({ name: "Amazon.com", ticker: "AMZN", exchange: "NASDAQ" })?.name).toBe("Amazon.com");
+  });
+
+  it("cuts long names by characters, never splitting an emoji", () => {
+    const name = cleanCompany({ name: `${"A".repeat(79)}\u{1F600}\u{1F600}`, ticker: null, exchange: null })?.name ?? "";
+    expect(Array.from(name)).toHaveLength(80);
+    expect(name.endsWith("\u{1F600}")).toBe(true);
   });
 
   it("keeps a valid ticker, upper-cased, and drops a bad one", () => {
@@ -103,6 +113,18 @@ describe("refreshSecTickers", () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(await refreshSecTickers(client, vi.fn().mockResolvedValue(big) as unknown as typeof fetch, now)).toBe(false);
     expect(from).toHaveBeenCalledTimes(1);
+    log.mockRestore();
+  });
+
+  it("returns false, without throwing, when saving the list fails", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const upsert = vi.fn().mockResolvedValue({ error: { message: "db down" } });
+    const client = { from: vi.fn(() => ({ select: () => ({ eq: () => ({ maybeSingle }) }), upsert })) } as unknown as SupabaseClient;
+    const body = JSON.stringify({ "0": { cik_str: 1, ticker: "NVDA", title: "NVIDIA CORP" } });
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await refreshSecTickers(client, vi.fn().mockResolvedValue(new Response(body)) as unknown as typeof fetch, now)).toBe(false);
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/db down/));
     log.mockRestore();
   });
 

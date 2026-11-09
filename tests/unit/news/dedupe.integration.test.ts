@@ -102,7 +102,7 @@ describe.skipIf(!enabled)("assignClusters against local Supabase", () => {
     expect((await clusterOf([a]))[0]).not.toBeNull();
   });
 
-  it("joins a yes, starts a new cluster on a no, and records one dedupe row per call", async () => {
+  it("joins a yes, starts a new cluster on a no, asks once per cluster, and records one dedupe row per call", async () => {
     const w = await world();
     const before = await dedupeRows();
     const [a] = await w.issue([{ headline: "Nvidia unveils new data center chip", companyIds: [w.company] }]);
@@ -111,7 +111,7 @@ describe.skipIf(!enabled)("assignClusters against local Supabase", () => {
     const second = stubHaiku([true]);
     await assignClusters(client(), second.anthropic, [b]);
     const [c] = await w.issue([{ headline: "Nvidia reports quarterly earnings", companyIds: [w.company] }]);
-    const third = stubHaiku([false, false]);
+    const third = stubHaiku([false]);
     await assignClusters(client(), third.anthropic, [c]);
 
     const [ca, cb, cc] = await clusterOf([a, b, c]);
@@ -120,8 +120,9 @@ describe.skipIf(!enabled)("assignClusters against local Supabase", () => {
     expect(cc).not.toBeNull();
     expect(cc).not.toBe(ca);
     expect(second.create).toHaveBeenCalledTimes(1);
-    expect(third.create).toHaveBeenCalledTimes(2);
-    expect((await dedupeRows()) - before).toBe(3);
+    // a and b share a cluster, so one "no" covers both.
+    expect(third.create).toHaveBeenCalledTimes(1);
+    expect((await dedupeRows()) - before).toBe(2);
   });
 
   it("clusters stories from the same batch together and ignores old runs, other kinds and the same issue", async () => {
@@ -142,6 +143,20 @@ describe.skipIf(!enabled)("assignClusters against local Supabase", () => {
     expect(ca).not.toBeNull();
     expect(cb).toBe(ca);
     expect(await clusterOf([sameIssue, stale, sponsor, far])).toEqual([null, null, null, null]);
+  });
+
+  it("keeps an event that spans days in its existing cluster when the new stories arrive together", async () => {
+    const w = await world();
+    const [c] = await w.issue([{ headline: "Chip export rules tightened", companyIds: [w.company], day: 9 }]);
+    await assignClusters(client(), stubHaiku([]).anthropic, [c]);
+    const [a] = await w.issue([{ headline: "Export rules on chips tightened", companyIds: [w.company] }]);
+    const [b] = await w.issue([{ headline: "New limits on chip exports", companyIds: [w.company] }]);
+    const { anthropic, create } = stubHaiku([true, true]);
+    await assignClusters(client(), anthropic, [a, b]);
+    const [ca, cb, cc] = await clusterOf([a, b, c]);
+    expect(cc).not.toBeNull();
+    expect([ca, cb]).toEqual([cc, cc]);
+    expect(create).toHaveBeenCalledTimes(2);
   });
 
   it("treats a failed call as not same and moves on", async () => {
