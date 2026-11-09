@@ -92,7 +92,10 @@ pg_cron every 15 min ──pg_net──▶ /api/hub/events/ideas
 ### Quick capture and voice
 
 - The capture screen keeps working exactly as today. **(Spec writer's call)** It gains one extra button, **"Save as idea"**, next to Save. It files the item straight into the Ideas list with the `idea` label. No detection step is needed for it.
-- A plain capture (Save) still lands in the inbox. The detection step (section 2) reads it. If the whole capture is one idea, the job moves that item to the Ideas list and adds the `idea` label. It does not change the title or text. **(Spec writer's call)** Moving list and adding `idea` are changes the worker role may already make to an open item, and every change is in `audit_log`.
+- A plain capture (Save) still lands in the inbox. The detection step (section 2) reads it. **(Spec writer's call, from the builder check)**
+  - **Move** only when the whole capture is one idea and the model marks itself sure (a `sure` field in its reply). The job moves the item to the Ideas list and adds the `idea` label. It does not change the title or text. Moving list and adding `idea` are changes the worker role may already make to an open item, and every change is in `audit_log`.
+  - **Copy** in every other case: the capture stays in the inbox untouched, and a new linked idea item is made, the same way memos work. A to-do that only looks like an idea never leaves the inbox.
+  - The moved item's page says "Moved here from the inbox by the Ideas Lab", with a "Back to inbox" button, so a wrong move is one tap to undo.
 - Shares (source `share`) are not read for ideas. They are articles, not Mason's own ideas.
 
 ### HiNote recordings and memos
@@ -196,6 +199,7 @@ Ideas stay ordinary hub items (list `ideas`, label `idea`), so lists, search, co
 ### Schedule **(Coordinator's call; Mason did not pick)**
 
 - Each reviewed idea comes back at **+3 days, +2 weeks and +2 months** from capture. Then it stops.
+- **Which ideas get a schedule (Spec writer's call, from the builder check):** only ideas captured after launch, plus an older or imported idea once Mason taps "Review" on it (its schedule then counts from that day). Older and imported ideas never join on their own, so the Todoist import cannot flood the calendar.
 - It stops early when Mason acts on it: promotes it to a task, marks it done, or taps "Stop reminders".
 - "Review again" restarts the schedule from that day, since the idea has changed.
 - An idea with no review yet (cap reached, or failed) still comes back on time; the event says the review is waiting.
@@ -323,8 +327,19 @@ Steps 2 and 3 already give Mason value; the calendar can follow.
 
 ## Open questions for Mason
 
-(Filled in after the builder check, below.)
+1. **Should HiNote recordings start going to the hub now, or wait for the Todoist cutover (project 5)?**
+   - **Now:** the builder points `HINOTE_UPLOAD_URL` on the Mac and phone at `https://masonbair.com/api/memo` (Mason enters the token) and seeds the files already filed (`hub memo-seed`), so nothing is filed twice. Ideas in recordings are caught from day one. The cost: recordings stop reaching Todoist, and their to-dos sit unsplit in the hub inbox (readable, not sorted) until the worker goes live.
+   - **Wait:** memo detection is built and tested on fake memos only, and switches on at cutover. Until then, only quick capture and voice feed the Ideas Lab.
+   - Either way, build steps 1 to 3 do not depend on the answer.
 
-## Builder check
+Settled without Mason (Spec writer's calls; he can overrule): the $20 monthly cap, web search on with a per-idea off switch, Opus 5.5 for reviews, events at 9:00 his time.
 
-(Filled in below.)
+## Builder check (2026-11-09)
+
+A fresh builder read this doc and asked three questions. Sorted:
+
+| Question | Sorted as | Answer |
+|---|---|---|
+| Should HiNote recordings reach the hub before the cutover? | Mason's | Open question 1. |
+| Do older and imported ideas come back on the calendar? | Spec writer's call | Only new ideas, or older ones once Mason taps "Review". See section 6. |
+| Does detection move a whole capture to Ideas, or copy it? | Spec writer's call | Move only when the model is sure; otherwise copy. One-tap undo. See section 1. |
