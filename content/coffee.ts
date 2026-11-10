@@ -47,7 +47,7 @@ export const coffee: {
   faqs: { q: string; a: string }[];
   linksHeading: string;
 } = {
-  title: "Coffee chat",
+  title: "Free Coffee Chat with Mason Bair, Software Engineer",
   description:
     "Book a free 30 minute video coffee chat with Mason Bair, a software engineer and digital nomad. He likes meeting people who have something interesting to share, whatever they do.",
   heading: "Coffee chat with Mason Bair",

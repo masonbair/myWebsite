@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { PHONE } from "./phone";
 
 const BOOKING_URL = "https://calendar.app.google/suAxGdTVkbEB2GFN6";
@@ -21,6 +21,12 @@ const BOTS = [
 ];
 
 type Node = Record<string, unknown>;
+
+async function expectTitles(page: Page, title: string) {
+  await expect(page).toHaveTitle(title);
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", title);
+  await expect(page.locator('meta[name="twitter:title"]')).toHaveAttribute("content", title);
+}
 
 async function jsonLdBlocks(request: APIRequestContext, path: string) {
   const html = await (await request.get(path)).text();
@@ -111,7 +117,7 @@ test.describe("crawl files", () => {
 
   test("home canonical and title", async ({ page }) => {
     await page.goto("/");
-    await expect(page).toHaveTitle("Mason Bair");
+    await expectTitles(page, "Mason Bair | Software Engineer & Digital Nomad");
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://masonbair.com");
     await expect(page.locator('meta[property="og:image"]').first()).toHaveAttribute("content", /opengraph-image/);
   });
@@ -134,7 +140,7 @@ test.describe("coffee page", () => {
     expect(questions).toBeGreaterThanOrEqual(3);
     expect(questions).toBeLessThanOrEqual(8);
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://masonbair.com/coffee");
-    await expect(page).toHaveTitle("Coffee chat | Mason Bair");
+    await expectTitles(page, "Free Coffee Chat with Mason Bair, Software Engineer");
     await expect(page.getByRole("main").getByRole("link", { name: /GitHub/ })).toHaveAttribute("href", "https://github.com/masonbair");
     await expect(page.getByRole("main").getByRole("link", { name: /LinkedIn/ })).toHaveAttribute(
       "href",

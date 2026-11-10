@@ -21,10 +21,10 @@ import { contact } from "@/content/site";
 import { coffeeJsonLd } from "@/lib/jsonld";
 
 export const metadata: Metadata = {
-  title: coffee.title,
+  title: { absolute: coffee.title },
   description: coffee.description,
   alternates: { canonical: "/coffee" },
-  openGraph: { type: "website", siteName: "Mason Bair", title: coffee.heading, description: coffee.description, url: "/coffee" },
+  openGraph: { type: "website", siteName: "Mason Bair", title: coffee.title, description: coffee.description, url: "/coffee" },
 };
 
 const topicIcons: Record<TopicIcon, Icon> = {
