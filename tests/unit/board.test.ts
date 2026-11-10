@@ -1,15 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getBoard } from "@/lib/board";
+import { getBoard, lowerKeys, lowerSpans, MAX_BOARD_TILES } from "@/lib/board";
 import { parseNow, readNow } from "@/lib/now";
 import type { GithubActivity } from "@/lib/github";
+import type { PublicTrends } from "@/lib/news/public";
 
 const now = parseNow({ countriesVisited: 23 });
 const github: GithubActivity = { commits30d: 4, private30d: 0, total30d: 4, repos30d: 2, recent: [], online: [] };
+const trends: PublicTrends = { today: "2026-11-09", rows: [] };
+const noTrends = async () => null;
 
 describe("getBoard", () => {
   it("getBoard merges sources", async () => {
-    const board = await getBoard({ readNow: async () => now, github: async () => github });
-    expect(board).toEqual({ now, github });
+    const board = await getBoard({ readNow: async () => now, github: async () => github, trends: async () => trends });
+    expect(board).toEqual({ now, github, trends });
   });
 
   it("getBoard survives github throwing", async () => {
@@ -18,14 +21,28 @@ describe("getBoard", () => {
       github: () => {
         throw new Error("rate limited");
       },
+      trends: noTrends,
     });
-    expect(board).toEqual({ now, github: null });
+    expect(board).toEqual({ now, github: null, trends: null });
   });
 
   it("getBoard survives the now source throwing", async () => {
-    const board = await getBoard({ readNow: async () => Promise.reject(new Error("down")), github: async () => github });
+    const board = await getBoard({
+      readNow: async () => Promise.reject(new Error("down")),
+      github: async () => github,
+      trends: noTrends,
+    });
     expect(board.now).toEqual(parseNow(null));
     expect(board.github).toEqual(github);
+  });
+
+  it("getBoard survives the trends source throwing", async () => {
+    const board = await getBoard({
+      readNow: async () => now,
+      github: async () => github,
+      trends: () => Promise.reject(new Error("down")),
+    });
+    expect(board.trends).toBeNull();
   });
 });
 
@@ -48,5 +65,53 @@ describe("readNow fixture override", () => {
     vi.stubEnv("NOW_FIXTURE", "full.json");
     vi.stubEnv("NODE_ENV", "production");
     expect((await readNow()).place?.city).not.toBe("Lisbon");
+  });
+});
+
+describe("lowerSpans", () => {
+  const cols = (span: string, bp: "md" | "lg") => Number(new RegExp(`${bp}:col-span-(\\d+)`).exec(span)?.[1]);
+
+  // Packs spans left to right the way the grid does and reports any row left short.
+  function shortRows(spans: string[], bp: "md" | "lg", width: number) {
+    const rows: number[] = [0];
+    for (const s of spans) {
+      const n = cols(s, bp);
+      if (rows[rows.length - 1] + n > width) rows.push(0);
+      rows[rows.length - 1] += n;
+    }
+    return rows.filter((r) => r !== width);
+  }
+
+  for (const keys of [["projects"], ["news"], ["projects", "news"], ["news", "bake"], ["projects", "bake"], ["projects", "news", "bake"]]) {
+    it(`fills every row for ${keys.join(" + ")}`, () => {
+      const spans = [...lowerSpans(keys).values()];
+      expect(spans).toHaveLength(keys.length);
+      expect(shortRows(spans, "lg", 12)).toEqual([]);
+      expect(shortRows(spans, "md", 6)).toEqual([]);
+    });
+  }
+});
+
+describe("lowerKeys", () => {
+  const flags = [true, false];
+
+  it(`keeps the board at ${MAX_BOARD_TILES} tiles or fewer in every combination`, () => {
+    for (const firstScreen of [3, 4, 5, 6])
+      for (const projects of flags)
+        for (const news of flags)
+          for (const bake of flags)
+            expect(firstScreen + lowerKeys(firstScreen, { projects, news, bake }).length).toBeLessThanOrEqual(MAX_BOARD_TILES);
+  });
+
+  it("shows news when there is room", () => {
+    expect(lowerKeys(4, { projects: true, news: true, bake: true })).toEqual(["projects", "news", "bake"]);
+  });
+
+  it("drops news first when the board would pass the cap", () => {
+    expect(lowerKeys(6, { projects: true, news: true, bake: true })).toEqual(["projects", "bake"]);
+  });
+
+  it("leaves news out when it has fewer than three rising topics", () => {
+    expect(lowerKeys(4, { projects: false, news: false, bake: true })).toEqual(["bake"]);
   });
 });

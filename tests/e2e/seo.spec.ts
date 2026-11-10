@@ -91,12 +91,13 @@ test.describe("crawl files", () => {
     expect(text).not.toMatch(/Disallow: \/\s*$/m);
   });
 
-  test("sitemap lists home and coffee", async ({ request }) => {
+  test("sitemap lists home, coffee and trends", async ({ request }) => {
     const res = await request.get("/sitemap.xml");
     expect(res.status()).toBe(200);
     const xml = await res.text();
     expect(xml).toContain("<loc>https://masonbair.com</loc>");
     expect(xml).toContain("<loc>https://masonbair.com/coffee</loc>");
+    expect(xml).toContain("<loc>https://masonbair.com/trends</loc>");
   });
 
   test("llms.txt is plain text with the coffee link and no phone", async ({ request }) => {

@@ -4,6 +4,7 @@ import { CLAUDE_LABEL } from "./rules";
 import { notify } from "./notify";
 import { offsetMinutesAt } from "./schedule";
 import type { IdeasRunResult } from "@/lib/ideas/job";
+import type { NewsJobResult } from "@/lib/news/job";
 import type { BackupResult } from "./backup";
 import type { HubStore, Item } from "./types";
 
@@ -28,6 +29,8 @@ export type EventDeps = {
   backup: (() => Promise<BackupResult>) | null;
   /** One Ideas Lab run; null only in tests that leave it out. */
   ideas?: (() => Promise<IdeasRunResult>) | null;
+  /** One news job run; null when the news Claude key is unset. */
+  news: (() => Promise<NewsJobResult>) | null;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -234,6 +237,10 @@ export async function handleEventRequest(request: Request, event: string, deps: 
     if (event === "ideas") {
       if (!deps.ideas) return json({ error: "ideas are not configured" }, 503);
       return json(await deps.ideas());
+    }
+    if (event === "news") {
+      if (!deps.news) return json({ error: "news is not configured" }, 503);
+      return json(await deps.news());
     }
     return json({ error: "not found" }, 404);
   } catch (e) {

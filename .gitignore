@@ -17,3 +17,6 @@ supabase/.temp/
 # local agent/tool folders
 .claude/worktrees/
 .nodeterm/
+
+# model comparison output (real newsletter content)
+.news-compare/

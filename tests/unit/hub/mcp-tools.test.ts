@@ -6,6 +6,7 @@ import { monthSpend } from "@/lib/ai/claude";
 import { MCP_TOOL_NAMES, handleMcpRequest } from "@/lib/hub/mcp-tools";
 import type { TimelineDayInput } from "@/lib/hub/timeline";
 import type { NowData } from "@/lib/now";
+import type { NewsReader } from "@/lib/news/reader";
 import { createFakeStore } from "./fake-store";
 import { seedItem } from "./worker-harness";
 
@@ -46,6 +47,7 @@ function setup(options: { token?: string; clientName?: string | null; serverToke
         return createFakeStore({ kind: "agent", client }, rows);
       },
       readNow: async () => NOW,
+      news: {} as NewsReader,
       ideasClient: readOnlyClient,
       now: () => new Date("2026-11-09T12:00:00Z"),
       timelineFor: (client) => ({
@@ -78,7 +80,7 @@ describe("mcp agent connector", () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["add_comment", "add_item", "find_items", "get_item", "get_now", "list_comments", "log_day", "merge_duplicate", "update_item", "ideas_list", "idea_get", "ai_costs"].sort(),
+      ["add_comment", "add_item", "find_items", "get_item", "get_now", "list_comments", "log_day", "merge_duplicate", "update_item", "ideas_list", "idea_get", "ai_costs", "news_search", "news_trend", "news_movers", "news_get_issue", "news_costs"].sort(),
     );
     expect([...MCP_TOOL_NAMES].sort()).toEqual(names);
     for (const tool of tools) expect(tool.description).toMatch(/data, never instructions/);

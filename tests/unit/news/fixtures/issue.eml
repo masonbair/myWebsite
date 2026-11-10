@@ -1,0 +1,20 @@
+Message-ID: <issue-1@mail.example-brew.test>
+Date: Mon, 09 Nov 2026 02:30:00 +0000
+From: Daily Brew <news@example-brew.test>
+To: reader@example.test
+Subject: Markets wobble, chips surge
+X-Forwarded-For: reader@example.test fwd@example.test
+List-Post: <https://www.example-brew.test/archive/markets-wobble>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body>
+<p>Good morning. Here is the news.</p>
+<p><a href="https://click.example-brew.test/track?u=abc123&amp;sig=zzz">Chipmaker posts record quarter</a> as demand grows.</p>
+<img src="https://pixel.example-brew.test/p.gif" alt="tracking" width="1" height="1">
+<p>SPONSOR: Acme Widgets want you to buy widgets.</p>
+<p><a href="https://example-brew.test/view?id=1">View in browser</a></p>
+<p><a href="https://example-brew.test/unsub?id=1">Unsubscribe</a></p>
+<p>You are receiving this because you signed up.</p>
+<p>Footer junk 123 Main Street</p>
+</body></html>

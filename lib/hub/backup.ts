@@ -46,6 +46,25 @@ export type BackupCollectorPhoto = {
 export type BackupDaylioExport = { id: number; path: string; filename: string; sizeBytes: number; modifiedAt: string; createdAt: string };
 export type BackupAuditEntry = { id: number; actor: string; action: string; itemId: string | null; detail: unknown; at: string };
 
+type Row = Record<string, unknown>;
+
+/** News tables as raw rows; the long texts (`clean_text`, `fetched_text`) are left out because Blob raw files rebuild them. */
+export type BackupNews = {
+  sources: Row[];
+  runs: Row[];
+  issues: Row[];
+  shared: Row[];
+  clusters: Row[];
+  companies: Row[];
+  topics: Row[];
+  stories: Row[];
+};
+
+export const NEWS_ISSUE_COLUMNS =
+  "id,source_id,message_id,subject,from_address,received_at,published_on,raw_path,public_url,status,attempts,next_attempt_at,claimed_at,last_error,current_run_id,created_at";
+export const NEWS_SHARED_COLUMNS =
+  "id,item_id,url,title,thin,status,attempts,next_attempt_at,claimed_at,last_error,current_run_id,created_at";
+
 export type BackupAiUsage = {
   id: number;
   feature: string;
@@ -136,6 +155,7 @@ export type Snapshot = {
   collectorDaylioExport: BackupDaylioExport[];
   itemsHistory: ItemVersion[];
   auditLog: BackupAuditEntry[];
+  news: BackupNews;
   aiUsage: BackupAiUsage[];
   ideaSettings: BackupIdeaSettings[];
   ideaReviews: BackupIdeaReview[];
@@ -157,6 +177,7 @@ export interface SnapshotSource {
   collectorDaylioExport(): Promise<BackupDaylioExport[]>;
   itemsHistory(): Promise<ItemVersion[]>;
   auditLog(): Promise<BackupAuditEntry[]>;
+  news(): Promise<BackupNews>;
   aiUsage(): Promise<BackupAiUsage[]>;
   ideaSettings(): Promise<BackupIdeaSettings[]>;
   ideaReviews(): Promise<BackupIdeaReview[]>;
@@ -190,6 +211,7 @@ export async function snapshot(source: SnapshotSource, now: Date = new Date()): 
   const comments = await source.comments();
   const itemsHistory = await source.itemsHistory();
   const auditLog = await source.auditLog();
+  const news = await source.news();
   const aiUsage = await source.aiUsage();
   const ideaSettings = await source.ideaSettings();
   const ideaReviews = await source.ideaReviews();
@@ -209,6 +231,7 @@ export async function snapshot(source: SnapshotSource, now: Date = new Date()): 
     collectorDaylioExport,
     itemsHistory,
     auditLog,
+    news,
     aiUsage,
     ideaSettings,
     ideaReviews,
@@ -283,15 +306,15 @@ function toBackupItem(row: ItemRow): BackupItem {
 
 /** Reads whole tables through the service client, paging by key so rows written meanwhile never shift a page. */
 export function createSnapshotSource(client: SupabaseClient): SnapshotSource {
-  async function all<T extends Record<string, unknown>>(table: string, key: string): Promise<T[]> {
+  async function all<T extends Record<string, unknown>>(table: string, key: string, columns = "*"): Promise<T[]> {
     const rows: T[] = [];
     for (;;) {
-      let query = client.from(table).select("*").order(key, { ascending: true }).limit(PAGE);
+      let query = client.from(table).select(columns).order(key, { ascending: true }).limit(PAGE);
       const last = rows.at(-1);
       if (last) query = query.gt(key, last[key] as string);
       const { data, error } = await query;
       if (error) throw error;
-      rows.push(...(data as T[]));
+      rows.push(...(data as unknown as T[]));
       if (data.length < PAGE) return rows;
     }
   }
@@ -405,6 +428,15 @@ export function createSnapshotSource(client: SupabaseClient): SnapshotSource {
         "id",
       );
       return rows.map((r) => ({ id: r.id, actor: r.actor, action: r.action, itemId: r.item_id, detail: r.detail, at: r.at }));
+    },
+    async news() {
+      try {
+        return await readNews();
+      } catch (error) {
+        // Deploying before 0009 is pushed must not break the nightly backup.
+        if (isMissingTable(error)) return { sources: [], runs: [], issues: [], shared: [], clusters: [], companies: [], topics: [], stories: [] };
+        throw error;
+      }
     },
     async aiUsage() {
       const rows = await all<{
@@ -573,6 +605,25 @@ export function createSnapshotSource(client: SupabaseClient): SnapshotSource {
       }));
     },
   };
+
+  async function readNews(): Promise<BackupNews> {
+    // Children first: these tables are never deleted, so every parent a story points at is already there when it is read.
+    const stories = await all<Row>("news_stories", "id");
+    const shared = await all<Row>("news_shared", "id", NEWS_SHARED_COLUMNS);
+    const issues = await all<Row>("news_issues", "id", NEWS_ISSUE_COLUMNS);
+    const clusters = await all<Row>("news_clusters", "id");
+    const companies = await all<Row>("news_companies", "id");
+    const runs = await all<Row>("news_extraction_runs", "id");
+    const topics = await all<Row>("news_topics", "slug");
+    const sources = await all<Row>("news_sources", "id");
+    return { sources, runs, issues, shared, clusters, companies, topics, stories };
+  }
+}
+
+/** Postgres "undefined table" or PostgREST "table not in the schema cache". */
+function isMissingTable(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === "42P01" || code === "PGRST205";
 }
 
 /** The private Vercel Blob store, authenticated by the function's OIDC token plus BLOB_STORE_ID; no read-write token. */

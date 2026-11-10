@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +11,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   BACKUP_PREFIX,
   KEEP_BACKUPS,
+  NEWS_ISSUE_COLUMNS,
+  NEWS_SHARED_COLUMNS,
   backupPath,
   createSnapshotSource,
   runBackup,
@@ -34,6 +37,19 @@ async function restore(args: string[]): Promise<{ code: number; stdout: string; 
   }
 }
 
+const RESTORE_SOURCE = readFileSync(RESTORE, "utf8");
+
+/** The per-table column lists written in scripts/hub-restore.ts, with its two shared constants resolved. */
+function restoreColumns(): Record<string, string[]> {
+  const block = RESTORE_SOURCE.slice(RESTORE_SOURCE.indexOf("const NEWS_COLUMNS"), RESTORE_SOURCE.indexOf("} as const"));
+  const named: Record<string, string> = { NEWS_ISSUE_COLUMNS, NEWS_SHARED_COLUMNS };
+  const out: Record<string, string[]> = {};
+  for (const m of block.matchAll(/(news_\w+):\s*(?:"([^"]+)"|(NEWS_\w+))/g)) out[m[1]] = (m[2] ?? named[m[3]]).split(",");
+  return out;
+}
+
+const emptyNews = { sources: [], runs: [], issues: [], shared: [], clusters: [], companies: [], topics: [], stories: [] };
+
 const emptySource: SnapshotSource = {
   items: async () => [],
   comments: async () => [],
@@ -46,6 +62,7 @@ const emptySource: SnapshotSource = {
   collectorDaylioExport: async () => [],
   itemsHistory: async () => [],
   auditLog: async () => [],
+  news: async () => emptyNews,
   aiUsage: async () => [],
   ideaSettings: async () => [],
   ideaReviews: async () => [],
@@ -116,6 +133,7 @@ describe("snapshot", () => {
       collectorDaylioExport: [daylio],
       itemsHistory: [version],
       auditLog: [audit],
+      news: emptyNews,
       aiUsage: [],
       ideaSettings: [],
       ideaReviews: [],
@@ -150,6 +168,74 @@ describe("snapshot", () => {
       ideaResurface: [resurface],
       ideaRecordings: [recording],
     });
+  });
+});
+
+describe("news snapshot", () => {
+  it("reads every news table and asks for no clean_text or fetched_text", async () => {
+    const selects: Record<string, string> = {};
+    const client = {
+      from(table: string) {
+        const q = {
+          select(columns: string) {
+            selects[table] = columns;
+            return q;
+          },
+          order: () => q,
+          limit: () => q,
+          gt: () => q,
+          then: (resolve: (v: { data: unknown[]; error: null }) => void) => resolve({ data: [], error: null }),
+        };
+        return q;
+      },
+    };
+    const news = await createSnapshotSource(client as never).news();
+    expect(Object.keys(news).sort()).toEqual(Object.keys(emptyNews).sort());
+    expect(Object.keys(selects).sort()).toEqual(
+      ["news_clusters", "news_companies", "news_extraction_runs", "news_issues", "news_shared", "news_sources", "news_stories", "news_topics"],
+    );
+    expect(selects.news_issues).not.toContain("clean_text");
+    expect(selects.news_shared).not.toContain("fetched_text");
+    expect(selects.news_issues).toContain("raw_path");
+  });
+});
+
+describe("news snapshot before 0009", () => {
+  function failingClient(error: { code: string; message: string }) {
+    return {
+      from() {
+        const q = {
+          select: () => q,
+          order: () => q,
+          limit: () => q,
+          gt: () => q,
+          then: (resolve: (v: { data: null; error: typeof error }) => void) => resolve({ data: null, error }),
+        };
+        return q;
+      },
+    };
+  }
+
+  it("returns an empty news section when the news tables are missing", async () => {
+    for (const code of ["42P01", "PGRST205"]) {
+      const news = await createSnapshotSource(failingClient({ code, message: "missing" }) as never).news();
+      expect(news).toEqual(emptyNews);
+    }
+  });
+
+  it("still fails on any other error", async () => {
+    await expect(createSnapshotSource(failingClient({ code: "57014", message: "timeout" }) as never).news()).rejects.toMatchObject({ code: "57014" });
+  });
+});
+
+describe("restore column lists", () => {
+  it("uses the same issue and shared column lists as the snapshot, and lists all eight news tables", () => {
+    const cols = restoreColumns();
+    expect(RESTORE_SOURCE).toContain(NEWS_ISSUE_COLUMNS);
+    expect(RESTORE_SOURCE).toContain(NEWS_SHARED_COLUMNS);
+    expect(cols.news_issues).toEqual(NEWS_ISSUE_COLUMNS.split(","));
+    expect(cols.news_shared).toEqual(NEWS_SHARED_COLUMNS.split(","));
+    expect(Object.keys(cols)).toHaveLength(8);
   });
 });
 
@@ -251,7 +337,7 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
   async function createScratch(name: string): Promise<void> {
     await withDb(`${LOCAL_DB}/postgres`, (db) => db.query(`create database ${name}`));
     const migrations = await Promise.all(
-      ["0002_hub.sql", "0003_hub_memo.sql", "0005_now.sql", "0006_hub_history.sql", "0007_collector.sql", "0008_ideas_lab.sql"].map((m) =>
+      ["0002_hub.sql", "0003_hub_memo.sql", "0005_now.sql", "0006_hub_history.sql", "0007_collector.sql", "0008_ideas_lab.sql", "0009_news.sql"].map((m) =>
         readFile(join(__dirname, "../../../supabase/migrations", m), "utf8"),
       ),
     );
@@ -292,6 +378,33 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
     });
     if (photo.error || daylio.error) throw photo.error ?? daylio.error;
 
+    const tag = randomUUID();
+    const run = await client.from("news_extraction_runs").insert({ model: "test", prompt_version: "t1", kind: "daily" }).select("id").single();
+    if (run.error) throw run.error;
+    const issue = await client
+      .from("news_issues")
+      .insert({ source_id: "rundown-ai", message_id: `backup-${tag}`, subject: "synthetic", raw_path: `news/raw/${tag}.eml`, clean_text: "SECRET BODY", status: "done" })
+      .select("id")
+      .single();
+    const cluster = await client.from("news_clusters").insert({ first_date: "2026-11-04" }).select("id").single();
+    const topic = await client.from("news_topics").upsert({ slug: "backup-topic", name: "Backup topic" });
+    if (issue.error || cluster.error || topic.error) throw issue.error ?? cluster.error ?? topic.error;
+    const stories = await client.from("news_stories").insert(
+      [4, 5].map((day) => ({
+        run_id: run.data.id,
+        issue_id: issue.data.id,
+        source_id: "rundown-ai",
+        story_date: `2026-11-0${day}`,
+        headline: `backup story ${day}`,
+        kind: "news",
+        sentiment: 1,
+        topics: ["backup-topic"],
+        cluster_id: cluster.data.id,
+      })),
+    );
+    if (stories.error) throw stories.error;
+    const current = await client.from("news_issues").update({ current_run_id: run.data.id }).eq("id", issue.data.id);
+    if (current.error) throw current.error;
     // A capture filed straight to Ideas fires the live intake trigger; a restore that fired it again would hit a duplicate key.
     const idea = await store.addItem({ title: "backup idea", source: "capture", list: "ideas" });
     const recordingFile = `backup-${randomUUID()}.txt`;
@@ -417,6 +530,49 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
     await withDb(`${LOCAL_DB}/${oldScratch}`, async (db) => {
       expect((await db.query("select count(*)::int as n from public.items")).rows[0].n).toBe(shot.items.length);
       expect((await db.query("select count(*)::int as n from public.idea_settings")).rows[0].n).toBe(0);
+    });
+  }, 60_000);
+
+  it("restores the news tables without cleaned text, moves their sequences and rebuilds trends", async () => {
+    expect(shot.news.stories.length).toBeGreaterThanOrEqual(2);
+    expect(JSON.stringify(shot.news)).not.toContain("SECRET BODY");
+    expect(shot.news.issues.every((i) => !("clean_text" in i))).toBe(true);
+    expect(shot.news.shared.every((i) => !("fetched_text" in i))).toBe(true);
+    await withDb(scratchUrl, async (db) => {
+      const count = async (table: string) => (await db.query(`select count(*)::int as n from public.${table}`)).rows[0].n as number;
+      expect(await count("news_stories")).toBe(shot.news.stories.length);
+      expect(await count("news_issues")).toBe(shot.news.issues.length);
+      expect(await count("news_clusters")).toBe(shot.news.clusters.length);
+      expect(await count("news_extraction_runs")).toBe(shot.news.runs.length);
+      expect(await count("news_sources")).toBe(shot.news.sources.length);
+      const issue = (await db.query("select clean_text, raw_path from public.news_issues where subject = 'synthetic' limit 1")).rows[0];
+      expect(issue).toMatchObject({ clean_text: "" });
+      expect(issue.raw_path).toContain("news/raw/");
+      const trends = (await db.query("select count(*)::int as n from public.news_trends_daily where key = 'backup-topic'")).rows[0].n;
+      expect(trends).toBeGreaterThanOrEqual(2);
+      const maxOf = (rows: Record<string, unknown>[]) => Math.max(0, ...rows.map((r) => Number(r.id)));
+      const sequences = [
+        ["news_extraction_runs", shot.news.runs],
+        ["news_companies", shot.news.companies],
+        ["news_clusters", shot.news.clusters],
+        ["news_stories", shot.news.stories],
+      ] as const;
+      for (const [table, rows] of sequences) {
+        const next = (await db.query(`select nextval(pg_get_serial_sequence('public.${table}', 'id'))::int as id`)).rows[0].id;
+        expect(next, table).toBeGreaterThan(maxOf([...rows]));
+      }
+    });
+  }, 60_000);
+
+  it("restores every column of the news tables except the two long texts", async () => {
+    await withDb(scratchUrl, async (db) => {
+      const left = new Set(["clean_text", "fetched_text"]);
+      for (const [table, listed] of Object.entries(restoreColumns())) {
+        const actual = (
+          await db.query("select column_name from information_schema.columns where table_schema = 'public' and table_name = $1", [table])
+        ).rows.map((r) => r.column_name as string);
+        expect([...listed].sort(), table).toEqual(actual.filter((c) => !left.has(c)).sort());
+      }
     });
   }, 60_000);
 

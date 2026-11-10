@@ -43,6 +43,8 @@ const fixtureServers = FIXTURES.map((f) => ({
   env: {
     // The github server shows the full board plus fixture GitHub data.
     NOW_FIXTURE: f === "github" ? "full.json" : `${f}.json`,
+    // Only the full and empty boards read trends, so the other fixture boards keep their tile layouts.
+    TRENDS_FIXTURE: f === "full" ? "trends.json" : f === "empty" ? "empty.json" : "",
     GITHUB_TOKEN: "",
     SUPABASE_URL: "",
     ...(f === "github" ? { GITHUB_FIXTURE: "github-graphql.json" } : {}),

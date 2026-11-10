@@ -1,10 +1,12 @@
-import type { Board as BoardData } from "@/lib/board";
+import { lowerKeys, lowerSpans, type Board as BoardData } from "@/lib/board";
+import { movers, risingTopics } from "@/lib/news/movers";
 import type { Photo } from "@/lib/now";
 import { Reveal } from "./Reveal";
 import { BakeTile } from "./tiles/BakeTile";
 import { GithubTile } from "./tiles/GithubTile";
 import { HelloTile } from "./tiles/HelloTile";
 import { LocationTile } from "./tiles/LocationTile";
+import { NewsTile } from "./tiles/NewsTile";
 import { PhotoTile } from "./tiles/PhotoTile";
 import { ProjectsTile } from "./tiles/ProjectsTile";
 
@@ -14,17 +16,18 @@ const FALLBACK_PHOTO: Photo = {
 };
 
 const TALL = "md:col-span-3 md:row-span-2 lg:col-span-3 lg:row-span-2";
-
 // These fill the first screen, so they paint at once: a fade-in there blanks Lighthouse's filmstrip and raises Speed Index.
 const FIRST_SCREEN = new Set(["hello", "location", "photo", "github"]);
 
 // Spans are picked from which tiles exist so every grid row is filled; dense flow alone leaves holes.
 export function Board({ board }: { board: BoardData }) {
-  const { now, github } = board;
+  const { now, github, trends } = board;
   const hasLocation = now.place !== null || now.countriesVisited > 0;
   const online = (github?.online ?? []).flatMap((r) => (r.homepage ? [{ ...r, homepage: r.homepage }] : []));
   const photos = now.photos.length > 0 ? now.photos : [FALLBACK_PHOTO];
-  const lowerSpan = online.length > 0 && now.bake ? null : "md:col-span-6 lg:col-span-12";
+  const rising = trends ? risingTopics(movers(trends.rows, trends.today), 3) : [];
+  const shown = lowerKeys(hasLocation ? 4 : 3, { projects: online.length > 0, news: rising.length >= 3, bake: !!now.bake });
+  const lower = lowerSpans(shown);
 
   const tiles = [
     { key: "hello", span: "md:col-span-6 md:row-span-2 lg:col-span-6", node: <HelloTile /> },
@@ -39,12 +42,13 @@ export function Board({ board }: { board: BoardData }) {
       node: <PhotoTile photos={photos.map(({ src, alt }) => ({ src, alt }))} />,
     },
     { key: "github", span: hasLocation ? "md:col-span-3 lg:col-span-3" : TALL, node: <GithubTile github={github} /> },
-    online.length > 0 && {
+    shown.includes("projects") && {
       key: "projects",
-      span: lowerSpan ?? "md:col-span-3 lg:col-span-8",
+      span: lower.get("projects"),
       node: <ProjectsTile repos={online} />,
     },
-    now.bake && { key: "bake", span: lowerSpan ?? "md:col-span-3 lg:col-span-4", node: <BakeTile bake={now.bake} /> },
+    shown.includes("news") && { key: "news", span: lower.get("news"), node: <NewsTile rising={rising} /> },
+    shown.includes("bake") && now.bake && { key: "bake", span: lower.get("bake"), node: <BakeTile bake={now.bake} /> },
   ].filter((t) => !!t);
 
   return (

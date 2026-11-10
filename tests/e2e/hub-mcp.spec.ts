@@ -20,7 +20,25 @@ test.describe("hub agent connector", () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(
       // Kept literal: importing MCP_TOOL_NAMES would load the server's MCP handler into Playwright.
-      ["add_comment", "add_item", "ai_costs", "find_items", "get_item", "get_now", "idea_get", "ideas_list", "list_comments", "log_day", "merge_duplicate", "update_item"],
+      [
+        "add_comment",
+        "add_item",
+        "ai_costs",
+        "find_items",
+        "get_item",
+        "get_now",
+        "idea_get",
+        "ideas_list",
+        "list_comments",
+        "log_day",
+        "merge_duplicate",
+        "news_costs",
+        "news_get_issue",
+        "news_movers",
+        "news_search",
+        "news_trend",
+        "update_item",
+      ],
     );
     const title = `e2e mcp ${randomUUID().slice(0, 8)}`;
     const result = await client.callTool({ name: "add_item", arguments: { title } });

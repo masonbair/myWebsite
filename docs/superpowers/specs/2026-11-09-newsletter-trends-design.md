@@ -374,3 +374,78 @@ A fresh builder read this doc and asked six questions. Sorted:
 | Archive links whose address holds headline words? | Spec writer's call | Allowed as link target; link text is name and date. See section 8. |
 | Who approves re-running extraction, under what budget? | Spec writer's call | Mason confirms an estimate; own one-time budget. See "Costs". |
 | Budget, subdomain, and when past emails arrive | Mason's (first two); Spec writer's call (timing) | Mason answered both (see "Open questions for Mason"). Takeout export moves to step 0. |
+
+## Builder findings (2026-11-09)
+
+### Senders in the Takeout export
+
+Header-only scan, 1,361 messages parsed. No body text was read.
+
+| Source | Sender address | Messages | First | Last |
+|---|---|---|---|---|
+| Mindstream | hello@mindstream.news | 468 | 2025-09-19 | 2026-11-09 |
+| Superhuman | superhuman@mail.joinsuperhuman.ai | 411 | 2025-09-19 | 2026-11-09 |
+| The Hustle | news@thehustle.co | 264 | 2026-01-05 | 2026-11-09 |
+| Tech Brew | techbrew@morningbrew.com | 207 | 2026-01-10 | 2026-11-09 |
+| Morning Brew | none found (4 messages from morningbrew@mail.sailthru.com, a shared sending platform) | 4 | 2026-08-25 | 2026-11-05 |
+| The Rundown AI | none found | 0 | n/a | n/a |
+
+Also seen: 6 messages from crew@community.morningbrew.com. That is community mail, not the daily newsletter, so it is not matched.
+
+Message-count check: 468 + 411 + 264 + 207 = 1,350 matched messages. Plus 4 sailthru and 6 community messages, 1,360. One message is from some other sender.
+
+### Second account (2026-11-09)
+
+A header-only scan of the second Takeout (1,939 messages, no body text read) found both missing senders. Migration 0011 fills them in, exact addresses only.
+
+| Source | Sender address | Messages | First | Last |
+|---|---|---|---|---|
+| Morning Brew | crew@morningbrew.com | 1,615 | 2022-05-01 | 2026-11-09 |
+| The Rundown AI | news@daily.therundown.ai | 306 | 2025-09-19 | 2026-11-09 |
+
+Both sign with an aligned DKIM domain (morningbrew.com, daily.therundown.ai). Not matched: morningbrew@mail.sailthru.com (platform), crew@community.morningbrew.com (community), events@morningbrew.com (events). Morning Brew's history goes back to 2022, so the 12-month import must use `--since`.
+
+### Two newsletters are missing
+
+Morning Brew's daily mail and The Rundown AI are not in the export. The ask to Mason: send the real sender address for each, and widen the Gmail filter so the forward includes them. Until then both sources keep empty address lists, and their mail is held back (the Release button covers it once the address is filled in).
+
+### Sender matching
+
+Exact addresses only. `sender_domains` stays empty for every source. Morning Brew, Tech Brew and The Hustle share sending infrastructure, and platform domains (sailthru, sendgrid, beehiiv) must never match.
+
+### Public links
+
+"Read Online" links are tracked redirects (link.mail.beehiiv.com/ss/c/...) that carry a per-subscriber token. Archive pages can't be built safely from a subject line. So `archive_pattern` stays null for all six, and public coverage links go to each newsletter's homepage (the section 8 fallback).
+
+Homepage check: Morning Brew, The Hustle and The Rundown AI answer 200. Mindstream and Superhuman answer 403 to a script (bot protection) but web search confirms them as the newsletters' own sites. One fix: Tech Brew's page at morningbrew.com/tech returns 404. Its own site is https://www.techbrew.com (200), so that is now the stored homepage. The test fixtures still show the old Tech Brew URL; they are sample data and don't affect behaviour.
+
+### DKIM
+
+Every newsletter that was found signs with a `d=` domain equal to its From domain (mindstream.news, mail.joinsuperhuman.ai, thehustle.co, morningbrew.com). The aligned check will pass for real mail. sendgrid.info signatures also appear on some; they are extra and not used for matching.
+
+### Step 3 checks
+
+These need a live look at vendor pages. This sandbox cannot confirm current numbers, so they are written as the figures to verify before go-live.
+
+- Resend receiving on the free plan: expect 3,000 emails a month and 100 a day, shared between sending and receiving. About 200 newsletters a month fits. Confirm on resend.com/pricing.
+- Resend webhook carries metadata only, not the email. Fetch the raw message from `GET /emails/receiving/{id}` using `raw.download_url`.
+- Vercel Blob storage limit on Hobby and Pro: about 250 MB a year is needed. Confirm the plan's included storage on vercel.com/docs.
+- Function `maxDuration`: default 300 s. Inbound routes set 60 s. Job deadlines are 180 s and 240 s.
+
+### Model comparison (2026-11-09)
+
+Run on 20 real issues, the 5 newest from each of Mindstream, Superhuman, The Hustle and Tech Brew, with the 30 provisional topics. Opus 5.5 at medium effort is the reference. Measured spend for the whole run: $5.95.
+
+| Model | Stories | Opus stories found | Topic agreement | Ticker agreement | Cost per issue |
+|---|---|---|---|---|---|
+| Haiku 5.5, low effort | 305 | 69% (79% of news stories) | 98% | 75% | $0.005 |
+| Sonnet 5.5, low effort | 258 | 73% (83% of news stories) | 100% | 83% | $0.089 |
+| Opus 5.5, medium effort | 285 | reference | reference | reference | $0.204 |
+
+Most misses are short items Opus labelled "other"; the models split them differently. On news stories, the ones trends count, Sonnet clears the 80% bar and Haiku falls just short.
+
+Choice: **Sonnet 5.5 at low effort stays the daily model.** Haiku is the cheaper option to revisit after Mason looks at the side-by-side page (kept locally, not in git).
+
+Measured costs replace the earlier estimate table. They run about twice the old Sonnet estimate because real issues are longer:
+- Daily, about 180 issues a month on Sonnet: about $16, plus a little for dedupe. Inside the $25 cap, with less room than first planned.
+- 12-month import, about 2,000 issues through the Batch API at half price: about $90 on Sonnet, or about $5 on Haiku. The import script shows its own estimate and waits for Mason's yes.

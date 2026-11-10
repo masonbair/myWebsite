@@ -92,6 +92,7 @@ function harness(overrides: Partial<EventDeps> = {}) {
       return new Response("{}");
     }) as unknown as typeof fetch,
     backup: async () => ({ path: "hub-backups/2026-11-05.json", pruned: [], newestAt: "2026-11-05T17:59:00.000Z" }),
+    news: null,
     ...overrides,
   };
   const call = (event: string, body: unknown = {}, auth = `Bearer ${TOKEN}`) =>
@@ -332,6 +333,29 @@ describe("ideas event", () => {
   it("refuses a wrong token before running anything", async () => {
     let runs = 0;
     const res = await harness({ ideas: async () => (runs++, result) }).call("ideas", {}, "Bearer nope");
+    expect(res.status).toBe(401);
+    expect(runs).toBe(0);
+  });
+});
+
+describe("news event", () => {
+  const result = { extracted: ["a"], failed: [], clustered: 2, paused: false, alerts: [] };
+
+  it("answers 503 when no Claude key is set", async () => {
+    expect((await harness({ news: null }).call("news")).status).toBe(503);
+  });
+
+  it("runs the news job and returns its result", async () => {
+    let runs = 0;
+    const res = await harness({ news: async () => (runs++, result) }).call("news");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(result);
+    expect(runs).toBe(1);
+  });
+
+  it("refuses a wrong token before running anything", async () => {
+    let runs = 0;
+    const res = await harness({ news: async () => (runs++, result) }).call("news", {}, "Bearer nope");
     expect(res.status).toBe(401);
     expect(runs).toBe(0);
   });
