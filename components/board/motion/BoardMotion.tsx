@@ -5,6 +5,7 @@ import { useReducedMotion } from "@/lib/use-reduced-motion";
 import { Doodle } from "./Doodle";
 import { DotField } from "./DotField";
 import { SunClock } from "./SunClock";
+import { TerminalMount } from "./TerminalMount";
 import { useLean } from "./useLean";
 import { useStickerBurst } from "./useStickerBurst";
 
@@ -50,6 +51,7 @@ export function BoardMotion({
       {fine && !reduce && <DotField />}
       {doodle && <Doodle />}
       {sunOffsetMinutes !== null && <SunClock offsetMinutes={sunOffsetMinutes} />}
+      <TerminalMount />
     </>
   );
 }

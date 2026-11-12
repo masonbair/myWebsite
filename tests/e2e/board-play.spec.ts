@@ -17,6 +17,17 @@ test.describe("terminal tile", () => {
     await expect(page.getByRole("log")).toContainText("Lisbon, Portugal. 22 countries so far.");
   });
 
+  test("the field is 16px on phones so iOS never zooms on focus", async ({ page, isMobile }) => {
+    test.skip(!isMobile, "phone size only");
+    await page.goto(fixtureUrl("full"));
+    expect(await input(page).evaluate((el) => getComputedStyle(el).fontSize)).toBe("16px");
+  });
+
+  test("the terminal shows its greeting before the prompt loads", async ({ page }) => {
+    await page.goto(fixtureUrl("full"), { waitUntil: "commit" });
+    await expect(page.locator('[data-tile="terminal"]')).toContainText("Type help and hit enter.");
+  });
+
   test("clear wipes the screen", async ({ page }) => {
     await page.goto(fixtureUrl("full"));
     await run(page, "help");

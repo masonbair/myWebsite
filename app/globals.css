@@ -111,6 +111,10 @@ html[data-lean] [data-tile] .shadow-tile {
     box-shadow 300ms var(--ease-spring);
 }
 
+[data-terminal-slot][data-live] > [data-terminal-placeholder] {
+  display: none;
+}
+
 [data-lifted] .shadow-tile {
   box-shadow: var(--shadow-tile-lift);
 }
