@@ -22,6 +22,17 @@ test("header plate hides text scrolling under the nav", async ({ page }) => {
   expect(hit).toBe("covered");
 });
 
+test("cat label never covers reading text on phones", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "phone layout only");
+  await page.goto(fixtureUrl("full"));
+  const label = page.getByText("Play with me", { exact: true });
+  await expect(label).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("heading", { name: "Work and experience", exact: true }).scrollIntoViewIfNeeded();
+  await expect(label).toBeHidden();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(label).toBeVisible();
+});
+
 test("header plate never blocks clicks", async ({ page }) => {
   await page.goto(fixtureUrl("full"));
   const pe = await page.locator("[data-nav-plate]").evaluate((el) => getComputedStyle(el).pointerEvents);

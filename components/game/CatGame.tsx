@@ -56,9 +56,27 @@ function refit(spot: Spot, avoid: DOMRect[]): Spot {
 }
 
 /** The cat-builder game: the corner cat toggles play, each caught circle scores a point. */
+// On phones the label sits over body text once the reader scrolls, so it only shows near the top there.
+function useLabelRoom() {
+  const [room, setRoom] = useState(true);
+  useEffect(() => {
+    const wide = window.matchMedia("(min-width: 501px)");
+    const update = () => setRoom(wide.matches || window.scrollY < window.innerHeight * 0.5);
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    wide.addEventListener("change", update);
+    return () => {
+      window.removeEventListener("scroll", update);
+      wide.removeEventListener("change", update);
+    };
+  }, []);
+  return room;
+}
+
 export function CatGame() {
   const { score, playing, color } = useGame();
   const reduce = useReducedMotion();
+  const labelRoom = useLabelRoom();
   const [circle, setCircle] = useState<Circle | null>(null);
   const [pops, setPops] = useState<Circle[]>([]);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
@@ -177,7 +195,7 @@ export function CatGame() {
 
         <div className="relative flex flex-col items-end gap-1.5 min-[501px]:flex-row min-[501px]:gap-2">
           <AnimatePresence>
-            {color && !playing && score === 0 && (
+            {color && !playing && score === 0 && labelRoom && (
               <motion.span
                 aria-hidden
                 initial={reduce ? false : { opacity: 0, scale: 0.9 }}
