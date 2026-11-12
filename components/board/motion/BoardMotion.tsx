@@ -6,6 +6,7 @@ import { Doodle } from "./Doodle";
 import { DotField } from "./DotField";
 import { SunClock } from "./SunClock";
 import { useLean } from "./useLean";
+import { useStickerBurst } from "./useStickerBurst";
 
 const FINE = "(pointer: fine)";
 
@@ -26,6 +27,7 @@ export function BoardMotion({ sunOffsetMinutes }: { sunOffsetMinutes: number | n
   const reduce = useReducedMotion();
   const fine = useFinePointer();
   useLean(reduce);
+  useStickerBurst(reduce);
 
   useEffect(() => {
     document.documentElement.dataset.boardMotion = "ready";

@@ -58,6 +58,7 @@ export function Resume() {
           <h3 className="sr-only">Contact</h3>
           <Link
             href={coffeeChat.href}
+            data-burst
             className={`group inline-flex items-center gap-3 self-start rounded-full border-[2.5px] border-line bg-tea py-1.5 pr-1.5 pl-4 text-base font-bold whitespace-nowrap text-night shadow-sticker-sm transition-transform duration-200 ease-spring active:translate-x-0.5 active:translate-y-0.5 lg:order-last ${focusRing}`}
           >
             <Coffee weight="light" size={20} aria-hidden />

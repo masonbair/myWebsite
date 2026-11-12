@@ -41,6 +41,37 @@ test.describe("terminal tile", () => {
   });
 });
 
+test.describe("sticker burst", () => {
+  // Stops the navigation after the burst's own (capturing) listener has run, so the stickers can be counted.
+  const holdNavigation = (page: Page) =>
+    page.evaluate(() => document.addEventListener("click", (e) => (e.target as Element).closest("[data-burst]") && e.preventDefault()));
+
+  test("Book a coffee chat throws stickers", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await ready(page);
+    await holdNavigation(page);
+    await page.locator('[data-tile="hello"] [data-burst]').click();
+    expect(await page.locator("[data-burst-sticker]").count()).toBeGreaterThan(5);
+    await expect(page.locator("[data-burst-sticker]")).toHaveCount(0, { timeout: 3000 });
+  });
+
+  test("the burst never holds up the navigation", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await ready(page);
+    await page.locator('[data-tile="hello"] [data-burst]').click();
+    await expect(page).toHaveURL(/\/coffee$/);
+  });
+
+  test("no burst with reduced motion", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(fixtureUrl("full"));
+    await ready(page);
+    await holdNavigation(page);
+    await page.locator('[data-tile="hello"] [data-burst]').click();
+    expect(await page.locator("[data-burst-sticker]").count()).toBe(0);
+  });
+});
+
 test.describe("passport stamp", () => {
   test("stamp is visible before any motion loads", async ({ page }) => {
     await page.goto(fixtureUrl("full"), { waitUntil: "commit" });

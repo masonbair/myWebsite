@@ -70,6 +70,7 @@ export default function CoffeePage() {
               target="_blank"
               rel="noopener noreferrer"
               aria-label={coffee.bookLabel}
+              data-burst
               className={`${stickerButtonShape} ${focusRingOnColor} mt-8 self-start border-night bg-night text-snow`}
             >
               Book a time

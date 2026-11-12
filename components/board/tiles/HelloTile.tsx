@@ -13,7 +13,7 @@ export function HelloTile() {
       <p className="mt-4 max-w-[40ch] text-lg leading-relaxed text-mute md:text-xl">{hello.body}</p>
       {/* A plain anchor keeps next/link (about 7 KB) off the home page. */}
       <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-3 md:mt-auto md:pt-8">
-        <a href={coffeeChat.href} className={stickerButton}>
+        <a href={coffeeChat.href} data-burst className={stickerButton}>
           {coffeeChat.label}
           <span className={buttonBubble}>
             <ArrowUpRight weight="bold" size={16} aria-hidden />
