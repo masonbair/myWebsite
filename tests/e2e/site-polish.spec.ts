@@ -33,6 +33,19 @@ test("cat label never covers reading text on phones", async ({ page, isMobile })
   await expect(label).toBeVisible();
 });
 
+test("coffee chat cards fill the width with no empty cell", async ({ page, isMobile }) => {
+  test.skip(isMobile, "desktop layout");
+  await page.goto(`${fixtureUrl("full")}coffee`);
+  const section = page.getByRole("region", { name: "Some chats I'm hoping for" });
+  const cards = section.locator("article");
+  const main = (await page.locator("main").boundingBox())!;
+  const grid = (await cards.first().locator("..").boundingBox())!;
+  expect(grid.width).toBeGreaterThan(main.width * 0.85);
+  const tops = await cards.evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
+  // Every row is full: the cards share one row.
+  expect(new Set(tops).size).toBe(1);
+});
+
 test("header plate never blocks clicks", async ({ page }) => {
   await page.goto(fixtureUrl("full"));
   const pe = await page.locator("[data-nav-plate]").evaluate((el) => getComputedStyle(el).pointerEvents);

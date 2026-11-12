@@ -145,9 +145,14 @@ export default function CoffeePage() {
         <h2 id="niches-title" className="text-4xl leading-none font-bold tracking-[-0.04em] text-ink md:text-5xl">
           {coffee.nichesHeading}
         </h2>
-        <div className="mt-10 grid max-w-5xl gap-5 md:grid-cols-2">
+        {/* Three chats: one row at lg, and at md the last one spans both columns so no cell sits empty. */}
+        <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {coffee.niches.map(({ id, heading, body }) => (
-            <article key={id} id={id} className="scroll-mt-28 rounded-tile border-[2.5px] border-line bg-surface p-6 shadow-sticker-sm">
+            <article
+              key={id}
+              id={id}
+              className="scroll-mt-28 rounded-tile border-[2.5px] border-line bg-surface p-6 shadow-sticker-sm md:last:odd:col-span-2 lg:last:odd:col-span-1"
+            >
               <h3 className="text-xl font-semibold tracking-tight text-ink">
                 {heading}
               </h3>
