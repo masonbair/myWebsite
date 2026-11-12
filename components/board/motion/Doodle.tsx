@@ -6,6 +6,7 @@ import { focusRing, stickerButtonShape } from "@/components/ui/sticker";
 
 type Dot = { x: number; y: number; w: number };
 
+const MAX_DPR = 2;
 const button = `${stickerButtonShape} pr-4 pl-4 text-sm border-line bg-surface text-ink ${focusRing}`;
 
 /** Lets a visitor scribble on the board; strokes live only in memory, in the canvas's own coordinates, and the canvas scrolls with the board. */
@@ -14,11 +15,14 @@ export function Doodle() {
   const strokes = useRef<Dot[][]>([]);
   const [drawing, setDrawing] = useState(false);
   const [hasInk, setHasInk] = useState(false);
+  // A board-sized canvas is tens of MB on a phone, so it gets its pixels only once someone starts drawing.
+  const [armed, setArmed] = useState(false);
+  if (drawing && !armed) setArmed(true);
 
   useEffect(() => {
     const canvas = ref.current;
     const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
+    if (!armed || !canvas || !ctx) return;
 
     const paint = () => {
       ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
@@ -38,7 +42,7 @@ export function Doodle() {
       }
     };
     const size = () => {
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(MAX_DPR, window.devicePixelRatio || 1);
       canvas.width = Math.round(canvas.clientWidth * dpr);
       canvas.height = Math.round(canvas.clientHeight * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -88,7 +92,7 @@ export function Doodle() {
       canvas.removeEventListener("doodle:clear", clear);
       resized.disconnect();
     };
-  }, []);
+  }, [armed]);
 
   useEffect(() => {
     if (!drawing) return;

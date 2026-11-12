@@ -245,6 +245,22 @@ test.describe("doodle", () => {
     expect(hit).toBe("https://github.com/masonbair");
   });
 
+  test("the doodle canvas gets its pixels only once drawing starts, at 2x at most", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    const draw = page.getByRole("button", { name: "Draw on the board" });
+    await expect(draw).toBeVisible({ timeout: 15_000 });
+    const size = () =>
+      page.locator("canvas[data-doodle]").evaluate((el) => {
+        const c = el as HTMLCanvasElement;
+        return { w: c.width, css: c.clientWidth, dpr: window.devicePixelRatio };
+      });
+    expect((await size()).w).toBe(300);
+    await draw.click();
+    await expect.poll(async () => (await size()).w).not.toBe(300);
+    const after = await size();
+    expect(after.w).toBe(Math.round(after.css * Math.min(2, after.dpr)));
+  });
+
   test("doodle stays put on scroll", async ({ page }) => {
     await page.goto(fixtureUrl("full"));
     await page.getByRole("button", { name: "Draw on the board" }).click({ timeout: 15_000 });
