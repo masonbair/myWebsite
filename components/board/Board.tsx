@@ -1,4 +1,4 @@
-import { lowerKeys, lowerSpans, type Board as BoardData } from "@/lib/board";
+import { liveElsewhere, lowerKeys, lowerSpans, type Board as BoardData } from "@/lib/board";
 import { movers, risingTopics } from "@/lib/news/movers";
 import type { Photo } from "@/lib/now";
 import { LazyBoardMotion } from "./motion/LazyBoardMotion";
@@ -24,7 +24,7 @@ const FIRST_SCREEN = new Set(["hello", "location", "photo", "github"]);
 export function Board({ board }: { board: BoardData }) {
   const { now, github, trends } = board;
   const hasLocation = now.place !== null || now.countriesVisited > 0;
-  const online = (github?.online ?? []).flatMap((r) => (r.homepage ? [{ ...r, homepage: r.homepage }] : []));
+  const online = liveElsewhere(github?.online ?? []);
   const photos = now.photos.length > 0 ? now.photos : [FALLBACK_PHOTO];
   const rising = trends ? risingTopics(movers(trends.rows, trends.today), 3) : [];
   const shown = lowerKeys(hasLocation ? 4 : 3, { projects: online.length > 0, news: rising.length >= 3, bake: !!now.bake });

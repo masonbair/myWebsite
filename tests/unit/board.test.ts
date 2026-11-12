@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getBoard, lowerKeys, lowerSpans, MAX_BOARD_TILES } from "@/lib/board";
+import { getBoard, liveElsewhere, lowerKeys, lowerSpans, MAX_BOARD_TILES } from "@/lib/board";
+import type { Repo } from "@/lib/github";
 import { parseNow, readNow } from "@/lib/now";
 import type { GithubActivity } from "@/lib/github";
 import type { PublicTrends } from "@/lib/news/public";
@@ -138,5 +139,23 @@ describe("lowerKeys", () => {
 
   it("leaves news out when it has fewer than three rising topics", () => {
     expect(lowerKeys(4, { projects: false, news: false, bake: true })).toEqual(["bake"]);
+  });
+});
+
+describe("liveElsewhere", () => {
+  const repo = (homepage: string | null): Repo => ({ name: homepage ?? "none", url: "", homepage, description: null, pushedAt: "" });
+
+  it("drops a project whose live link is this site", () => {
+    expect(liveElsewhere([repo("https://masonbair.com"), repo("https://www.masonbair.com/")])).toEqual([]);
+  });
+
+  it("keeps projects that live somewhere else", () => {
+    expect(liveElsewhere([repo("https://justporchit.com"), repo("https://masonbair.com")]).map((r) => r.homepage)).toEqual([
+      "https://justporchit.com",
+    ]);
+  });
+
+  it("drops projects with no or broken links", () => {
+    expect(liveElsewhere([repo(null), repo("not a url")])).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import { getGithubActivity, type GithubActivity } from "@/lib/github";
+import { getGithubActivity, type GithubActivity, type Repo } from "@/lib/github";
 import { masonTimeZone } from "@/lib/hub/events";
 import { offsetMinutesAt } from "@/lib/hub/schedule";
 import { readPublicTrends, type PublicTrends } from "@/lib/news/public";
@@ -42,6 +42,17 @@ export function lowerSpans(keys: string[]): Map<string, string> {
 }
 
 export const MAX_BOARD_TILES = 8;
+
+const THIS_SITE = "masonbair.com";
+
+/** Repos with a live link that is not this site; linking to the page the visitor is already on helps nobody. */
+export function liveElsewhere(repos: Repo[]): (Repo & { homepage: string })[] {
+  return repos.flatMap((r) => {
+    if (!r.homepage || !URL.canParse(r.homepage)) return [];
+    const host = new URL(r.homepage).hostname.replace(/^www\./, "");
+    return host === THIS_SITE ? [] : [{ ...r, homepage: r.homepage }];
+  });
+}
 
 /** Which tiles below the first screen to show; news gives way first when the board would pass the cap. */
 export function lowerKeys(firstScreen: number, has: { projects: boolean; news: boolean; bake: boolean }): string[] {
