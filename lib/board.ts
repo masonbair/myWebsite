@@ -54,8 +54,11 @@ export function liveElsewhere(repos: Repo[]): (Repo & { homepage: string })[] {
   });
 }
 
-/** Which tiles below the first screen to show; news gives way first when the board would pass the cap. */
+const GIVES_WAY_FIRST = ["news", "bake"];
+
+/** Which tiles below the first screen to show; the terminal always stays, and news then bake give way to keep the cap. */
 export function lowerKeys(firstScreen: number, has: { projects: boolean; news: boolean; bake: boolean }): string[] {
-  const keys = (["projects", "news", "bake"] as const).filter((k) => has[k]);
-  return firstScreen + keys.length > MAX_BOARD_TILES ? keys.filter((k) => k !== "news") : [...keys];
+  let keys: string[] = [...(["projects", "news", "bake"] as const).filter((k) => has[k]), "terminal"];
+  for (const drop of GIVES_WAY_FIRST) if (firstScreen + keys.length > MAX_BOARD_TILES) keys = keys.filter((k) => k !== drop);
+  return keys;
 }

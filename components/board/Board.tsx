@@ -1,4 +1,5 @@
 import { liveElsewhere, lowerKeys, lowerSpans, type Board as BoardData } from "@/lib/board";
+import { formatLocation } from "@/lib/location";
 import { movers, risingTopics } from "@/lib/news/movers";
 import type { Photo } from "@/lib/now";
 import { LazyBoardMotion } from "./motion/LazyBoardMotion";
@@ -10,6 +11,7 @@ import { LocationTile } from "./tiles/LocationTile";
 import { NewsTile } from "./tiles/NewsTile";
 import { PhotoTile } from "./tiles/PhotoTile";
 import { ProjectsTile } from "./tiles/ProjectsTile";
+import { TerminalTile } from "./tiles/TerminalTile";
 
 const FALLBACK_PHOTO: Photo = {
   src: "/misc/Mason_traveling.webp",
@@ -50,6 +52,21 @@ export function Board({ board }: { board: BoardData }) {
     },
     shown.includes("news") && { key: "news", span: lower.get("news"), node: <NewsTile rising={rising} /> },
     shown.includes("bake") && now.bake && { key: "bake", span: lower.get("bake"), node: <BakeTile bake={now.bake} /> },
+    {
+      key: "terminal",
+      span: lower.get("terminal"),
+      node: (
+        <TerminalTile
+          data={{
+            // formatLocation is the only form of the place that may reach the page.
+            place: now.place ? formatLocation(now.place) : null,
+            countries: now.countriesVisited,
+            projects: online.map((r) => ({ name: r.name, url: r.homepage })),
+            contributions30d: github?.total30d ?? null,
+          }}
+        />
+      ),
+    },
   ].filter((t) => !!t);
 
   return (

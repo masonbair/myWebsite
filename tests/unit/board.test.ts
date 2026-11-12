@@ -129,16 +129,21 @@ describe("lowerKeys", () => {
             expect(firstScreen + lowerKeys(firstScreen, { projects, news, bake }).length).toBeLessThanOrEqual(MAX_BOARD_TILES);
   });
 
-  it("shows news when there is room", () => {
-    expect(lowerKeys(4, { projects: true, news: true, bake: true })).toEqual(["projects", "news", "bake"]);
+  it("shows news and the terminal when there is room", () => {
+    expect(lowerKeys(4, { projects: true, news: true, bake: true })).toEqual(["projects", "news", "bake", "terminal"]);
   });
 
-  it("drops news first when the board would pass the cap", () => {
-    expect(lowerKeys(6, { projects: true, news: true, bake: true })).toEqual(["projects", "bake"]);
+  it("drops news first, then bake, when the board would pass the cap", () => {
+    expect(lowerKeys(5, { projects: true, news: true, bake: true })).toEqual(["projects", "bake", "terminal"]);
+    expect(lowerKeys(6, { projects: true, news: true, bake: true })).toEqual(["projects", "terminal"]);
   });
 
   it("leaves news out when it has fewer than three rising topics", () => {
-    expect(lowerKeys(4, { projects: false, news: false, bake: true })).toEqual(["bake"]);
+    expect(lowerKeys(4, { projects: false, news: false, bake: true })).toEqual(["bake", "terminal"]);
+  });
+
+  it("always keeps the terminal", () => {
+    expect(lowerKeys(4, { projects: false, news: false, bake: false })).toEqual(["terminal"]);
   });
 });
 
