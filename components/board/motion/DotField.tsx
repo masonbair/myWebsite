@@ -114,7 +114,7 @@ export function DotField() {
 
     window.addEventListener("pointermove", onMove, { passive: true });
     root.addEventListener("pointerleave", onLeave);
-    window.addEventListener("scroll", draw, { passive: true });
+    window.addEventListener("scroll", wake, { passive: true });
     window.addEventListener("resize", onResize);
     document.addEventListener("visibilitychange", onVisibility);
     scheme.addEventListener("change", onScheme);
@@ -123,7 +123,7 @@ export function DotField() {
       delete root.dataset.dots;
       window.removeEventListener("pointermove", onMove);
       root.removeEventListener("pointerleave", onLeave);
-      window.removeEventListener("scroll", draw);
+      window.removeEventListener("scroll", wake);
       window.removeEventListener("resize", onResize);
       document.removeEventListener("visibilitychange", onVisibility);
       scheme.removeEventListener("change", onScheme);

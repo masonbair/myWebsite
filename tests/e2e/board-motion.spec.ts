@@ -98,6 +98,24 @@ test.describe("dot field", () => {
     await expect(page.locator("canvas[data-dots]")).toHaveAttribute("data-running", "false", { timeout: 2_000 });
   });
 
+  test("scrolling redraws dots once per frame, not per event", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await ready(page);
+    await expect(page.locator("canvas[data-dots]")).toHaveCount(1);
+    const fillsDuringBurst = await page.evaluate(() => {
+      let fills = 0;
+      const fill = CanvasRenderingContext2D.prototype.fill;
+      CanvasRenderingContext2D.prototype.fill = function (...args: []) {
+        fills++;
+        return fill.apply(this, args);
+      };
+      for (let i = 0; i < 20; i++) window.dispatchEvent(new Event("scroll"));
+      CanvasRenderingContext2D.prototype.fill = fill;
+      return fills;
+    });
+    expect(fillsDuringBurst).toBe(0);
+  });
+
   test("no dot field with reduced motion", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(fixtureUrl("full"));
