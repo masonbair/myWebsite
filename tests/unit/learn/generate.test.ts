@@ -43,7 +43,8 @@ const fetchBy = (bad: Set<string>) => vi.fn(async (url: string) => new Response(
 describe("generateExercises", () => {
   it("searches, then formats two rows for the day's plan", async () => {
     const { client, create } = stub(text("notes about readings"), text(exercises(["https://a.test/1", "https://a.test/2"])));
-    const out = await generateExercises(client, "2026-11-14", plan, [], okFetch);
+    const charges: unknown[] = [];
+    const out = await generateExercises(client, "2026-11-14", plan, [], okFetch, async (c) => void charges.push(c));
     expect(out.rows.map((r) => [r.position, r.type, r.topic])).toEqual([
       [1, "explain", "explain-simply"],
       [2, "voice", "communication"],
@@ -51,7 +52,7 @@ describe("generateExercises", () => {
     expect(out.rows[0].date).toBe("2026-11-14");
     expect(create.mock.calls[0][0].tools?.[0]?.name).toBe("web_search");
     expect(create.mock.calls[1][0].output_config.format.type).toBe("json_schema");
-    expect(out.usage).toHaveLength(2);
+    expect(charges).toHaveLength(2);
   });
 
   it("asks once more when a reading URL is dead", async () => {
@@ -60,7 +61,7 @@ describe("generateExercises", () => {
       text(exercises(["https://dead.test/1", "https://a.test/2"])),
       text(exercises(["https://a.test/3", "https://a.test/2"])),
     );
-    const out = await generateExercises(client, "2026-11-14", plan, [], fetchBy(new Set(["https://dead.test/1"])));
+    const out = await generateExercises(client, "2026-11-14", plan, [], fetchBy(new Set(["https://dead.test/1"])), async () => {});
     expect(create).toHaveBeenCalledTimes(3);
     expect(out.rows[0].readingUrl).toBe("https://a.test/3");
   });
@@ -71,7 +72,7 @@ describe("generateExercises", () => {
       text(exercises(["https://dead.test/1", "https://a.test/2"])),
       text(exercises(["https://dead.test/1", "https://a.test/2"])),
     );
-    await expect(generateExercises(client, "2026-11-14", plan, [], fetchBy(new Set(["https://dead.test/1"])))).rejects.toMatchObject({
+    await expect(generateExercises(client, "2026-11-14", plan, [], fetchBy(new Set(["https://dead.test/1"])), async () => {})).rejects.toMatchObject({
       reason: "reading",
     });
   });
@@ -83,12 +84,34 @@ describe("generateExercises", () => {
       text(exercises(["https://used.test/1", "https://a.test/2"])),
     );
     await expect(
-      generateExercises(client, "2026-11-14", plan, [{ question: "old", readingUrl: "https://used.test/1" }], okFetch),
+      generateExercises(client, "2026-11-14", plan, [{ question: "old", readingUrl: "https://used.test/1" }], okFetch, async () => {}),
     ).rejects.toBeInstanceOf(GenerateError);
   });
 
   it("refuses an explain exercise with no client", async () => {
     const { client } = stub(text("notes"), text(exercises(["https://a.test/1", "https://a.test/2"], null)));
-    await expect(generateExercises(client, "2026-11-14", plan, [], okFetch)).rejects.toMatchObject({ reason: "schema" });
+    await expect(generateExercises(client, "2026-11-14", plan, [], okFetch, async () => {})).rejects.toMatchObject({ reason: "schema" });
+  });
+
+  it("logs the cost of every paid call even when generation fails afterwards", async () => {
+    const charges: unknown[] = [];
+    const { client } = stub(
+      text("notes"),
+      text(exercises(["https://dead.test/1", "https://a.test/2"])),
+      text(exercises(["https://dead.test/1", "https://a.test/2"])),
+    );
+    await expect(
+      generateExercises(client, "2026-11-14", plan, [], fetchBy(new Set(["https://dead.test/1"])), async (c) => void charges.push(c)),
+    ).rejects.toMatchObject({ reason: "reading" });
+    expect(charges).toHaveLength(3);
+  });
+
+  it("logs the cost of a refused call", async () => {
+    const charges: unknown[] = [];
+    const { client } = stub(text("", "refusal"));
+    await expect(generateExercises(client, "2026-11-14", plan, [], okFetch, async (c) => void charges.push(c))).rejects.toMatchObject({
+      reason: "refusal",
+    });
+    expect(charges).toHaveLength(1);
   });
 });

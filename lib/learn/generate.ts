@@ -61,14 +61,17 @@ const textOf = (r: Reply) =>
     .map((c) => c.text ?? "")
     .join("\n");
 
-async function call(anthropic: Anthropic, request: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming, charges: Charge[]): Promise<Reply> {
+export type OnCharge = (charge: Charge) => Promise<void>;
+
+// Each paid call is logged the moment it returns, so a run that fails later still counts toward the monthly cap.
+async function call(anthropic: Anthropic, request: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming, onCharge: OnCharge): Promise<Reply> {
   let reply: Reply;
   try {
     reply = (await anthropic.beta.messages.create(request, REQUEST_OPTIONS)) as unknown as Reply;
   } catch (e) {
     throw new GenerateError("api", (e as Error).name);
   }
-  charges.push({ model: knownModel(reply.model), usage: reply.usage });
+  await onCharge({ model: knownModel(reply.model), usage: reply.usage });
   if (reply.stop_reason === "refusal") throw new GenerateError("refusal", "Claude declined");
   return reply;
 }
@@ -79,7 +82,7 @@ function planText(plan: Plan): string {
     .join("\n");
 }
 
-async function searchReadings(anthropic: Anthropic, plan: Plan, avoid: string[], charges: Charge[]): Promise<string> {
+async function searchReadings(anthropic: Anthropic, plan: Plan, avoid: string[], onCharge: OnCharge): Promise<string> {
   const messages: BetaMessageParam[] = [
     {
       role: "user",
@@ -99,7 +102,7 @@ async function searchReadings(anthropic: Anthropic, plan: Plan, avoid: string[],
         tools: [WEB_SEARCH_TOOL],
         messages,
       },
-      charges,
+      onCharge,
     );
     notes.push(textOf(reply));
     if (reply.stop_reason !== "pause_turn") return notes.join("\n").trim();
@@ -114,7 +117,7 @@ async function formatExercises(
   notes: string,
   recent: string[],
   badUrls: string[],
-  charges: Charge[],
+  onCharge: OnCharge,
 ): Promise<z.infer<typeof exerciseSchema>[]> {
   const lines = [
     planText(plan),
@@ -136,7 +139,7 @@ async function formatExercises(
       output_config: { effort: "medium", format: { type: "json_schema", schema: formatSchema() } },
       messages: [{ role: "user", content: lines.join("\n\n") }],
     },
-    charges,
+    onCharge,
   );
   let parsed: unknown;
   try {
@@ -174,21 +177,25 @@ export async function generateExercises(
   plan: Plan,
   avoid: { question: string; readingUrl: string }[],
   fetchFn: typeof fetch,
-): Promise<{ rows: NewExercise[]; usage: Charge[] }> {
-  const charges: Charge[] = [];
+  onCharge: OnCharge,
+): Promise<{ rows: NewExercise[] }> {
+  let model: ModelId = MODEL;
+  const charge: OnCharge = async (c) => {
+    model = c.model;
+    await onCharge(c);
+  };
   const avoidUrls = new Set(avoid.map((a) => a.readingUrl));
   const recent = avoid.map((a) => a.question);
-  const notes = await searchReadings(anthropic, plan, [...avoidUrls], charges);
+  const notes = await searchReadings(anthropic, plan, [...avoidUrls], charge);
 
-  let exercises = await formatExercises(anthropic, plan, notes, recent, [], charges);
+  let exercises = await formatExercises(anthropic, plan, notes, recent, [], charge);
   let bad = await deadUrls(exercises.map((e) => e.reading.url), avoidUrls, fetchFn);
   if (bad.length) {
-    exercises = await formatExercises(anthropic, plan, notes, recent, bad, charges);
+    exercises = await formatExercises(anthropic, plan, notes, recent, bad, charge);
     bad = await deadUrls(exercises.map((e) => e.reading.url), avoidUrls, fetchFn);
     if (bad.length) throw new GenerateError("reading", `${bad.length} reading link(s) did not open`);
   }
 
-  const model = charges.at(-1)?.model ?? MODEL;
   const rows = plan.map((p, i): NewExercise => {
     const e = exercises[i];
     return {
@@ -205,5 +212,5 @@ export async function generateExercises(
       model,
     };
   });
-  return { rows, usage: charges };
+  return { rows };
 }

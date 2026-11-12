@@ -29,14 +29,14 @@ export async function runLearnJob(deps: LearnJobDeps): Promise<{ generated: bool
 
   if (deps.anthropic && (await store.exercisesFor(today)).length === 0 && (await store.spend(deps.now())) < deps.cap) {
     try {
-      const { rows, usage } = await (deps.generate ?? generateExercises)(
+      const { rows } = await (deps.generate ?? generateExercises)(
         deps.anthropic,
         today,
         dayPlan(today),
         await store.recentQuestions(RECENT_DAYS, today),
         deps.fetchFn,
+        async (c) => void (await store.recordUsage({ model: c.model, itemId: null, purpose: "generate", usage: c.usage })),
       );
-      for (const c of usage) await store.recordUsage({ model: c.model, itemId: null, purpose: "generate", usage: c.usage });
       generated = (await store.insertExercises(rows)) === "ok";
     } catch (e) {
       console.error(`learn: exercises not written: ${(e as Error).message}`);

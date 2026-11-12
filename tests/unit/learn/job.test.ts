@@ -24,7 +24,11 @@ function row(position: 1 | 2): NewExercise {
 
 function setup(overrides: Partial<LearnJobDeps> = {}) {
   const store = new FakeLearnStore();
-  const generate = vi.fn(async () => ({ rows: [row(1), row(2)], usage: [{ model: "claude-sonnet-5-5" as const, usage: { input_tokens: 1, output_tokens: 1 } }] }));
+  const generate = vi.fn(async (...args: unknown[]) => {
+    const onCharge = args[5] as (c: { model: "claude-sonnet-5-5"; usage: { input_tokens: number; output_tokens: number } }) => Promise<void>;
+    await onCharge({ model: "claude-sonnet-5-5", usage: { input_tokens: 1, output_tokens: 1 } });
+    return { rows: [row(1), row(2)] };
+  });
   const award = vi.fn(async () => ({ status: "duplicate" as const }));
   const deps: LearnJobDeps = {
     store,
@@ -63,6 +67,17 @@ describe("runLearnJob", () => {
     store.spent = 10;
     await runLearnJob(deps);
     expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("logs generation cost even when generation fails", async () => {
+    const { store, deps } = setup({
+      generate: vi.fn(async (...args: unknown[]) => {
+        await (args[5] as (c: unknown) => Promise<void>)({ model: "claude-sonnet-5-5", usage: { input_tokens: 1, output_tokens: 1 } });
+        throw new Error("dead links");
+      }) as unknown as LearnJobDeps["generate"],
+    });
+    await expect(runLearnJob(deps)).resolves.toMatchObject({ generated: false });
+    expect(store.usage).toHaveLength(1);
   });
 
   it("does not throw when a parallel run inserted first", async () => {
