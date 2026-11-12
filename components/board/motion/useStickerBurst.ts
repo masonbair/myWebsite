@@ -2,26 +2,20 @@ import { useEffect } from "react";
 
 const COUNT = 12;
 const FILLS = ["--color-accent", "--color-tea", "--color-rose", "--color-surface"];
-const SHAPES = ["9999px", "4px", "9999px 9999px 4px 9999px"];
 
 function burst(x: number, y: number) {
-  const root = getComputedStyle(document.documentElement);
   for (let i = 0; i < COUNT; i++) {
     const s = document.createElement("span");
     s.dataset.burstSticker = "";
+    s.className = "burst-sticker";
     s.setAttribute("aria-hidden", "true");
     const size = 10 + Math.random() * 8;
     Object.assign(s.style, {
-      position: "fixed",
       left: `${x - size / 2}px`,
       top: `${y - size / 2}px`,
       width: `${size}px`,
       height: `${size}px`,
-      background: root.getPropertyValue(FILLS[i % FILLS.length]),
-      border: `2px solid ${root.getPropertyValue("--color-line")}`,
-      borderRadius: SHAPES[i % SHAPES.length],
-      pointerEvents: "none",
-      zIndex: "60",
+      background: `var(${FILLS[i % FILLS.length]})`,
     });
     document.body.appendChild(s);
     const angle = (i / COUNT) * Math.PI * 2 + Math.random() * 0.4;

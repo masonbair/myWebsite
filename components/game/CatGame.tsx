@@ -55,7 +55,6 @@ function refit(spot: Spot, avoid: DOMRect[]): Spot {
   return avoid.some((r) => overlaps(next, r)) ? randomSpot(avoid) : next;
 }
 
-/** The cat-builder game: the corner cat toggles play, each caught circle scores a point. */
 // On phones the label sits over body text once the reader scrolls, so it only shows near the top there.
 function useLabelRoom() {
   const [room, setRoom] = useState(true);
@@ -73,6 +72,7 @@ function useLabelRoom() {
   return room;
 }
 
+/** The cat-builder game: the corner cat toggles play, each caught circle scores a point. */
 export function CatGame() {
   const { score, playing, color } = useGame();
   const reduce = useReducedMotion();

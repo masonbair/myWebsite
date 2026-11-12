@@ -111,11 +111,28 @@ html[data-dots] body {
 
 /* A pressed tile is held up off the board, so its shadow grows. */
 /* Flat 2D only: a 3D turn on a rounded, clipped tile leaves seams at its corners. The tilt uses the separate `rotate` property, so both apply. */
-html[data-lean] [data-tile] .shadow-tile {
+html[data-lean] :is([data-board-grid], [data-coffee-grid]) [data-tile] .shadow-tile {
   transform: translate(var(--lean-dx, 0px), calc(var(--lean-dy, 0px) + var(--lift, 0px))) rotate(var(--lean-r, 0deg));
   transition:
     transform 300ms var(--ease-spring),
     box-shadow 300ms var(--ease-spring);
+}
+
+/* Above the nav (z-50) so stickers fly over it; see components/board/motion/useStickerBurst.ts. */
+.burst-sticker {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  border: 2px solid var(--color-line);
+}
+.burst-sticker:nth-child(3n) {
+  border-radius: var(--radius-sm, 4px);
+}
+.burst-sticker:nth-child(3n + 1) {
+  border-radius: 9999px;
+}
+.burst-sticker:nth-child(3n + 2) {
+  border-radius: var(--radius-tile) var(--radius-tile) var(--radius-sm, 4px) var(--radius-tile);
 }
 
 [data-terminal-slot][data-live] > [data-terminal-placeholder] {
