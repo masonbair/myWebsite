@@ -9,6 +9,7 @@ import { tag } from "@/components/ui/sticker";
 import type { LearnCardView, LearnDay, LearnReport } from "@/lib/learn/read";
 import { browserClient } from "@/lib/supabase/browser";
 import { field, focusRing, panel, primaryButton, quietButton } from "../styles";
+import { pendingText, recordingAnnouncement, runSend } from "./cards-ui";
 import { MinutesBar } from "./MinutesBar";
 import { ReportCard } from "./ReportCard";
 import { useRecorder } from "./useRecorder";
@@ -118,15 +119,13 @@ function ReadSide({ card, onDone }: { card: LearnCardView; onDone: () => void })
   const [result, setResult] = useState<{ feedback: string; minutes: number } | null>(card.reading.takeaway);
   const [error, setError] = useState<string | null>(null);
 
-  async function send() {
-    setBusy(true);
-    setError(null);
-    const out = await sendTakeaway(card.exerciseId, takeaway);
-    setBusy(false);
-    if (!out.ok) return setError(out.error);
-    setResult({ feedback: out.feedback, minutes: out.minutes });
-    router.refresh();
-  }
+  const send = () =>
+    runSend(setBusy, setError, async () => {
+      const out = await sendTakeaway(card.exerciseId, takeaway);
+      if (!out.ok) return setError(out.error);
+      setResult({ feedback: out.feedback, minutes: out.minutes });
+      router.refresh();
+    });
 
   return (
     <>
@@ -182,33 +181,30 @@ function AnswerSide({ card, onNext }: { card: LearnCardView; onNext: (() => void
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<LearnReport | null>(card.answer?.report ?? null);
-  const [pending, setPending] = useState<string | null>(card.answer && !card.answer.report ? "Graded soon." : null);
+  const [pending, setPending] = useState<{ kind: "typed" | "voice"; message: string } | null>(
+    card.answer && !card.answer.report ? { kind: card.answer.kind, message: "Graded soon." } : null,
+  );
   const slug = TOPIC_PROMPT[card.topicName] ?? "think";
   const hasRecording = recorder.state === "stopped";
 
-  async function send() {
-    setBusy(true);
-    setError(null);
-    let out;
-    const clip = recorder.take();
-    if (clip) {
-      const path = `answers/${card.exerciseId}${EXT[clip.mime] ?? ".webm"}`;
-      // Upsert so a re-record replaces the clip; storage refuses it once an answer points at the clip.
-      const { error: uploadError } = await browserClient().storage.from("learn-voice").upload(path, clip.blob, { contentType: clip.mime, upsert: true });
-      if (uploadError) {
-        setBusy(false);
-        return setError("The recording did not upload. Record again.");
+  const send = () =>
+    runSend(setBusy, setError, async () => {
+      const clip = recorder.take();
+      let out;
+      if (clip) {
+        const path = `answers/${card.exerciseId}${EXT[clip.mime] ?? ".webm"}`;
+        // Upsert so a re-record replaces the clip; storage refuses it once an answer points at the clip.
+        const { error: uploadError } = await browserClient().storage.from("learn-voice").upload(path, clip.blob, { contentType: clip.mime, upsert: true });
+        if (uploadError) return setError("The recording did not upload. Record again.");
+        out = await sendVoiceAnswer(card.exerciseId, { path, mime: clip.mime, durationMs: clip.durationMs });
+      } else {
+        out = await sendTypedAnswer(card.exerciseId, text);
       }
-      out = await sendVoiceAnswer(card.exerciseId, { path, mime: clip.mime, durationMs: clip.durationMs });
-    } else {
-      out = await sendTypedAnswer(card.exerciseId, text);
-    }
-    setBusy(false);
-    if (!out.ok) return setError(out.error);
-    if (out.status === "graded") setReport(out.report);
-    else setPending(out.message);
-    router.refresh();
-  }
+      if (!out.ok) return setError(out.error);
+      if (out.status === "graded") setReport(out.report);
+      else setPending({ kind: clip ? "voice" : "typed", message: out.message });
+      router.refresh();
+    });
 
   return (
     <>
@@ -228,7 +224,7 @@ function AnswerSide({ card, onNext }: { card: LearnCardView; onNext: (() => void
         </>
       ) : pending ? (
         <p role="status" className="rounded-2xl border-2 border-line bg-canvas p-4 font-semibold">
-          {card.answer?.kind === "voice" || pending === "Graded soon." ? "Voice note sent. Graded soon." : pending}
+          {pendingText(pending.kind, pending.message)}
         </p>
       ) : (
         <div className="flex flex-col gap-2">
@@ -251,7 +247,7 @@ function AnswerSide({ card, onNext }: { card: LearnCardView; onNext: (() => void
             ) : (
               <button
                 type="button"
-                aria-label={recorder.state === "recording" ? "Stop recording" : "Answer with a voice note"}
+                aria-label="Answer with a voice note"
                 aria-pressed={recorder.state === "recording"}
                 onClick={() => (recorder.state === "recording" ? recorder.stop() : hasRecording ? recorder.reset() : recorder.start())}
                 className={`grid size-12 shrink-0 place-items-center rounded-full border-2 border-line bg-tea text-night ${focusRing}`}
@@ -268,11 +264,10 @@ function AnswerSide({ card, onNext }: { card: LearnCardView; onNext: (() => void
               {busy ? "Sending…" : "Send for grading"}
             </button>
           </div>
-          {recorder.state === "recording" && (
-            <p className="font-mono text-sm" role="status">
-              Recording · {recorder.seconds}s · tap to stop
-            </p>
-          )}
+          <p className="sr-only" role="status">
+            {recordingAnnouncement(recorder.state)}
+          </p>
+          {recorder.state === "recording" && <p className="font-mono text-sm">Recording · {recorder.seconds}s · tap the mic to stop</p>}
           {hasRecording && <p className="text-sm text-mute">Voice note ready. Tap the mic to record again.</p>}
           {error && (
             <p role="alert" className="text-sm text-accent-ink">

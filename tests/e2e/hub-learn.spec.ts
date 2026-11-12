@@ -108,10 +108,24 @@ test.describe("learn page", () => {
       // Recording, upload, and grading in after() on a cold dev server take longer than the 30 s default.
       test.setTimeout(120_000);
       await openAnswer(page, 2);
-      await page.getByRole("button", { name: "Answer with a voice note" }).click();
+      const mic = page.getByRole("button", { name: "Answer with a voice note" });
+      await mic.click();
+      await expect(mic).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByRole("status").filter({ hasText: "Recording started" })).toBeAttached();
       await expect(page.getByText(/Recording · \d+s/)).toBeVisible();
       await page.waitForTimeout(2200);
-      await page.getByRole("button", { name: "Stop recording" }).click();
+      await mic.click();
+      await expect(mic).toHaveAttribute("aria-pressed", "false");
+      await expect(page.getByRole("status").filter({ hasText: "Recording stopped" })).toBeAttached();
+      await expect(page.getByText("Voice note ready.")).toBeVisible();
+
+      // Recording again: the first click clears the take, the next starts a new one.
+      await mic.click();
+      await expect(page.getByText("Voice note ready.")).toBeHidden();
+      await mic.click();
+      await expect(mic).toHaveAttribute("aria-pressed", "true");
+      await page.waitForTimeout(1500);
+      await mic.click();
       await expect(page.getByText("Voice note ready.")).toBeVisible();
       await page.getByRole("button", { name: "Send for grading" }).click();
       await expect(page.getByText("Voice note sent. Graded soon.")).toBeVisible({ timeout: 30_000 });
