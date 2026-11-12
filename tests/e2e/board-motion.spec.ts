@@ -106,7 +106,18 @@ test.describe("dot field", () => {
   });
 });
 
-const doodleInk = (page: Page) =>
+test("sun phase is set", async ({ page }) => {
+  await page.goto(fixtureUrl("full"));
+  await ready(page);
+  await expect(page.locator("html")).toHaveAttribute("data-sun", /^(dawn|day|dusk|night)$/);
+});
+
+test("page html holds no zone name", async ({ request }) => {
+  const html = await (await request.get(fixtureUrl("private"))).text();
+  expect(html).not.toMatch(/(America|Europe|Asia|Africa|Australia|Pacific)\//);
+});
+
+const doodleInk =(page: Page) =>
   page.locator("canvas[data-doodle]").evaluate((el) => {
     const c = el as HTMLCanvasElement;
     const data = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;

@@ -54,6 +54,49 @@ body {
   color: var(--color-ink);
 }
 
+/* Registered so the time-of-day tint can fade between phases. */
+@property --color-sun {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+/* A wash at the top of the page for the time of day where Mason is; components/board/motion/SunClock.tsx sets data-sun. */
+html[data-sun="dawn"] {
+  --color-sun: color-mix(in srgb, var(--color-rose) 30%, transparent);
+}
+html[data-sun="dusk"] {
+  --color-sun: color-mix(in srgb, var(--color-tea) 35%, transparent);
+}
+html[data-sun="night"] {
+  --color-sun: color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  html[data-sun="dawn"] {
+    --color-sun: color-mix(in srgb, var(--color-rose) 14%, transparent);
+  }
+  html[data-sun="dusk"] {
+    --color-sun: color-mix(in srgb, var(--color-tea) 14%, transparent);
+  }
+  html[data-sun="night"] {
+    --color-sun: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  }
+}
+html[data-sun]::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: -20;
+  height: 70vh;
+  pointer-events: none;
+  background: linear-gradient(var(--color-sun), transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    transition: --color-sun 2s ease;
+  }
+}
+
 /* The board's dot canvas draws these same dots while it runs; see components/board/motion/DotField.tsx. */
 html[data-dots] body {
   background-image: none;

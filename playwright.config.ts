@@ -47,6 +47,8 @@ const fixtureServers = FIXTURES.map((f) => ({
     TRENDS_FIXTURE: f === "full" ? "trends.json" : f === "empty" ? "empty.json" : "",
     GITHUB_TOKEN: "",
     SUPABASE_URL: "",
+    // With no database, the board's time-of-day tint falls back to this zone.
+    HUB_TIME_ZONE: "Europe/Lisbon",
     ...(f === "github" ? { GITHUB_FIXTURE: "github-graphql.json" } : {}),
     NEXT_DIST_DIR: `.next/e2e-${f}`,
     NEXT_TSCONFIG: fixtureTsconfig(f),

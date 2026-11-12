@@ -3,16 +3,21 @@ import { getBoard, lowerKeys, lowerSpans, MAX_BOARD_TILES } from "@/lib/board";
 import { parseNow, readNow } from "@/lib/now";
 import type { GithubActivity } from "@/lib/github";
 import type { PublicTrends } from "@/lib/news/public";
+import { offsetMinutesAt } from "@/lib/hub/schedule";
 
 const now = parseNow({ countriesVisited: 23 });
 const github: GithubActivity = { commits30d: 4, private30d: 0, total30d: 4, repos30d: 2, recent: [], online: [] };
 const trends: PublicTrends = { today: "2026-11-09", rows: [] };
 const noTrends = async () => null;
+const noZone = () => Promise.reject(new Error("no zone"));
+const sources = { readNow: async () => now, github: async () => github, trends: noTrends };
 
 describe("getBoard", () => {
   it("getBoard merges sources", async () => {
-    const board = await getBoard({ readNow: async () => now, github: async () => github, trends: async () => trends });
-    expect(board).toEqual({ now, github, trends });
+    vi.stubEnv("HUB_TIME_ZONE", "");
+    const board = await getBoard({ readNow: async () => now, github: async () => github, trends: async () => trends, zone: noZone });
+    expect(board).toEqual({ now, github, trends, sunOffsetMinutes: null });
+    vi.unstubAllEnvs();
   });
 
   it("getBoard survives github throwing", async () => {
@@ -22,8 +27,9 @@ describe("getBoard", () => {
         throw new Error("rate limited");
       },
       trends: noTrends,
+      zone: async () => "Europe/Lisbon",
     });
-    expect(board).toEqual({ now, github: null, trends: null });
+    expect(board).toEqual({ now, github: null, trends: null, sunOffsetMinutes: offsetMinutesAt("Europe/Lisbon", new Date()) });
   });
 
   it("getBoard survives the now source throwing", async () => {
@@ -34,6 +40,26 @@ describe("getBoard", () => {
     });
     expect(board.now).toEqual(parseNow(null));
     expect(board.github).toEqual(github);
+  });
+
+  it("zone failure gives null offset", async () => {
+    vi.stubEnv("HUB_TIME_ZONE", "");
+    const board = await getBoard({ ...sources, zone: () => Promise.reject(new Error("down")) });
+    expect(board.sunOffsetMinutes).toBeNull();
+    vi.unstubAllEnvs();
+  });
+
+  it("zone failure falls back to HUB_TIME_ZONE", async () => {
+    vi.stubEnv("HUB_TIME_ZONE", "America/New_York");
+    const board = await getBoard({ ...sources, zone: () => Promise.reject(new Error("down")) });
+    expect(board.sunOffsetMinutes).toBe(offsetMinutesAt("America/New_York", new Date()));
+    vi.unstubAllEnvs();
+  });
+
+  it("board never holds a zone name", async () => {
+    const board = await getBoard({ ...sources, zone: async () => "Europe/Lisbon" });
+    expect(typeof board.sunOffsetMinutes).toBe("number");
+    expect(JSON.stringify(board)).not.toContain("Europe/");
   });
 
   it("getBoard survives the trends source throwing", async () => {

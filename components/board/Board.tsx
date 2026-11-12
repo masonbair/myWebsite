@@ -53,7 +53,8 @@ export function Board({ board }: { board: BoardData }) {
   ].filter((t) => !!t);
 
   return (
-    <section aria-label="Right now" className="mx-auto w-full max-w-[1400px] px-4 md:px-8">
+    // Clipped sideways so a tile mid-swing (rotated) never widens the page on a phone.
+    <section aria-label="Right now" className="mx-auto w-full max-w-[1400px] overflow-x-clip px-4 md:px-8">
       <div
         data-board-grid
         className="grid grid-flow-row-dense grid-cols-1 gap-4 md:gap-5 md:grid-cols-6 lg:grid-cols-12 lg:grid-rows-[repeat(2,minmax(17.5rem,auto))]"
@@ -70,7 +71,7 @@ export function Board({ board }: { board: BoardData }) {
           ),
         )}
       </div>
-      <LazyBoardMotion sunOffsetMinutes={null} />
+      <LazyBoardMotion sunOffsetMinutes={board.sunOffsetMinutes} />
     </section>
   );
 }

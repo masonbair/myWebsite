@@ -1,13 +1,18 @@
 import { getGithubActivity, type GithubActivity } from "@/lib/github";
+import { masonTimeZone } from "@/lib/hub/events";
+import { offsetMinutesAt } from "@/lib/hub/schedule";
 import { readPublicTrends, type PublicTrends } from "@/lib/news/public";
 import { loadNow, parseNow, type NowData } from "@/lib/now";
+import { serviceClient } from "@/lib/supabase/server";
 
-export type Board = { now: NowData; github: GithubActivity | null; trends: PublicTrends | null };
+/** `sunOffsetMinutes` is Mason's UTC offset; only the number reaches the page, never the zone name. */
+export type Board = { now: NowData; github: GithubActivity | null; trends: PublicTrends | null; sunOffsetMinutes: number | null };
 
 type Deps = {
   readNow?: () => Promise<NowData>;
   github?: () => Promise<GithubActivity | null>;
   trends?: () => Promise<PublicTrends | null>;
+  zone?: () => Promise<string>;
 };
 
 // Promise.resolve().then also catches a source that throws before returning a promise.
@@ -18,12 +23,13 @@ const settle = <T,>(source: () => Promise<T>, fallback: T): Promise<T> =>
 
 /** Loads everything the Right Now board shows; a failing source becomes its empty value. */
 export async function getBoard(deps: Deps = {}): Promise<Board> {
-  const [now, github, trends] = await Promise.all([
+  const [now, github, trends, zone] = await Promise.all([
     settle(deps.readNow ?? (() => loadNow()), parseNow(null)),
     settle(deps.github ?? (() => getGithubActivity()), null),
     settle(deps.trends ?? (() => readPublicTrends()), null),
+    settle(deps.zone ?? (() => masonTimeZone(serviceClient())), process.env.HUB_TIME_ZONE || null),
   ]);
-  return { now, github, trends };
+  return { now, github, trends, sunOffsetMinutes: zone ? offsetMinutesAt(zone, new Date()) : null };
 }
 
 const FULL = "md:col-span-6 lg:col-span-12";

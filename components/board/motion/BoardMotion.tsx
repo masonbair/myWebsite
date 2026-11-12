@@ -4,6 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { useReducedMotion } from "@/lib/use-reduced-motion";
 import { Doodle } from "./Doodle";
 import { DotField } from "./DotField";
+import { SunClock } from "./SunClock";
 import { useLean } from "./useLean";
 
 const FINE = "(pointer: fine)";
@@ -33,11 +34,11 @@ export function BoardMotion({ sunOffsetMinutes }: { sunOffsetMinutes: number | n
     };
   }, []);
 
-  void sunOffsetMinutes;
   return (
     <>
       {fine && !reduce && <DotField />}
       <Doodle />
+      {sunOffsetMinutes !== null && <SunClock offsetMinutes={sunOffsetMinutes} />}
     </>
   );
 }

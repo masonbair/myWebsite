@@ -196,9 +196,11 @@ test("full board rows stay full with the reading tile", async ({ page }, testInf
   await page.goto(fixtureUrl("full"));
   await expect(page.getByRole("region", { name: "What I'm reading about" })).toBeVisible();
   const gaps = await page.locator("[data-board-grid]").evaluate((grid) => {
-    const g = grid.getBoundingClientRect();
+    // Layout boxes, not getBoundingClientRect: tiles swinging in on scroll are transformed mid-animation.
+    const box = (el: HTMLElement) => ({ top: el.offsetTop, bottom: el.offsetTop + el.offsetHeight, width: el.offsetWidth });
+    const g = box(grid as HTMLElement);
     const gap = parseFloat(getComputedStyle(grid).columnGap);
-    const tiles = Array.from(grid.children).map((el) => el.getBoundingClientRect());
+    const tiles = Array.from(grid.children).map((el) => box(el as HTMLElement));
     const tops = [...new Set(tiles.map((t) => Math.round(t.top)))];
     // Every row line, tall tiles included, must cover the grid's full width.
     return tops.filter((y) => {
