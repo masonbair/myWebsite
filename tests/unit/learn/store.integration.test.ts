@@ -67,6 +67,22 @@ describe.skipIf(!enabled)("supabaseLearnStore against local Supabase", () => {
     expect((await store().loadAnswer(answer.id))?.answer.status).toBe("graded");
   });
 
+  it("keeps retrying an answer held by the monthly cap, but gives up on other failures after the attempt limit", async () => {
+    const date = freshDate();
+    await store().insertExercises([exercise(date, 1, "explain"), exercise(date, 2, "scenario")]);
+    const [first, second] = await store().exercisesFor(date);
+    const capped = await store().insertAnswer({ exerciseId: first.id, kind: "typed", body: "Held by the cap." });
+    const broken = await store().insertAnswer({ exerciseId: second.id, kind: "typed", body: "Claude kept failing." });
+    if (capped === "duplicate" || broken === "duplicate") throw new Error("unexpected duplicate");
+    for (let i = 0; i < 3; i++) {
+      await store().markFailed(capped.id, "cap");
+      await store().markFailed(broken.id, "api");
+    }
+    const retry = await store().answersToRetry(3);
+    expect(retry).toContain(capped.id);
+    expect(retry).not.toContain(broken.id);
+  });
+
   it("lists a voice clip until its transcript lands, once", async () => {
     const date = freshDate();
     await store().insertExercises([exercise(date, 2, "voice")]);

@@ -269,7 +269,10 @@ export function supabaseLearnStore(client: SupabaseClient): LearnStore {
       const { data, error } = await client
         .from("learn_answers")
         .select("id")
-        .or(`status.eq.transcribed,and(status.in.(failed,grading),attempts.lt.${maxAttempts},updated_at.lt.${before})`)
+        // An answer held by the monthly cap waits until spend resets, however many runs found the cap still reached.
+        .or(
+          `status.eq.transcribed,and(status.eq.failed,last_error.eq.cap),and(status.in.(failed,grading),attempts.lt.${maxAttempts},updated_at.lt.${before})`,
+        )
         .order("created_at");
       if (error) throw error;
       return (data ?? []).map((r) => r.id as string);
