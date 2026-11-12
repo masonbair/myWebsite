@@ -15,6 +15,7 @@ export type LearnJobDeps = {
   key: KeyObject | null;
   now: () => Date;
   timeZone: string;
+  defaultTimeZone: string;
   cap: number;
   fetchFn: typeof fetch;
   generate?: typeof generateExercises;
@@ -46,7 +47,18 @@ export async function runLearnJob(deps: LearnJobDeps): Promise<{ generated: bool
   const award =
     deps.award ??
     ((id: string) =>
-      gradeAndGrant({ store, anthropic: deps.anthropic, key: deps.key, now: deps.now, timeZone: deps.timeZone, cap: deps.cap }, id));
+      gradeAndGrant(
+        {
+          store,
+          anthropic: deps.anthropic,
+          key: deps.key,
+          now: deps.now,
+          timeZone: deps.timeZone,
+          defaultTimeZone: deps.defaultTimeZone,
+          cap: deps.cap,
+        },
+        id,
+      ));
   const graded: string[] = [];
   const waiting: string[] = [];
   for (const id of await store.answersToRetry(MAX_ATTEMPTS)) {

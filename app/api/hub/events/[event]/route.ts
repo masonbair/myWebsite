@@ -1,6 +1,6 @@
 import { anthropicClient } from "@/lib/ai/claude";
 import { createSnapshotSource, runBackup, vercelBlobs } from "@/lib/hub/backup";
-import { handleEventRequest, masonTimeZone, readLatestPlaceZone } from "@/lib/hub/events";
+import { DEFAULT_TIME_ZONE, handleEventRequest, masonTimeZone, readLatestPlaceZone } from "@/lib/hub/events";
 import { createHubStore } from "@/lib/hub/store";
 import { ideasRunner } from "@/lib/ideas/runner";
 import { learnCapUsd } from "@/lib/learn/budget";
@@ -44,6 +44,7 @@ function learnRunner() {
       key: signingKey(process.env.LEARN_GRANT_PRIVATE_KEY),
       now: () => new Date(),
       timeZone: await masonTimeZone(client),
+      defaultTimeZone: process.env.HUB_TIME_ZONE || DEFAULT_TIME_ZONE,
       cap: learnCapUsd(process.env),
       fetchFn: fetch,
     });

@@ -37,6 +37,7 @@ function setup(overrides: Partial<AwardDeps> = {}, exerciseDate = TODAY) {
     key: key(),
     now: () => NOW,
     timeZone: "UTC",
+    defaultTimeZone: "UTC",
     cap: 10,
     grade,
     judge,
@@ -79,6 +80,15 @@ describe("gradeAndGrant", () => {
     expect(await gradeAndGrant(deps, "ans1")).toMatchObject({ status: "graded", minutes: 0, late: true });
     expect(store.grades.get("ans1")?.late).toBe(true);
     expect(store.grants).toHaveLength(0);
+  });
+
+  it("grants nothing for a card dated later than today in the default zone, even if Mason's zone has reached it", async () => {
+    const { store, deps } = setup({ timeZone: "Pacific/Kiritimati" }, "2026-11-14");
+    expect(await gradeAndGrant(deps, "ans1")).toMatchObject({ status: "graded", minutes: 0, late: false });
+    expect(store.grants).toHaveLength(0);
+    const reading = setup({ timeZone: "Pacific/Kiritimati" }, "2026-11-14");
+    expect(await awardTakeaway(reading.deps, "ex1", "Specific.")).toMatchObject({ status: "judged", minutes: 0 });
+    expect(reading.store.grants).toHaveLength(0);
   });
 
   it("grades a silent recording F without calling Claude", async () => {

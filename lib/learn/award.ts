@@ -14,6 +14,8 @@ export type AwardDeps = {
   key: KeyObject | null;
   now: () => Date;
   timeZone: string;
+  /** HUB_TIME_ZONE (or its default); a card dated later than today here earns nothing, so a far-east zone cannot bank tomorrow. */
+  defaultTimeZone: string;
   cap: number;
   grade?: typeof gradeAnswer;
   judge?: typeof judgeTakeaway;
@@ -35,6 +37,10 @@ const MAX_TAKEAWAY_TRIES = 3;
 async function grantFor(deps: AwardDeps, date: string, want: number): Promise<SignedGrant | null> {
   const minutes = grantMinutes(want, await deps.store.grantedMinutes(date));
   return minutes > 0 && deps.key ? signGrant(deps.key, date, minutes) : null;
+}
+
+function aheadOfDefaultZone(deps: AwardDeps, date: string): boolean {
+  return date > learnToday(deps.now(), deps.defaultTimeZone);
 }
 
 const failureCode = (e: unknown) => (e instanceof GradeError ? e.reason : "error");
@@ -81,7 +87,7 @@ export async function gradeAndGrant(deps: AwardDeps, answerId: string): Promise<
   }
 
   const late = learnToday(deps.now(), deps.timeZone) !== exercise.date;
-  const want = late ? 0 : GRADE_MINUTES[card.grade];
+  const want = late || aheadOfDefaultZone(deps, exercise.date) ? 0 : GRADE_MINUTES[card.grade];
   const save = async () => {
     const grant = await grantFor(deps, exercise.date, want);
     const minutes = grant?.minutes ?? 0;
@@ -126,7 +132,7 @@ export async function awardTakeaway(deps: AwardDeps, exerciseId: string, takeawa
   await deps.store.recordUsage({ model: verdict.model, itemId: null, purpose, usage: verdict.usage });
 
   const late = learnToday(deps.now(), deps.timeZone) !== exercise.date;
-  const want = verdict.accepted && !late ? READING_MINUTES : 0;
+  const want = verdict.accepted && !late && !aheadOfDefaultZone(deps, exercise.date) ? READING_MINUTES : 0;
   const save = async () => {
     const grant = await grantFor(deps, exercise.date, want);
     const minutes = grant?.minutes ?? 0;

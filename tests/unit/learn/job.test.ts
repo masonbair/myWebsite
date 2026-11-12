@@ -37,6 +37,7 @@ function setup(overrides: Partial<LearnJobDeps> = {}) {
     key: null,
     now: () => NOW,
     timeZone: "UTC",
+    defaultTimeZone: "UTC",
     cap: 10,
     fetchFn: fetch,
     generate,

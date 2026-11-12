@@ -108,7 +108,7 @@ export async function readLatestPlaceZone(client: SupabaseClient): Promise<Place
   return data ? { timeZone: data.time_zone, updatedAt: data.updated_at } : null;
 }
 
-const DEFAULT_TIME_ZONE = "America/Denver";
+export const DEFAULT_TIME_ZONE = "America/Denver";
 
 /** Mason's zone now: the latest place ping's, else HUB_TIME_ZONE, else America/Denver; a failed read falls back too. */
 export async function masonTimeZone(client: SupabaseClient, now = new Date()): Promise<string> {
