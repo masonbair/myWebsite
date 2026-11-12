@@ -18,6 +18,8 @@ export type Exercise = {
   readingUrl: string;
   readingSummary: string;
   readingWhy: string | null;
+  /** Start of the article text, saved at generation so the takeaway check can see what the article says. */
+  readingExcerpt: string | null;
   model: string;
 };
 export type NewExercise = Omit<Exercise, "id">;
@@ -84,6 +86,7 @@ type ExerciseRow = {
   reading_url: string;
   reading_summary: string;
   reading_why: string | null;
+  reading_excerpt: string | null;
   model: string;
 };
 type AnswerRow = {
@@ -112,6 +115,7 @@ const toExercise = (r: ExerciseRow): Exercise => ({
   readingUrl: r.reading_url,
   readingSummary: r.reading_summary,
   readingWhy: r.reading_why,
+  readingExcerpt: r.reading_excerpt,
   model: r.model,
 });
 
@@ -197,6 +201,7 @@ export function supabaseLearnStore(client: SupabaseClient): LearnStore {
           reading_url: r.readingUrl,
           reading_summary: r.readingSummary,
           reading_why: r.readingWhy,
+          reading_excerpt: r.readingExcerpt,
           model: r.model,
         })),
       );

@@ -12,6 +12,7 @@ create table public.learn_exercises (
   reading_url text not null check (reading_url ~ '^https://' and length(reading_url) <= 2000),
   reading_summary text not null check (length(reading_summary) <= 600),
   reading_why text check (length(reading_why) <= 300),
+  reading_excerpt text check (length(reading_excerpt) <= 4000),
   model text not null,
   created_at timestamptz not null default now(),
   unique (date, position)

@@ -27,6 +27,7 @@ export class FakeLearnStore implements LearnStore {
       readingUrl: "https://hbr.org/2006/12/the-curse-of-knowledge",
       readingSummary: "Experts forget what it was like not to know.",
       readingWhy: null,
+      readingExcerpt: "Tappers guessed half the listeners would know the song. Only 2.5% did.",
       model: "claude-sonnet-5-5",
       ...e,
     };

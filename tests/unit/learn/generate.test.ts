@@ -114,4 +114,14 @@ describe("generateExercises", () => {
     });
     expect(charges).toHaveLength(1);
   });
+
+  it("keeps a trimmed text excerpt of each reading for the takeaway check", async () => {
+    const html = "<html><head><style>p{}</style></head><body><nav>Menu</nav><p>Tappers guessed half the listeners would know the song.</p><p>Only 2.5% did.</p></body></html>";
+    const fetchHtml = vi.fn(async () => new Response(html, { status: 200, headers: { "content-type": "text/html" } })) as unknown as typeof fetch;
+    const { client } = stub(text("notes"), text(exercises(["https://a.test/1", "https://a.test/2"])));
+    const out = await generateExercises(client, "2026-11-14", plan, [], fetchHtml, async () => {});
+    expect(out.rows[0].readingExcerpt).toContain("Tappers guessed half the listeners would know the song.");
+    expect(out.rows[0].readingExcerpt).toContain("Only 2.5% did.");
+    expect(out.rows[0].readingExcerpt!.length).toBeLessThanOrEqual(4000);
+  });
 });

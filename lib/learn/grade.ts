@@ -126,7 +126,7 @@ export async function gradeAnswer(
 /** Accepts a takeaway only when it shows something specific from the article beyond the summary shown. */
 export async function judgeTakeaway(
   anthropic: Anthropic,
-  r: { title: string; url: string; summary: string; takeaway: string },
+  r: { title: string; url: string; summary: string; excerpt: string | null; takeaway: string },
 ): Promise<{ accepted: boolean; feedback: string; usage: ClaudeUsage; model: ModelId }> {
   const fenced = fence(r.takeaway);
   const { value, usage, model } = await ask(anthropic, JUDGE_MODEL, JUDGE_SYSTEM, judgeUser(r, fenced), verdictSchema, 500);

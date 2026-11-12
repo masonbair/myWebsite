@@ -116,6 +116,7 @@ export async function awardTakeaway(deps: AwardDeps, exerciseId: string, takeawa
       title: exercise.readingTitle,
       url: exercise.readingUrl,
       summary: exercise.readingSummary,
+      excerpt: exercise.readingExcerpt,
       takeaway,
     });
   } catch (e) {

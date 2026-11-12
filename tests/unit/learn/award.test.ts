@@ -145,8 +145,10 @@ describe("gradeAndGrant", () => {
 describe("awardTakeaway", () => {
   it("grants 1 minute for an accepted takeaway, tied to the exercise", async () => {
     const { store, deps } = setup();
+    const judge = deps.judge as ReturnType<typeof vi.fn>;
     expect(await awardTakeaway(deps, "ex1", "Tappers think half know the song; 2.5% do.")).toMatchObject({ status: "judged", accepted: true, minutes: 1 });
     expect(store.grants).toEqual([expect.objectContaining({ minutes: 1, exerciseId: "ex1" })]);
+    expect(judge.mock.calls[0][1]).toMatchObject({ excerpt: expect.stringContaining("Only 2.5% did.") });
   });
 
   it("grants nothing for a rejected takeaway", async () => {

@@ -2,6 +2,7 @@ import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { BetaMessageParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { transformJSONSchema } from "@anthropic-ai/sdk/lib/transform-json-schema";
+import { convert } from "html-to-text";
 import { z } from "zod";
 import { PRICES, type ClaudeUsage, type ModelId } from "@/lib/ai/claude";
 import type { dayPlan } from "./day";
@@ -14,6 +15,7 @@ const WEB_SEARCH_TOOL = { type: "web_search_20260209", name: "web_search", max_u
 const MAX_PAUSE_RESENDS = 2;
 const REQUEST_OPTIONS = { timeout: 120_000, maxRetries: 1 } as const;
 const LINK_TIMEOUT_MS = 8000;
+const EXCERPT_CHARS = 4000;
 
 export type GenerateFailure = "refusal" | "schema" | "reading" | "api";
 
@@ -155,19 +157,31 @@ async function formatExercises(
   return result.data.exercises;
 }
 
-async function deadUrls(urls: string[], avoid: Set<string>, fetchFn: typeof fetch): Promise<string[]> {
+function excerptOf(body: string, contentType: string | null): string | null {
+  const text = contentType?.includes("html")
+    ? convert(body, { wordwrap: false, selectors: [{ selector: "a", options: { ignoreHref: true } }, { selector: "img", format: "skip" }, { selector: "nav", format: "skip" }] })
+    : body;
+  const clean = text.replace(/\s+/g, " ").trim().slice(0, EXCERPT_CHARS);
+  return clean.length > 0 ? clean : null;
+}
+
+/** Opens each reading once: dead or recently used links are listed, and the rest give a text excerpt. */
+async function checkReadings(urls: string[], avoid: Set<string>, fetchFn: typeof fetch): Promise<{ dead: string[]; excerpts: Map<string, string | null> }> {
+  const excerpts = new Map<string, string | null>();
   const checks = await Promise.all(
     urls.map(async (url) => {
       if (avoid.has(url)) return url;
       try {
         const res = await fetchFn(url, { redirect: "follow", signal: AbortSignal.timeout(LINK_TIMEOUT_MS) });
-        return res.status < 400 ? null : url;
+        if (res.status >= 400) return url;
+        excerpts.set(url, excerptOf(await res.text().catch(() => ""), res.headers.get("content-type")));
+        return null;
       } catch {
         return url;
       }
     }),
   );
-  return checks.filter((u): u is string => u !== null);
+  return { dead: checks.filter((u): u is string => u !== null), excerpts };
 }
 
 /** Writes the day's exercises: one web-search call for readings, then a format call; every reading link must open. */
@@ -189,11 +203,11 @@ export async function generateExercises(
   const notes = await searchReadings(anthropic, plan, [...avoidUrls], charge);
 
   let exercises = await formatExercises(anthropic, plan, notes, recent, [], charge);
-  let bad = await deadUrls(exercises.map((e) => e.reading.url), avoidUrls, fetchFn);
-  if (bad.length) {
-    exercises = await formatExercises(anthropic, plan, notes, recent, bad, charge);
-    bad = await deadUrls(exercises.map((e) => e.reading.url), avoidUrls, fetchFn);
-    if (bad.length) throw new GenerateError("reading", `${bad.length} reading link(s) did not open`);
+  let checked = await checkReadings(exercises.map((e) => e.reading.url), avoidUrls, fetchFn);
+  if (checked.dead.length) {
+    exercises = await formatExercises(anthropic, plan, notes, recent, checked.dead, charge);
+    checked = await checkReadings(exercises.map((e) => e.reading.url), avoidUrls, fetchFn);
+    if (checked.dead.length) throw new GenerateError("reading", `${checked.dead.length} reading link(s) did not open`);
   }
 
   const rows = plan.map((p, i): NewExercise => {
@@ -209,6 +223,7 @@ export async function generateExercises(
       readingUrl: e.reading.url,
       readingSummary: e.reading.summary,
       readingWhy: e.reading.why,
+      readingExcerpt: checked.excerpts.get(e.reading.url) ?? null,
       model,
     };
   });

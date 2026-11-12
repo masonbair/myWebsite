@@ -18,6 +18,7 @@ function row(position: 1 | 2): NewExercise {
     readingUrl: `https://a.test/${position}`,
     readingSummary: "Summary.",
     readingWhy: null,
+    readingExcerpt: null,
     model: "claude-sonnet-5-5",
   };
 }

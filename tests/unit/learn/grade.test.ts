@@ -87,8 +87,10 @@ describe("judgeTakeaway", () => {
       url: "https://hbr.org/2006/12/the-curse-of-knowledge",
       summary: "Experts forget what it was like not to know.",
       takeaway: "Tappers guess 50% of listeners know the song; really 2.5% do.",
+      excerpt: "In the study, tappers predicted half of listeners would name the song. Only 2.5% did.",
     });
     expect(create.mock.calls[0][0].model).toBe("claude-haiku-5-5");
+    expect(JSON.stringify(create.mock.calls[0][0].messages)).toContain("Only 2.5% did.");
     expect(out.accepted).toBe(true);
     expect(out.model).toBe("claude-haiku-5-5");
   });

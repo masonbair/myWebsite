@@ -30,6 +30,7 @@ function exercise(date: string, position: 1 | 2, type: NewExercise["type"]): New
     readingUrl: "https://hbr.org/2006/12/the-curse-of-knowledge",
     readingSummary: "Experts forget what it was like not to know.",
     readingWhy: null,
+    readingExcerpt: "Experts forget what it was like not to know. Tappers guessed half would know the song.",
     model: "claude-sonnet-5-5",
   };
 }
@@ -48,6 +49,7 @@ describe.skipIf(!enabled)("supabaseLearnStore against local Supabase", () => {
     expect(await store().insertExercises(rows)).toBe("ok");
     expect(await store().insertExercises(rows)).toBe("exists");
     expect((await store().exercisesFor(date)).map((e) => e.position)).toEqual([1, 2]);
+    expect((await store().exercisesFor(date))[0].readingExcerpt).toContain("Tappers guessed");
   });
 
   it("saves a grade with its grant and serves only msg and sig for that date", async () => {

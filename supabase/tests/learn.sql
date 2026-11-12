@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(73);
+select plan(74);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a4', 'learn-owner@example.com'),
@@ -231,6 +231,7 @@ select throws_ok($$ insert into storage.objects (bucket_id, name) values ('learn
 reset role;
 
 select is((select count(*)::int from cron.job where jobname = 'hub-learn'), 1, 'the learn event is scheduled');
+select col_is_null('public', 'learn_exercises', 'reading_excerpt', 'an exercise keeps an optional article excerpt for the takeaway check');
 
 select * from finish();
 rollback;
