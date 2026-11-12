@@ -5,8 +5,12 @@ import { getIdeaPage, IDEA_FILTERS, listIdeas } from "./read";
 
 export const MAX_IDEAS_LIMIT = 200;
 export const DEFAULT_IDEAS_LIMIT = 50;
-const DEFAULT_BUDGET_USD: Record<AiFeature, number> = { ideas: 20, news: 25 };
-const BUDGET_VAR: Record<AiFeature, string> = { ideas: "IDEAS_MONTHLY_BUDGET_USD", news: "NEWS_MONTHLY_BUDGET_USD" };
+const DEFAULT_BUDGET_USD: Record<AiFeature, number> = { ideas: 20, news: 25, learn: 10 };
+const BUDGET_VAR: Record<AiFeature, string> = {
+  ideas: "IDEAS_MONTHLY_BUDGET_USD",
+  news: "NEWS_MONTHLY_BUDGET_USD",
+  learn: "LEARN_MONTHLY_BUDGET_USD",
+};
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
