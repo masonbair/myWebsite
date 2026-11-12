@@ -48,6 +48,8 @@ export type LearnStore = {
   exercisesFor(date: string): Promise<Exercise[]>;
   exerciseById(id: string): Promise<Exercise | null>;
   readingExists(exerciseId: string): Promise<boolean>;
+  /** Paid takeaway checks logged for this card; each is an ai_usage row with purpose takeaway:<exerciseId>. */
+  takeawayAttempts(exerciseId: string): Promise<number>;
   recentQuestions(days: number, today: string): Promise<{ question: string; readingUrl: string }[]>;
   insertExercises(rows: NewExercise[]): Promise<"ok" | "exists">;
   loadAnswer(id: string): Promise<{ answer: Answer; exercise: Exercise } | null>;
@@ -158,6 +160,16 @@ export function supabaseLearnStore(client: SupabaseClient): LearnStore {
         .eq("exercise_id", exerciseId);
       if (error) throw error;
       return (count ?? 0) > 0;
+    },
+
+    async takeawayAttempts(exerciseId) {
+      const { count, error } = await client
+        .from("ai_usage")
+        .select("id", { count: "exact", head: true })
+        .eq("feature", "learn")
+        .eq("purpose", `takeaway:${exerciseId}`);
+      if (error) throw error;
+      return count ?? 0;
     },
 
     async recentQuestions(days, today) {

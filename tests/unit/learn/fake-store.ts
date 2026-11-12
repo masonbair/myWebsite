@@ -106,6 +106,9 @@ export class FakeLearnStore implements LearnStore {
     this.answers.get(answerId)!.status = "graded";
     return "ok" as const;
   }
+  async takeawayAttempts(exerciseId: string) {
+    return this.usage.filter((u) => (u as { purpose?: string }).purpose === `takeaway:${exerciseId}`).length;
+  }
   async readingExists(exerciseId: string) {
     return this.readings.has(exerciseId);
   }

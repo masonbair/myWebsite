@@ -57,9 +57,12 @@ describe("gradeAnswer", () => {
     expect("minutes" in out.card).toBe(false);
   });
 
-  it("rejects an unknown grade as a schema error", async () => {
+  it("rejects an unknown grade as a schema error, carrying what the call cost", async () => {
     const { client } = stubClient(reply({ ...card, grade: "A+" }));
-    await expect(gradeAnswer(client, input)).rejects.toMatchObject({ reason: "schema" });
+    await expect(gradeAnswer(client, input)).rejects.toMatchObject({
+      reason: "schema",
+      charge: { model: "claude-opus-5-5", usage: { input_tokens: 100, output_tokens: 50 } },
+    });
   });
 
   it("treats a refusal as a refusal error", async () => {

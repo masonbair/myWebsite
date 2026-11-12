@@ -27,7 +27,10 @@ export type AwardResult =
 export type TakeawayResult =
   | { status: "judged"; accepted: boolean; feedback: string; minutes: number }
   | { status: "duplicate" }
-  | { status: "waiting"; reason: "cap" | "not-configured" | "claude" };
+  | { status: "waiting"; reason: "cap" | "not-configured" | "claude" | "limit" };
+
+// Each failed check is billed, so one reading gets a few tries a day, not unlimited ones.
+const MAX_TAKEAWAY_TRIES = 3;
 
 async function grantFor(deps: AwardDeps, date: string, want: number): Promise<SignedGrant | null> {
   const minutes = grantMinutes(want, await deps.store.grantedMinutes(date));
@@ -35,6 +38,10 @@ async function grantFor(deps: AwardDeps, date: string, want: number): Promise<Si
 }
 
 const failureCode = (e: unknown) => (e instanceof GradeError ? e.reason : "error");
+
+async function recordFailedCharge(store: LearnStore, e: unknown, purpose: string): Promise<void> {
+  if (e instanceof GradeError && e.charge) await store.recordUsage({ model: e.charge.model, itemId: null, purpose, usage: e.charge.usage });
+}
 
 /** The only code that grades an answer and makes its grant; minutes come from the grade table, never from Claude. */
 export async function gradeAndGrant(deps: AwardDeps, answerId: string): Promise<AwardResult> {
@@ -67,6 +74,7 @@ export async function gradeAndGrant(deps: AwardDeps, answerId: string): Promise<
       card = graded.card;
       model = graded.model;
     } catch (e) {
+      await recordFailedCharge(deps.store, e, "grade");
       await deps.store.markFailed(answerId, failureCode(e));
       return { status: "waiting", reason: "claude" };
     }
@@ -99,7 +107,9 @@ export async function awardTakeaway(deps: AwardDeps, exerciseId: string, takeawa
   if (await deps.store.readingExists(exerciseId)) return { status: "duplicate" };
   if (!deps.anthropic) return { status: "waiting", reason: "not-configured" };
   if ((await deps.store.spend(deps.now())) >= deps.cap) return { status: "waiting", reason: "cap" };
+  if ((await deps.store.takeawayAttempts(exerciseId)) >= MAX_TAKEAWAY_TRIES) return { status: "waiting", reason: "limit" };
 
+  const purpose = `takeaway:${exerciseId}`;
   let verdict: Awaited<ReturnType<typeof judgeTakeaway>>;
   try {
     verdict = await (deps.judge ?? judgeTakeaway)(deps.anthropic, {
@@ -108,10 +118,11 @@ export async function awardTakeaway(deps: AwardDeps, exerciseId: string, takeawa
       summary: exercise.readingSummary,
       takeaway,
     });
-  } catch {
+  } catch (e) {
+    await recordFailedCharge(deps.store, e, purpose);
     return { status: "waiting", reason: "claude" };
   }
-  await deps.store.recordUsage({ model: verdict.model, itemId: null, purpose: "takeaway", usage: verdict.usage });
+  await deps.store.recordUsage({ model: verdict.model, itemId: null, purpose, usage: verdict.usage });
 
   const late = learnToday(deps.now(), deps.timeZone) !== exercise.date;
   const want = verdict.accepted && !late ? READING_MINUTES : 0;

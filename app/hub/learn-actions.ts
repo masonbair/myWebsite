@@ -82,7 +82,9 @@ export async function sendTakeaway(exerciseId: string, takeaway: string): Promis
   if (!exercise || exercise.date !== today) return OTHER_DAY;
   const result = await awardTakeaway(awardDeps, exerciseId, text);
   if (result.status === "duplicate") return { ok: false, error: "You already sent a takeaway for this card." };
-  if (result.status === "waiting") return { ok: false, error: WAITING_COPY[result.reason] };
+  if (result.status === "waiting") {
+    return { ok: false, error: result.reason === "limit" ? "You have tried this takeaway 3 times today." : WAITING_COPY[result.reason] };
+  }
   revalidatePath("/hub/learn");
   return { ok: true, accepted: result.accepted, feedback: result.feedback, minutes: result.minutes };
 }

@@ -111,6 +111,14 @@ describe("gradeAndGrant", () => {
     expect(store.saveGradeCalls).toHaveLength(0);
   });
 
+  it("logs the cost of a paid grading call that failed, then marks the answer failed", async () => {
+    const charge = { model: "claude-opus-5-5" as const, usage: { input_tokens: 7, output_tokens: 3 } };
+    const { store, deps } = setup({ grade: vi.fn(async () => Promise.reject(new GradeError("schema", "bad shape", { charge }))) });
+    expect(await gradeAndGrant(deps, "ans1")).toEqual({ status: "waiting", reason: "claude" });
+    expect(store.usage).toEqual([expect.objectContaining({ model: "claude-opus-5-5", purpose: "grade" })]);
+    expect(store.failed).toEqual([{ id: "ans1", error: "schema" }]);
+  });
+
   it("takes minutes only from the grade table, never from Claude's reply", async () => {
     const sneaky = { ...cardA, grade: "C" as const, minutes: 60 } as ReportCard;
     const { deps } = setup({ grade: vi.fn(async () => ({ card: sneaky, usage: { input_tokens: 1, output_tokens: 1 }, model: "claude-opus-5-5" as const })) });
@@ -152,6 +160,16 @@ describe("awardTakeaway", () => {
     await awardTakeaway(deps, "ex1", "First.");
     expect(await awardTakeaway(deps, "ex1", "Second.")).toEqual({ status: "duplicate" });
     expect(judge).toHaveBeenCalledTimes(1);
+  });
+
+  it("logs the cost of a failed takeaway check and stops after three tries a day", async () => {
+    const charge = { model: "claude-haiku-5-5" as const, usage: { input_tokens: 2, output_tokens: 1 } };
+    const judge = vi.fn(async () => Promise.reject(new GradeError("schema", "bad shape", { charge })));
+    const { store, deps } = setup({ judge });
+    for (let i = 0; i < 3; i++) expect(await awardTakeaway(deps, "ex1", "Try.")).toEqual({ status: "waiting", reason: "claude" });
+    expect(store.usage).toHaveLength(3);
+    expect(await awardTakeaway(deps, "ex1", "Try again.")).toEqual({ status: "waiting", reason: "limit" });
+    expect(judge).toHaveBeenCalledTimes(3);
   });
 
   it("grants nothing on a late takeaway", async () => {

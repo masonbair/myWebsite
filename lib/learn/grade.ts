@@ -12,14 +12,17 @@ const REQUEST_OPTIONS = { timeout: 90_000, maxRetries: 1 } as const;
 
 export type GradeFailure = "refusal" | "schema" | "api";
 
+/** `charge` is set when Claude answered (and billed) before the failure, so the caller can still log the cost. */
 export class GradeError extends Error {
+  readonly charge: { model: ModelId; usage: ClaudeUsage } | null;
   constructor(
     readonly reason: GradeFailure,
     detail: string,
-    options?: { cause?: unknown },
+    options?: { cause?: unknown; charge?: { model: ModelId; usage: ClaudeUsage } },
   ) {
-    super(`grading failed (${reason}): ${detail}`, options);
+    super(`grading failed (${reason}): ${detail}`, { cause: options?.cause });
     this.name = "GradeError";
+    this.charge = options?.charge ?? null;
   }
 }
 
@@ -87,17 +90,18 @@ async function ask<T>(
   } catch (e) {
     throw new GradeError("api", (e as Error).name, { cause: e });
   }
-  if (reply.stop_reason === "refusal") throw new GradeError("refusal", "Claude declined");
+  const charge = { model: knownModel(reply.model, model), usage: reply.usage };
+  if (reply.stop_reason === "refusal") throw new GradeError("refusal", "Claude declined", { charge });
   const text = reply.content.find((c) => c.type === "text")?.text ?? "";
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new GradeError("schema", "reply was not JSON");
+    throw new GradeError("schema", "reply was not JSON", { charge });
   }
   const result = schema.safeParse(parsed);
-  if (!result.success) throw new GradeError("schema", result.error.issues[0]?.message ?? "bad shape");
-  return { value: result.data, usage: reply.usage, model: knownModel(reply.model, model) };
+  if (!result.success) throw new GradeError("schema", result.error.issues[0]?.message ?? "bad shape", { charge });
+  return { value: result.data, usage: charge.usage, model: charge.model };
 }
 
 /** Grades one answer on its rubric; the card never carries minutes, which only the grade table decides. */
