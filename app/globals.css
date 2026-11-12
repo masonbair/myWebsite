@@ -149,6 +149,20 @@ html[data-lean] [data-tile] .shadow-tile {
     animation-delay: calc(var(--i) * 60ms);
   }
 
+  /* Plays only once the board's effects load, so the stamp paints at rest first. */
+  html[data-board-motion] [data-stamp] {
+    animation: stamp-land 750ms var(--ease-spring) both;
+  }
+  html[data-board-motion] [data-stamp]::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border: 3px dashed currentColor;
+    border-radius: 9999px;
+    pointer-events: none;
+    animation: ink-spread 750ms ease-out both;
+  }
+
   /* Tied to scroll position, so a tile already in view at load is already at rest. */
   @supports (animation-timeline: view()) {
     [data-board-grid] > .reveal {
@@ -157,6 +171,41 @@ html[data-lean] [data-tile] .shadow-tile {
       animation-timeline: view();
       animation-range: entry 0% entry 70%;
     }
+  }
+}
+
+/* A rubber stamp: lifts, thumps down a little flat, settles. Only transform, since the stamp's tilt uses `rotate`. */
+@keyframes stamp-land {
+  0% {
+    transform: none;
+  }
+  35% {
+    transform: translateY(-10px) scale(1.3);
+  }
+  55% {
+    transform: scale(0.9);
+  }
+  75% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* Ink squeezed out at the thump, fading as it spreads. */
+@keyframes ink-spread {
+  0%,
+  50% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  60% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
   }
 }
 

@@ -6,7 +6,7 @@ import { Prompt, Tile } from "../Tile";
 
 function CountryStamp({ count }: { count: number }) {
   return (
-    <p className="grid size-24 shrink-0 -rotate-[10deg] place-items-center rounded-full border-[3px] border-dashed border-night text-center text-[13px] leading-tight font-bold">
+    <p data-stamp className="relative grid size-24 shrink-0 -rotate-[10deg] place-items-center rounded-full border-[3px] border-dashed border-night text-center text-[13px] leading-tight font-bold">
       <span>
         <span className="font-mono text-3xl leading-none">{count}</span>
         <br />
