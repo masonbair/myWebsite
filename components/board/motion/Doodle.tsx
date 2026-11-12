@@ -8,7 +8,7 @@ type Dot = { x: number; y: number; w: number };
 
 const button = `${stickerButtonShape} pr-4 pl-4 text-sm border-line bg-surface text-ink ${focusRing}`;
 
-/** Lets a visitor scribble over the board; strokes live only in memory and are kept in page coordinates so they scroll with it. */
+/** Lets a visitor scribble on the board; strokes live only in memory, in the canvas's own coordinates, and the canvas scrolls with the board. */
 export function Doodle() {
   const ref = useRef<HTMLCanvasElement>(null);
   const strokes = useRef<Dot[][]>([]);
@@ -31,8 +31,8 @@ export function Doodle() {
           const b = stroke[i];
           ctx.lineWidth = b.w;
           ctx.beginPath();
-          ctx.moveTo(a.x - window.scrollX, a.y - window.scrollY);
-          ctx.lineTo(b.x - window.scrollX, b.y - window.scrollY);
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
           ctx.stroke();
         }
       }
@@ -47,7 +47,10 @@ export function Doodle() {
 
     let current: Dot[] | null = null;
     // A marker's line is never perfectly even, so each point gets a slightly different width.
-    const dot = (e: PointerEvent): Dot => ({ x: e.clientX + window.scrollX, y: e.clientY + window.scrollY, w: 3.5 + Math.random() * 1.5 });
+    const dot = (e: PointerEvent): Dot => {
+      const box = canvas.getBoundingClientRect();
+      return { x: e.clientX - box.left, y: e.clientY - box.top, w: 3.5 + Math.random() * 1.5 };
+    };
     const onDown = (e: PointerEvent) => {
       canvas.setPointerCapture(e.pointerId);
       current = [dot(e)];
@@ -74,11 +77,7 @@ export function Doodle() {
     canvas.addEventListener("pointerup", onUp);
     canvas.addEventListener("pointercancel", onUp);
     canvas.addEventListener("doodle:clear", clear);
-    const onScroll = () => {
-      if (strokes.current.length > 0) paint();
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    // Follows the canvas box, which on phones changes as the browser toolbar shows and hides.
+    // The board's height changes as tiles load and on rotation.
     const resized = new ResizeObserver(size);
     resized.observe(canvas);
     return () => {
@@ -87,7 +86,6 @@ export function Doodle() {
       canvas.removeEventListener("pointerup", onUp);
       canvas.removeEventListener("pointercancel", onUp);
       canvas.removeEventListener("doodle:clear", clear);
-      window.removeEventListener("scroll", onScroll);
       resized.disconnect();
     };
   }, []);
@@ -107,7 +105,7 @@ export function Doodle() {
         ref={ref}
         data-doodle
         aria-hidden="true"
-        className={`fixed inset-0 z-30 size-full ${drawing ? "cursor-crosshair touch-none" : "pointer-events-none"}`}
+        className={`absolute inset-0 z-30 size-full ${drawing ? "cursor-crosshair touch-none" : "pointer-events-none"}`}
       />
       {/* In the page under the board, in a slot Board reserves, so the buttons never sit on a tile or shift the layout; z-40 keeps them above the drawing canvas. */}
       <div className="relative z-40 flex gap-2">

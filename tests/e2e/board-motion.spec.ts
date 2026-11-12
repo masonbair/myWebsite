@@ -176,10 +176,15 @@ const doodleInk =(page: Page) =>
   });
 
 async function scribble(page: Page) {
-  await page.mouse.move(200, 300);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const grid = (await page.locator("[data-board-grid]").boundingBox())!;
+  const x = grid.x + 60;
+  const y = grid.y + 120;
+  await page.mouse.move(x, y);
   await page.mouse.down();
-  for (let i = 1; i <= 10; i++) await page.mouse.move(200 + i * 20, 300 + (i % 2) * 15);
+  for (let i = 1; i <= 10; i++) await page.mouse.move(x + i * 20, y + (i % 2) * 15);
   await page.mouse.up();
+  return { x: 60, y: 120 };
 }
 
 test.describe("doodle", () => {
@@ -214,6 +219,29 @@ test.describe("doodle", () => {
       [box.x + box.width / 2, box.y + box.height / 2],
     );
     expect(hit).toBe("https://github.com/masonbair");
+  });
+
+  test("doodle stays put on scroll", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await page.getByRole("button", { name: "Draw on the board" }).click({ timeout: 15_000 });
+    const start = await scribble(page);
+    const where = () =>
+      page.evaluate(({ x, y }) => {
+        const c = document.querySelector<HTMLCanvasElement>("canvas[data-doodle]")!;
+        const grid = document.querySelector("[data-board-grid]")!.getBoundingClientRect();
+        const box = c.getBoundingClientRect();
+        // The stroke started at grid-relative (x, y); read the canvas pixel there.
+        const dpr = c.width / box.width;
+        const px = Math.round((grid.left + x - box.left) * dpr);
+        const py = Math.round((grid.top + y - box.top) * dpr);
+        const alpha = c.getContext("2d")!.getImageData(px, py, 1, 1).data[3];
+        return { offset: Math.round(box.top - grid.top), inked: alpha > 0 };
+      }, start);
+    const before = await where();
+    expect(before.inked).toBe(true);
+    await page.mouse.wheel(0, 300);
+    await page.waitForTimeout(200);
+    expect(await where()).toEqual(before);
   });
 
   test("clear wipes the doodle", async ({ page }) => {

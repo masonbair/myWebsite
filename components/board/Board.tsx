@@ -54,7 +54,7 @@ export function Board({ board }: { board: BoardData }) {
 
   return (
     // Clipped sideways so a tile mid-swing (rotated) never widens the page on a phone.
-    <section aria-label="Right now" className="mx-auto w-full max-w-[1400px] overflow-x-clip px-4 md:px-8">
+    <section aria-label="Right now" className="relative mx-auto w-full max-w-[1400px] overflow-x-clip px-4 md:px-8">
       <div
         data-board-grid
         className="grid grid-flow-row-dense grid-cols-1 gap-4 md:gap-5 md:grid-cols-6 lg:grid-cols-12 lg:grid-rows-[repeat(2,minmax(17.5rem,auto))]"
@@ -71,7 +71,7 @@ export function Board({ board }: { board: BoardData }) {
           ),
         )}
       </div>
-      {/* Reserved height for the Draw buttons, which arrive after first paint. */}
+      {/* Reserved height for the Draw buttons, which arrive after first paint; not positioned, so the doodle canvas fills the whole section. */}
       <div className="mt-4 h-11">
         <LazyBoardMotion sunOffsetMinutes={board.sunOffsetMinutes} />
       </div>
