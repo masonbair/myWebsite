@@ -49,6 +49,7 @@ describe("gradeAnswer", () => {
     expect(JSON.stringify(req.system)).toContain(JSON.stringify(graderSystem("explain")).slice(1, 60));
     expect(out.card.grade).toBe("B+");
     expect(out.model).toBe("claude-opus-5-5");
+    expect(create.mock.calls[0][1]).toEqual({ timeout: 50_000, maxRetries: 0 });
   });
 
   it("never carries a minutes field from Claude into the card", async () => {

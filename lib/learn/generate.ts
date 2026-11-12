@@ -13,7 +13,9 @@ const MODEL: ModelId = "claude-sonnet-5-5";
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 const WEB_SEARCH_TOOL = { type: "web_search_20260209", name: "web_search", max_uses: 6 } as const;
 const MAX_PAUSE_RESENDS = 2;
-const REQUEST_OPTIONS = { timeout: 120_000, maxRetries: 1 } as const;
+// Search plus up to two format calls stay inside the 300 s event function; the next run retries a failure.
+const SEARCH_OPTIONS = { timeout: 120_000, maxRetries: 0 } as const;
+const FORMAT_OPTIONS = { timeout: 50_000, maxRetries: 0 } as const;
 const LINK_TIMEOUT_MS = 8000;
 const EXCERPT_CHARS = 4000;
 
@@ -66,10 +68,15 @@ const textOf = (r: Reply) =>
 export type OnCharge = (charge: Charge) => Promise<void>;
 
 // Each paid call is logged the moment it returns, so a run that fails later still counts toward the monthly cap.
-async function call(anthropic: Anthropic, request: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming, onCharge: OnCharge): Promise<Reply> {
+async function call(
+  anthropic: Anthropic,
+  request: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming,
+  onCharge: OnCharge,
+  options: { timeout: number; maxRetries: number },
+): Promise<Reply> {
   let reply: Reply;
   try {
-    reply = (await anthropic.beta.messages.create(request, REQUEST_OPTIONS)) as unknown as Reply;
+    reply = (await anthropic.beta.messages.create(request, options)) as unknown as Reply;
   } catch (e) {
     throw new GenerateError("api", (e as Error).name);
   }
@@ -105,6 +112,7 @@ async function searchReadings(anthropic: Anthropic, plan: Plan, avoid: string[],
         messages,
       },
       onCharge,
+      SEARCH_OPTIONS,
     );
     notes.push(textOf(reply));
     if (reply.stop_reason !== "pause_turn") return notes.join("\n").trim();
@@ -142,6 +150,7 @@ async function formatExercises(
       messages: [{ role: "user", content: lines.join("\n\n") }],
     },
     onCharge,
+    FORMAT_OPTIONS,
   );
   let parsed: unknown;
   try {

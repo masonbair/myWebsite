@@ -8,7 +8,8 @@ import { GRADES, type Grade, type ReportCard } from "./types";
 
 const GRADE_MODEL: ModelId = "claude-opus-5-5";
 const JUDGE_MODEL: ModelId = "claude-haiku-5-5";
-const REQUEST_OPTIONS = { timeout: 90_000, maxRetries: 1 } as const;
+// One try inside the 120 s page and transcript functions; the 15-minute learn event retries a failure.
+const REQUEST_OPTIONS = { timeout: 50_000, maxRetries: 0 } as const;
 
 export type GradeFailure = "refusal" | "schema" | "api";
 

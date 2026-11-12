@@ -53,6 +53,9 @@ describe("generateExercises", () => {
     expect(create.mock.calls[0][0].tools?.[0]?.name).toBe("web_search");
     expect(create.mock.calls[1][0].output_config.format.type).toBe("json_schema");
     expect(charges).toHaveLength(2);
+    // Search plus up to two format calls must end inside the 300 s event function.
+    expect(create.mock.calls[0][1]).toEqual({ timeout: 120_000, maxRetries: 0 });
+    expect(create.mock.calls[1][1]).toEqual({ timeout: 50_000, maxRetries: 0 });
   });
 
   it("asks once more when a reading URL is dead", async () => {
