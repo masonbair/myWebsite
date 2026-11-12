@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(57);
+select plan(73);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a4', 'learn-owner@example.com'),
@@ -40,6 +40,16 @@ create function pg_temp.grant_of(p_date text, p_minutes int, p_nonce text) retur
     'msg', 'fl-grant-v1|' || p_date || '|com.instagram.android|' || p_minutes || '|' || p_nonce,
     'sig', repeat('A', 86) || '==')
 $$;
+
+-- Runs a statement and swallows its error, so a test can check that nothing changed either way.
+create function pg_temp.try_sql(p_sql text) returns void language plpgsql as $$
+begin
+  execute p_sql;
+exception when others then
+  null;
+end;
+$$;
+grant execute on function pg_temp.try_sql(text) to authenticated;
 
 -- Reads: the owner sees every table, a stranger sees nothing, anon has no grant at all.
 set local role authenticated;
@@ -82,6 +92,16 @@ reset role;
 set local role anon;
 select throws_ok($$ select * from public.learn_grants $$, '42501', null, 'anon cannot read grants');
 select throws_ok($$ select * from public.learn_exercises $$, '42501', null, 'anon cannot read exercises');
+select throws_ok($$ select public.learn_save_grade('a1000000-0000-0000-0000-000000000001', pg_temp.grade(4), null) $$,
+  '42501', null, 'anon cannot call learn_save_grade');
+select throws_ok($$ select public.learn_save_takeaway('e1000000-0000-0000-0000-000000000001', 't', true, 'f', 1, null) $$,
+  '42501', null, 'anon cannot call learn_save_takeaway');
+select throws_ok($$ select public.learn_attach_transcript('a2000000-0000-0000-0000-000000000001', 'hi') $$,
+  '42501', null, 'anon cannot call learn_attach_transcript');
+select throws_ok($$ select public.learn_mark_failed('a1000000-0000-0000-0000-000000000001', 'x') $$,
+  '42501', null, 'anon cannot call learn_mark_failed');
+select throws_ok($$ insert into storage.objects (bucket_id, name) values ('learn-voice', 'answers/a2000000-0000-0000-0000-00000000000b.webm') $$,
+  '42501', null, 'anon cannot upload a voice clip');
 reset role;
 
 select is(
@@ -110,9 +130,35 @@ select throws_ok($$ select public.learn_save_grade('a1000000-0000-0000-0000-0000
 select throws_ok($$ select public.learn_save_grade('a1000000-0000-0000-0000-000000000002', pg_temp.grade(4),
   pg_temp.grant_of('2026-11-13', 4, 'short')) $$, '23514', null, 'a short nonce is refused');
 select throws_ok($$ select public.learn_save_grade('a1000000-0000-0000-0000-000000000002', pg_temp.grade(4),
-  pg_temp.grant_of('2026-11-13', 4, 'n2aaaaaaaaaaaaaaaaaaaa') || '{"package":"com.other"}') $$, '23514', null, 'another package is refused');
+  pg_temp.grant_of('2026-11-13', 4, 'n2aaaaaaaaaaaaaaaaaaaa')
+  || '{"package":"com.other","msg":"fl-grant-v1|2026-11-13|com.other|4|n2aaaaaaaaaaaaaaaaaaaa"}') $$,
+  '23514', null, 'another package is refused even when its msg matches');
+
+-- A grant must match the work it pays for: same minutes as the grade, a grade worth minutes, the exercise's own day.
 select throws_ok($$ select public.learn_save_grade('a1000000-0000-0000-0000-000000000002', pg_temp.grade(0),
-  pg_temp.grant_of('2026-11-13', 0, 'n2aaaaaaaaaaaaaaaaaaaa')) $$, '23514', null, 'a zero-minute grant is refused');
+  pg_temp.grant_of('2026-11-13', 1, 'n2aaaaaaaaaaaaaaaaaaaa')) $$, '22023', null, 'a grade worth 0 minutes carries no grant');
+select throws_ok($$ select public.learn_save_grade('a1000000-0000-0000-0000-000000000002', pg_temp.grade(2),
+  pg_temp.grant_of('2026-11-13', 4, 'n2aaaaaaaaaaaaaaaaaaaa')) $$, '22023', null, 'a grant cannot pay more than its grade');
+select throws_ok($$ select public.learn_save_grade('a1000000-0000-0000-0000-000000000002', pg_temp.grade(4),
+  pg_temp.grant_of('2026-11-14', 4, 'n2aaaaaaaaaaaaaaaaaaaa')) $$, '22023', null, 'a grant cannot be dated off its exercise day');
+select throws_ok($$ select public.learn_save_takeaway('e3000000-0000-0000-0000-000000000001', 'Takeaway.', false, 'No.', 0,
+  pg_temp.grant_of('2026-11-15', 1, 'r6zzzzzzzzzzzzzzzzzzzz')) $$, '22023', null, 'a refused takeaway carries no grant');
+select throws_ok($$ select public.learn_save_takeaway('e3000000-0000-0000-0000-000000000001', 'Takeaway.', true, 'Yes.', 0,
+  pg_temp.grant_of('2026-11-15', 1, 'r6zzzzzzzzzzzzzzzzzzzz')) $$, '22023', null, 'a takeaway grant matches its minutes');
+select throws_ok($$ select public.learn_save_takeaway('e3000000-0000-0000-0000-000000000001', 'Takeaway.', true, 'Yes.', 1,
+  pg_temp.grant_of('2026-11-16', 1, 'r6zzzzzzzzzzzzzzzzzzzz')) $$, '22023', null, 'a takeaway grant is dated its exercise day');
+
+-- Only the save functions write grades, readings and grants, even for the service role.
+select throws_ok($$ insert into public.learn_grants (date, package, minutes, nonce, msg, sig, answer_id)
+  values ('2026-11-13', 'com.instagram.android', 1, 'dddddddddddddddddddddd',
+          'fl-grant-v1|2026-11-13|com.instagram.android|1|dddddddddddddddddddddd', repeat('A', 86) || '==',
+          'a1000000-0000-0000-0000-000000000002') $$, '42501', null, 'the service role cannot insert a grant directly');
+select throws_ok($$ insert into public.learn_grades (answer_id, grade, worked, fix, better, resources, minutes)
+  values ('a1000000-0000-0000-0000-000000000002', 'A', 'w', 'f', 'b', '[]', 4) $$, '42501', null,
+  'the service role cannot insert a grade directly');
+select throws_ok($$ insert into public.learn_readings (exercise_id, takeaway, accepted, feedback, minutes)
+  values ('e1000000-0000-0000-0000-000000000001', 't', true, 'f', 1) $$, '42501', null,
+  'the service role cannot insert a reading directly');
 select throws_ok($$ select public.learn_save_grade('a1000000-0000-0000-0000-000000000002', pg_temp.grade(4),
   pg_temp.grant_of('2026-11-13', 4, 'n1aaaaaaaaaaaaaaaaaaaa')) $$, '23505', null, 'a reused nonce is refused');
 select is((select count(*)::int from public.learn_grades where answer_id = 'a1000000-0000-0000-0000-000000000002'), 0,
@@ -149,13 +195,17 @@ select throws_ok($$ update public.learn_answers set body = 'changed' where id = 
   'P0001', null, 'an answer body never changes');
 select throws_ok($$ update public.learn_answers set transcript = 'changed' where id = 'a2000000-0000-0000-0000-000000000001' $$,
   'P0001', null, 'a transcript never changes once set');
-select throws_ok($$ delete from public.learn_grants $$, 'P0001', null, 'grants are never deleted');
+select throws_ok($$ delete from public.learn_grants $$, '42501', null, 'the service role cannot delete grants');
 select throws_ok($$ delete from public.learn_answers $$, 'P0001', null, 'answers are never deleted');
-select throws_ok($$ truncate public.learn_exercises cascade $$, 'P0001', null, 'exercises are never truncated');
+select throws_ok($$ truncate public.learn_exercises cascade $$, '42501', null, 'the service role cannot truncate learn tables');
 
 select lives_ok($$ insert into public.ai_usage (feature, model, cost_usd, purpose) values ('learn', 'claude-opus-5-5', 0.01, 'grade') $$,
   'ai_usage accepts the learn feature');
 reset role;
+
+-- Even the table owner hits the no-delete triggers.
+select throws_ok($$ delete from public.learn_grants $$, 'P0001', null, 'grants are never deleted');
+select throws_ok($$ truncate public.learn_exercises cascade $$, 'P0001', null, 'exercises are never truncated');
 
 -- Voice clips: the owner may only add files named answers/<uuid>.<ext> to learn-voice.
 set local role authenticated;
@@ -166,7 +216,14 @@ select throws_ok($$ insert into storage.objects (bucket_id, name) values ('learn
   '42501', null, 'a path that climbs out is refused');
 select throws_ok($$ insert into storage.objects (bucket_id, name) values ('learn-voice', 'other/a2000000-0000-0000-0000-000000000009.webm') $$,
   '42501', null, 'a path outside answers/ is refused');
+select pg_temp.try_sql($$ update storage.objects set name = 'answers/a2000000-0000-0000-0000-000000000008.webm'
+  where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000009.webm' $$);
+select pg_temp.try_sql($$ delete from storage.objects
+  where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000009.webm' $$);
 reset role;
+select is((select count(*)::int from storage.objects
+           where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000009.webm'), 1,
+  'the owner can neither rename nor delete an uploaded clip');
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-0000000000b4","role":"authenticated"}';
 select throws_ok($$ insert into storage.objects (bucket_id, name) values ('learn-voice', 'answers/a2000000-0000-0000-0000-00000000000a.webm') $$,

@@ -125,6 +125,15 @@ describe("event auth", () => {
     expect((await harness().call("delete")).status).toBe(404);
   });
 
+  it("knows the learn event the 0014 cron posts, so it never 404s", async () => {
+    expect((await harness({ learn: null }).call("learn")).status).toBe(503);
+    let runs = 0;
+    const res = await harness({ learn: async () => (runs++, { generated: 0, graded: 0 }) }).call("learn");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ generated: 0, graded: 0 });
+    expect(runs).toBe(1);
+  });
+
   it("exports only POST and the time limit from the route", () => {
     expect(Object.keys(route).sort()).toEqual(["POST", "maxDuration"]);
     expect(route.maxDuration).toBe(300);

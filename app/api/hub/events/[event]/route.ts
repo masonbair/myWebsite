@@ -48,5 +48,6 @@ export async function POST(request: Request, ctx: { params: Promise<{ event: str
       : null,
     ideas: ideasRunner(),
     news: newsRunner(),
+    learn: null,
   });
 }

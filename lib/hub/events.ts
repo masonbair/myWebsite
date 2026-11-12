@@ -31,6 +31,8 @@ export type EventDeps = {
   ideas?: (() => Promise<IdeasRunResult>) | null;
   /** One news job run; null when the news Claude key is unset. */
   news: (() => Promise<NewsJobResult>) | null;
+  /** One Learn to Earn run; null until the learn job is wired or when its Claude key is unset. */
+  learn?: (() => Promise<unknown>) | null;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -241,6 +243,10 @@ export async function handleEventRequest(request: Request, event: string, deps: 
     if (event === "news") {
       if (!deps.news) return json({ error: "news is not configured" }, 503);
       return json(await deps.news());
+    }
+    if (event === "learn") {
+      if (!deps.learn) return json({ error: "learn is not configured" }, 503);
+      return json(await deps.learn());
     }
     return json({ error: "not found" }, 404);
   } catch (e) {

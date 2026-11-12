@@ -86,6 +86,7 @@ begin
      'fl-grant-v1|' || to_char(new.date, 'YYYY-MM-DD') || '|' || new.package || '|' || new.minutes || '|' || new.nonce then
     raise exception 'learn grant msg does not match its columns' using errcode = '23514';
   end if;
+  -- Relies on READ COMMITTED: after the lock, the sum below sees grants committed by whoever held it before.
   perform pg_advisory_xact_lock(hashtext('learn_grants:' || to_char(new.date, 'YYYY-MM-DD')));
   if (select coalesce(sum(minutes), 0) from public.learn_grants where date = new.date) + new.minutes > 10 then
     raise exception 'learn grants for % would pass the daily cap of 10 minutes', new.date;
@@ -149,18 +150,39 @@ create trigger learn_readings_no_truncate before truncate on public.learn_readin
 create trigger learn_grants_no_truncate before truncate on public.learn_grants
   for each statement execute function public.hub_no_delete();
 
+-- A grant may only pay for the work it is saved with: the same minutes, a grade worth minutes, the exercise's own day.
+create function public.learn_check_grant(p_grant jsonb, p_minutes int, p_date date) returns void
+language plpgsql immutable set search_path = ''
+as $$
+begin
+  if p_grant is null then
+    return;
+  end if;
+  if coalesce(p_minutes, 0) <= 0 or (p_grant->>'minutes')::int is distinct from p_minutes
+     or (p_grant->>'date')::date is distinct from p_date then
+    raise exception 'learn grant does not match the work it pays for' using errcode = '22023';
+  end if;
+end;
+$$;
+
 -- The grade and its grant land together or not at all; a second save for the same answer writes nothing.
 create function public.learn_save_grade(p_answer_id uuid, p_grade jsonb, p_grant jsonb) returns text
 language plpgsql security definer set search_path = ''
 as $$
+declare
+  exercise_date date;
 begin
-  perform 1 from public.learn_answers where id = p_answer_id for update;
+  select e.date into exercise_date
+  from public.learn_answers a join public.learn_exercises e on e.id = a.exercise_id
+  where a.id = p_answer_id
+  for update of a;
   if not found then
     raise exception 'no learn answer %', p_answer_id using errcode = 'P0002';
   end if;
   if exists (select 1 from public.learn_grades where answer_id = p_answer_id) then
     return 'duplicate';
   end if;
+  perform public.learn_check_grant(p_grant, (p_grade->>'minutes')::int, exercise_date);
 
   insert into public.learn_grades (answer_id, grade, worked, fix, better, resources, jargon_opening, delivery, minutes, late, model)
   values (p_answer_id, p_grade->>'grade', p_grade->>'worked', p_grade->>'fix', p_grade->>'better',
@@ -182,14 +204,17 @@ create function public.learn_save_takeaway(p_exercise_id uuid, p_takeaway text, 
                                            p_minutes int, p_grant jsonb) returns text
 language plpgsql security definer set search_path = ''
 as $$
+declare
+  exercise_date date;
 begin
-  perform 1 from public.learn_exercises where id = p_exercise_id for update;
+  select date into exercise_date from public.learn_exercises where id = p_exercise_id for update;
   if not found then
     raise exception 'no learn exercise %', p_exercise_id using errcode = 'P0002';
   end if;
   if exists (select 1 from public.learn_readings where exercise_id = p_exercise_id) then
     return 'duplicate';
   end if;
+  perform public.learn_check_grant(p_grant, case when p_accepted then p_minutes else 0 end, exercise_date);
 
   insert into public.learn_readings (exercise_id, takeaway, accepted, feedback, minutes)
   values (p_exercise_id, p_takeaway, p_accepted, p_feedback, p_minutes);
@@ -229,6 +254,8 @@ begin
 end;
 $$;
 
+revoke execute on function public.learn_check_grant(jsonb, int, date) from public, anon, authenticated;
+
 revoke execute on function public.learn_save_grade(uuid, jsonb, jsonb),
   public.learn_save_takeaway(uuid, text, boolean, text, int, jsonb),
   public.learn_attach_transcript(uuid, text),
@@ -256,8 +283,10 @@ revoke all on public.learn_exercises, public.learn_answers, public.learn_grades,
   from public, anon, authenticated;
 grant select on public.learn_exercises, public.learn_answers, public.learn_grades, public.learn_readings, public.learn_grants
   to authenticated;
-grant select, insert, update on public.learn_exercises, public.learn_answers, public.learn_grades, public.learn_readings,
-  public.learn_grants to service_role;
+-- Grades, readings and grants are written only by the save functions above, never directly, even by the server.
+revoke all on public.learn_grades, public.learn_readings, public.learn_grants from service_role;
+grant select on public.learn_grades, public.learn_readings, public.learn_grants to service_role;
+grant select, insert, update on public.learn_exercises, public.learn_answers to service_role;
 
 alter table public.ai_usage drop constraint ai_usage_feature_check;
 alter table public.ai_usage add constraint ai_usage_feature_check check (feature in ('ideas', 'news', 'learn'));
