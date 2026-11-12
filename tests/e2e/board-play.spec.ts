@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { boardRowGaps } from "./board-grid";
 import { fixtureUrl } from "./fixture-servers";
 
 const ready = (page: Page) => expect(page.locator("html[data-board-motion=ready]")).toHaveCount(1, { timeout: 15_000 });
@@ -45,10 +46,12 @@ test.describe("terminal tile", () => {
     expect(html).not.toContain("Testerville");
   });
 
-  test("the board stays at 8 tiles or fewer with no holes", async ({ page }) => {
+  test("the board stays at 8 tiles or fewer with no holes", async ({ page, isMobile }) => {
+    test.skip(isMobile, "row math is for the wide grid");
     await page.goto(fixtureUrl("full"));
     expect(await page.locator("[data-board-grid] > *").count()).toBeLessThanOrEqual(8);
     await expect(page.locator('[data-tile="terminal"]')).toBeVisible();
+    expect(await boardRowGaps(page)).toBe(0);
   });
 });
 
@@ -84,9 +87,15 @@ test.describe("sticker burst", () => {
 });
 
 test.describe("passport stamp", () => {
-  test("stamp is visible before any motion loads", async ({ page }) => {
-    await page.goto(fixtureUrl("full"), { waitUntil: "commit" });
+  test("stamp is visible and still before any motion loads", async ({ page }) => {
+    // Idle callbacks never fire, so the effects (loaded on idle, 4 s fallback) can't arrive while this checks.
+    await page.addInitScript(() => {
+      window.requestIdleCallback = () => 0;
+    });
+    await page.goto(fixtureUrl("full"));
     await expect(stamp(page)).toBeVisible();
+    expect(await page.locator("html[data-board-motion]").count()).toBe(0);
+    expect(await stamp(page).evaluate((el) => getComputedStyle(el).animationName)).toBe("none");
     expect(await stamp(page).evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
   });
 

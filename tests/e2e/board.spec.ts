@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { boardRowGaps } from "./board-grid";
 import { fixtureUrl } from "./fixture-servers";
 
 test("full board shows location", async ({ page }) => {
@@ -195,19 +196,6 @@ test("full board rows stay full with the reading tile", async ({ page }, testInf
   test.skip(testInfo.project.name !== "desktop", "row math is for the wide grid");
   await page.goto(fixtureUrl("full"));
   await expect(page.getByRole("region", { name: "What I'm reading about" })).toBeVisible();
-  const gaps = await page.locator("[data-board-grid]").evaluate((grid) => {
-    // Layout boxes, not getBoundingClientRect: tiles swinging in on scroll are transformed mid-animation.
-    const box = (el: HTMLElement) => ({ top: el.offsetTop, bottom: el.offsetTop + el.offsetHeight, width: el.offsetWidth });
-    const g = box(grid as HTMLElement);
-    const gap = parseFloat(getComputedStyle(grid).columnGap);
-    const tiles = Array.from(grid.children).map((el) => box(el as HTMLElement));
-    const tops = [...new Set(tiles.map((t) => Math.round(t.top)))];
-    // Every row line, tall tiles included, must cover the grid's full width.
-    return tops.filter((y) => {
-      const across = tiles.filter((t) => t.top <= y + 1 && t.bottom > y + 1);
-      const covered = across.reduce((sum, t) => sum + t.width, 0) + gap * (across.length - 1);
-      return Math.abs(covered - g.width) > 2;
-    }).length;
-  });
+  const gaps = await boardRowGaps(page);
   expect(gaps).toBe(0);
 });
