@@ -326,3 +326,66 @@ Turning a newsletter private or switching a topic off changes what the public tr
 4. `estimate [--model claude-sonnet-5-5|claude-haiku-5-5|claude-opus-5-5]`: prints the issue count per newsletter and the cost at batch (half) price. It counts input tokens on 10 sample issues and assumes 2,500 output tokens per issue. It also shows the most the later grouping step can cost, and skips issues whose text is empty. Then it asks `Type yes to submit`. Anything else sends nothing. `submit` does the same.
 5. `collect`: run it once the batches end (usually within an hour, at most 24). It writes the stories under a new `backfill` run, logs each issue's cost in `ai_usage` (purpose `backfill`, not counted toward the monthly cap), and moves issues to done. Then it shows the most that grouping the new stories (Haiku calls at full price) can cost and asks `Type yes to cluster`; any other answer skips it, and running `collect` again asks again. Trends for the run's dates are rebuilt either way. Issues that failed go to the daily job as `failed`. Running it again is safe.
 6. Re-run after a prompt or topic change: `estimate --rerun --from <YYYY-MM-DD> --to <YYYY-MM-DD>`, type `yes`, then `collect`. New stories go under a new `rerun` run that becomes current; old rows stay, so a bad run can be undone by pointing issues back at the old run.
+
+## Learn to Earn (/hub/learn)
+
+Each morning the site writes two practice cards. You answer them on `/hub/learn` (typed or as a voice note), Claude grades them, and a good grade earns signed Instagram bonus minutes (at most +10 a day) that Focus Lock picks up. Design: `docs/superpowers/specs/2026-11-12-learn-to-earn-design.md`.
+
+What each setting does:
+
+| Name | What it is |
+| --- | --- |
+| `ANTHROPIC_API_KEY_LEARN` | The Claude key for writing cards and grading. Unset: no cards are written and answers wait. |
+| `LEARN_GRANT_PRIVATE_KEY` | The Ed25519 signing seed for bonus grants. Unset or bad: answers are still graded, but no minutes are granted. |
+| `LEARN_FOCUSLOCK_TOKEN` | Lets Focus Lock read the day's signed grants (`/api/learn/grants`). It can never create one. |
+| `LEARN_HINOTE_TOKEN` | Lets hinote-sync list voice clips waiting for a transcript and send each transcript once. |
+| `LEARN_ROUTINE_TOKEN` | Lets the Daily Learn email read today's questions (`/api/learn/today`). |
+| `LEARN_MONTHLY_BUDGET_USD` | Optional. The monthly Claude cap for this feature, default 10. At the cap, no new cards are written and answers wait until next month. |
+
+Steps, in this order (only you run these):
+
+1. **Read the migration's security review** (in the `fix(learn): security review fixes for 0014` commit message), then apply it:
+   ```sh
+   cd ~/Desktop/programming/myWebsite && supabase db push
+   ```
+2. **Make the signing key.** The private key goes to a file and is never printed:
+   ```sh
+   mkdir -p ~/.config/learn && chmod 700 ~/.config/learn
+   (umask 077 && node -e '
+   const { generateKeyPairSync } = require("node:crypto");
+   const fs = require("node:fs");
+   const dir = process.env.HOME + "/.config/learn/";
+   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+   fs.writeFileSync(dir + "grant-private-key", privateKey.export({ format: "der", type: "pkcs8" }).subarray(16).toString("base64"), { mode: 0o600 });
+   fs.writeFileSync(dir + "grant-public-key", publicKey.export({ format: "der", type: "spki" }).subarray(12).toString("base64") + "\n");
+   console.log("Saved. Private key written to file only.");
+   ')
+   ```
+   Keep `grant-private-key`. Losing it means a new key and a new Focus Lock build.
+3. **Make the three tokens:**
+   ```sh
+   for t in focuslock hinote routine; do (umask 077 && openssl rand -hex 32 > ~/.config/learn/$t-token); done
+   ```
+4. **Add them to Vercel (myWebsite, Production) as Sensitive**, read from the files so nothing lands in shell history:
+   ```sh
+   vercel env add LEARN_GRANT_PRIVATE_KEY production --sensitive < ~/.config/learn/grant-private-key
+   vercel env add LEARN_FOCUSLOCK_TOKEN production --sensitive < ~/.config/learn/focuslock-token
+   vercel env add LEARN_HINOTE_TOKEN production --sensitive < ~/.config/learn/hinote-token
+   vercel env add LEARN_ROUTINE_TOKEN production --sensitive < ~/.config/learn/routine-token
+   vercel env add ANTHROPIC_API_KEY_LEARN production --sensitive
+   ```
+   Type the Anthropic key at the last prompt. Make it in its own Console workspace (for example `masonbair-learn`) with a monthly limit of about $15; the app's $10 cap stops earlier.
+5. **Redeploy.** A Vercel env change reaches only deploys started after it.
+6. **Hand off:**
+   - `~/.config/learn/grant-public-key` to the Focus Lock agent. It is public and safe to share. Never share `grant-private-key`.
+   - `focuslock-token` to the phone, per the Focus Lock plan.
+   - `hinote-token` to hinote-sync, per its plan, with `LEARN_VOICE_URL=https://masonbair.com/api/learn/voice`.
+   - `routine-token` to the Daily Learn routine (the coordinator adds the routine section once you OK it).
+7. **Check the next morning:**
+   - `/hub/learn` shows two cards.
+   - Without a token, the grants endpoint refuses. This prints `401`:
+     ```sh
+     curl -s -o /dev/null -w '%{http_code}\n' "https://masonbair.com/api/learn/grants?date=$(date +%F)"
+     ```
+
+Costs: about $0.10 to $0.30 a day (one Sonnet call with web search to write the cards, Opus to grade each answer, Haiku for each reading takeaway), logged in `ai_usage` under the feature `learn`.
