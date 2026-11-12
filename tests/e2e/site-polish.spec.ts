@@ -46,6 +46,17 @@ test("coffee chat cards fill the width with no empty cell", async ({ page, isMob
   expect(new Set(tops).size).toBe(1);
 });
 
+test("header plate carries the page's fixed sun wash, so it shows no seam", async ({ page }) => {
+  await page.goto(fixtureUrl("full"));
+  const style = await page.locator("[data-nav-plate]").evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { image: s.backgroundImage, attachment: s.backgroundAttachment, color: s.backgroundColor };
+  });
+  expect(style.image).toContain("linear-gradient");
+  expect(style.attachment).toContain("fixed");
+  expect(style.color).toBe(await page.evaluate(() => getComputedStyle(document.body).backgroundColor));
+});
+
 test("header plate never blocks clicks", async ({ page }) => {
   await page.goto(fixtureUrl("full"));
   const pe = await page.locator("[data-nav-plate]").evaluate((el) => getComputedStyle(el).pointerEvents);

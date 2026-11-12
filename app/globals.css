@@ -97,6 +97,13 @@ html[data-sun]::before {
   }
 }
 
+/* The nav's plate repeats the page's canvas and the same fixed sun wash, so it hides text without showing a seam. */
+[data-nav-plate] {
+  background:
+    linear-gradient(var(--color-sun, transparent), transparent) 0 0 / 100% 70vh no-repeat fixed,
+    var(--color-canvas);
+}
+
 /* The board's dot canvas draws these same dots while it runs; see components/board/motion/DotField.tsx. */
 html[data-dots] body {
   background-image: none;

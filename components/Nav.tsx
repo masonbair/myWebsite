@@ -17,11 +17,11 @@ const links: NavLink[] = [
 export function Nav() {
   return (
     <>
-    {/* Below the game's circles (z-40) so they stay visible, above the page so headings never show through the nav. */}
+    {/* Below the game's circles (z-40), above the page; its background matches the page (see globals.css) so headings never show through. */}
     <div
       aria-hidden
       data-nav-plate
-      className="pointer-events-none fixed inset-x-0 top-0 z-[35] h-[calc(env(safe-area-inset-top,0px)+4.5rem)] bg-canvas [mask-image:linear-gradient(to_bottom,black_75%,transparent)] md:h-[calc(env(safe-area-inset-top,0px)+5.25rem)]"
+      className="pointer-events-none fixed inset-x-0 top-0 z-[35] h-[calc(env(safe-area-inset-top,0px)+4.5rem)] [mask-image:linear-gradient(to_bottom,black_75%,transparent)] md:h-[calc(env(safe-area-inset-top,0px)+5.25rem)]"
     />
     <header className="pointer-events-none fixed inset-x-0 top-0 z-50 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] md:pt-[calc(env(safe-area-inset-top,0px)+1rem)]">
       {/* Only the stickers take clicks, so game circles in the gaps stay reachable. */}
