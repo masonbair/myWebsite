@@ -54,6 +54,11 @@ body {
   color: var(--color-ink);
 }
 
+/* The board's dot canvas draws these same dots while it runs; see components/board/motion/DotField.tsx. */
+html[data-dots] body {
+  background-image: none;
+}
+
 /* A pressed tile is held up off the board, so its shadow grows. */
 [data-lifted] .shadow-tile {
   box-shadow: var(--shadow-tile-lift);
