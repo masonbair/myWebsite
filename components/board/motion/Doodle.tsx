@@ -87,6 +87,16 @@ export function Doodle() {
     };
   }, []);
 
+  // The buttons are fixed, so they only show while the board is on screen; elsewhere they would sit on top of reading text.
+  const [boardInView, setBoardInView] = useState(true);
+  useEffect(() => {
+    const grid = document.querySelector("[data-board-grid]");
+    if (!grid) return;
+    const observer = new IntersectionObserver(([entry]) => setBoardInView(entry.isIntersecting));
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     if (!drawing) return;
     const onKey = (e: KeyboardEvent) => {
@@ -104,7 +114,7 @@ export function Doodle() {
         aria-hidden="true"
         className={`fixed inset-0 z-30 h-screen w-screen ${drawing ? "cursor-crosshair touch-none" : "pointer-events-none"}`}
       />
-      <div className="fixed bottom-4 left-4 z-40 flex gap-2">
+      <div className="fixed bottom-4 left-4 z-40 flex gap-2" hidden={!boardInView && !drawing}>
         <button
           type="button"
           aria-pressed={drawing}

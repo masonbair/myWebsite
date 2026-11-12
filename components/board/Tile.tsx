@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 // The board's effects set these variables on the tile's wrapper; the tilt uses the separate `rotate` property, so both apply.
 const lean =
-  "[transform:perspective(900px)_rotateX(var(--lean-y,0deg))_rotateY(var(--lean-x,0deg))_translateY(var(--lift,0px))] transition-[transform,box-shadow] duration-300 ease-spring motion-reduce:transition-none";
+  "[transform:perspective(1600px)_rotateX(var(--lean-y,0deg))_rotateY(var(--lean-x,0deg))_translateY(var(--lift,0px))] transition-[transform,box-shadow] duration-300 ease-spring motion-reduce:transition-none";
 
 const tilts = { none: "", left: "md:-rotate-[1.5deg]", right: "md:rotate-[2deg]" };
 

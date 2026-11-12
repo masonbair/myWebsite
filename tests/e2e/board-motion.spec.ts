@@ -183,6 +183,14 @@ test.describe("doodle", () => {
   });
 });
 
+test("draw button hides once the board scrolls away", async ({ page }) => {
+  await page.goto(fixtureUrl("full"));
+  const draw = page.getByRole("button", { name: "Draw on the board" });
+  await expect(draw).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("heading", { name: "Work and experience", exact: true }).scrollIntoViewIfNeeded();
+  await expect(draw).toBeHidden();
+});
+
 test.describe("touch", () => {
   test("scrolling never draws", async ({ page }) => {
     await page.goto(fixtureUrl("full"));
