@@ -40,8 +40,40 @@ test.describe("desktop lean", () => {
     await page.goto(fixtureUrl("full"));
     await ready(page);
     const box = (await page.locator('[data-tile="location"]').boundingBox())!;
-    await page.mouse.move(box.x + box.width - 5, box.y + 5);
-    await expect.poll(() => tileVar(page, "location", "--lean-x")).toMatch(/^[1-9]/);
+    await page.mouse.move(box.x + box.width - 10, box.y + box.height / 2);
+    await expect.poll(() => tileVar(page, "location", "--lean-r")).toMatch(/^1\.\d+deg$/);
+  });
+
+  test("only the hovered tile leans", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await ready(page);
+    const box = (await page.locator('[data-tile="github"]').boundingBox())!;
+    await page.mouse.move(box.x + box.width - 10, box.y + 10);
+    await expect.poll(() => tileVar(page, "github", "--lean-r")).not.toBe("");
+    for (const other of ["hello", "location", "photo"]) expect(await tileVar(page, other, "--lean-r")).toBe("");
+  });
+
+  test("no lean off-tile", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await ready(page);
+    const box = (await page.locator('[data-tile="location"]').boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await expect.poll(() => tileVar(page, "location", "--lean-r")).not.toBe("");
+    const vp = page.viewportSize()!;
+    await page.mouse.move(vp.width - 5, vp.height - 5);
+    await expect
+      .poll(() => page.locator("[data-tile]").evaluateAll((els) => els.map((el) => (el as HTMLElement).style.getPropertyValue("--lean-r")).join("")))
+      .toBe("");
+  });
+
+  test("lean uses no 3D turn", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await ready(page);
+    const box = (await page.locator('[data-tile="photo"]').boundingBox())!;
+    await page.mouse.move(box.x + box.width - 10, box.y + 10);
+    await expect.poll(() => tileVar(page, "photo", "--lean-r")).not.toBe("");
+    const transform = await page.locator('[data-tile="photo"] .shadow-tile').first().evaluate((el) => getComputedStyle(el).transform);
+    expect(transform.startsWith("matrix(")).toBe(true);
   });
 
   test("press lifts a tile", async ({ page }) => {
@@ -62,7 +94,7 @@ test.describe("desktop lean", () => {
     const box = (await page.locator('[data-tile="location"]').boundingBox())!;
     await page.mouse.move(box.x + box.width - 5, box.y + 5);
     await page.waitForTimeout(300);
-    expect(await tileVar(page, "location", "--lean-x")).toBe("");
+    expect(await tileVar(page, "location", "--lean-r")).toBe("");
   });
 });
 
@@ -255,6 +287,6 @@ test.describe("touch", () => {
     await tile.dispatchEvent("pointermove", { pointerType: "touch", clientX: 10, clientY: 10, bubbles: true });
     await tile.dispatchEvent("pointerdown", { pointerType: "touch", bubbles: true });
     await expect.poll(() => tileVar(page, "location", "--lift")).toBe("-4px");
-    expect(await tileVar(page, "location", "--lean-x")).toBe("");
+    expect(await tileVar(page, "location", "--lean-r")).toBe("");
   });
 });

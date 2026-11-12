@@ -5,24 +5,25 @@ const rect = { left: 100, top: 100, width: 200, height: 100 };
 
 describe("leanFor", () => {
   it("pointer at center gives no lean", () => {
-    expect(leanFor(rect, { x: 200, y: 150 })).toEqual({ x: 0, y: 0 });
+    expect(leanFor(rect, { x: 200, y: 150 })).toEqual({ rotate: 0, dx: 0, dy: 0 });
   });
 
-  it("pointer at right edge leans right by max", () => {
-    expect(leanFor(rect, { x: 300, y: 150 }).x).toBe(4);
+  it("pointer at the right edge turns toward it by the max", () => {
+    expect(leanFor(rect, { x: 300, y: 150 }).rotate).toBe(1.5);
   });
 
-  it("result is clamped", () => {
-    const lean = leanFor(rect, { x: 480, y: 150 });
-    expect(Math.abs(lean.x)).toBeLessThanOrEqual(4);
-    expect(Math.abs(lean.y)).toBeLessThanOrEqual(4);
+  it("pointer at the left edge turns the other way", () => {
+    expect(leanFor(rect, { x: 100, y: 150 }).rotate).toBe(-1.5);
   });
 
-  it("far pointer gives no lean", () => {
-    expect(leanFor(rect, { x: 2000, y: 150 })).toEqual({ x: 0, y: 0 });
+  it("nudge points toward the pointer and stays small", () => {
+    const lean = leanFor(rect, { x: 300, y: 200 });
+    expect(lean.dx).toBe(3);
+    expect(lean.dy).toBe(3);
   });
 
-  it("pointer below the center tips the top edge back", () => {
-    expect(leanFor(rect, { x: 200, y: 200 }).y).toBe(-4);
+  it("pointer outside the tile gives no lean", () => {
+    expect(leanFor(rect, { x: 301, y: 150 })).toEqual({ rotate: 0, dx: 0, dy: 0 });
+    expect(leanFor(rect, { x: 200, y: 99 })).toEqual({ rotate: 0, dx: 0, dy: 0 });
   });
 });
