@@ -12,12 +12,14 @@ import {
   Trophy,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
+import { LazyBoardMotion } from "@/components/board/motion/LazyBoardMotion";
 import { Reveal } from "@/components/board/Reveal";
 import { Prompt, Tile } from "@/components/board/Tile";
 import { focusRing, focusRingOnColor, stickerButtonShape, tag } from "@/components/ui/sticker";
 import { JsonLd } from "@/components/JsonLd";
 import { bookingMailto, bookingUrl, coffee, coffeeUpdated, type TopicIcon } from "@/content/coffee";
 import { contact } from "@/content/site";
+import { readSunOffset } from "@/lib/board";
 import { coffeeJsonLd } from "@/lib/jsonld";
 
 export const metadata: Metadata = {
@@ -48,13 +50,17 @@ const elsewhere = [
   { label: "LinkedIn", href: contact.linkedin, icon: LinkedinLogo },
 ];
 
-export default function CoffeePage() {
+export const revalidate = 3600;
+
+export default async function CoffeePage() {
+  const sunOffsetMinutes = await readSunOffset();
   return (
-    <main className="mx-auto w-full max-w-[1400px] px-4 pt-24 pb-24 md:px-8">
+    // Clipped sideways so a tile mid-swing (rotated) never widens the page on a phone.
+    <main className="mx-auto w-full max-w-[1400px] overflow-x-clip px-4 pt-24 pb-24 md:px-8">
       <JsonLd data={coffeeJsonLd()} />
 
-      <div className="grid gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-7">
+      <div data-coffee-grid className="grid gap-4 lg:grid-cols-12">
+        <div data-tile="coffee-hero" className="lg:col-span-7">
           <Tile core="flex flex-col bg-tea p-7 text-night md:p-12">
             <Prompt>book --coffee</Prompt>
             <h1 className="mt-2 max-w-[14ch] text-5xl leading-[0.95] font-bold tracking-[-0.04em] md:text-7xl">
@@ -97,7 +103,7 @@ export default function CoffeePage() {
           </Tile>
         </div>
 
-        <div className="lg:col-span-5">
+        <div data-tile="coffee-photo" className="lg:col-span-5">
           <Tile tilt="right" core="aspect-[4/5] bg-ink/5 lg:aspect-auto lg:min-h-[36rem]">
             <Image
               src={photo.src}
@@ -110,7 +116,7 @@ export default function CoffeePage() {
           </Tile>
         </div>
 
-        <Reveal index={2} className="lg:col-span-8">
+        <Reveal index={2} tile="coffee-topics" className="lg:col-span-8">
           <Tile core="bg-surface p-7 md:p-10">
             <h2 className="text-2xl font-bold tracking-tight text-ink md:text-3xl">{coffee.topicsHeading}</h2>
             <ul className="mt-8 grid gap-5 sm:grid-cols-2">
@@ -133,7 +139,7 @@ export default function CoffeePage() {
           </Tile>
         </Reveal>
 
-        <Reveal index={3} className="lg:col-span-4">
+        <Reveal index={3} tile="coffee-time" className="lg:col-span-4">
           <Tile tilt="left" core="flex flex-col bg-accent p-7 text-night md:p-10">
             <GlobeHemisphereWest weight="light" size={40} aria-hidden />
             <h2 className="mt-auto pt-10 text-2xl font-bold tracking-tight md:text-3xl">{coffee.timeZoneHeading}</h2>
@@ -224,6 +230,8 @@ export default function CoffeePage() {
           ))}
         </ul>
       </section>
+
+      <LazyBoardMotion sunOffsetMinutes={sunOffsetMinutes} scope="[data-coffee-grid]" doodle={false} />
 
       <p className="mt-16 text-sm text-mute">
         Last updated <time dateTime={coffeeUpdated}>{updatedLabel}</time>

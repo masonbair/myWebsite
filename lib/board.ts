@@ -21,15 +21,21 @@ const settle = <T,>(source: () => Promise<T>, fallback: T): Promise<T> =>
     .then(source)
     .catch(() => fallback);
 
+/** Mason's UTC offset in minutes for the time-of-day colors; HUB_TIME_ZONE when the database can't say, else null. */
+export async function readSunOffset(zone: () => Promise<string> = () => masonTimeZone(serviceClient())): Promise<number | null> {
+  const name = await settle(zone, process.env.HUB_TIME_ZONE || null);
+  return name ? offsetMinutesAt(name, new Date()) : null;
+}
+
 /** Loads everything the Right Now board shows; a failing source becomes its empty value. */
 export async function getBoard(deps: Deps = {}): Promise<Board> {
-  const [now, github, trends, zone] = await Promise.all([
+  const [now, github, trends, sunOffsetMinutes] = await Promise.all([
     settle(deps.readNow ?? (() => loadNow()), parseNow(null)),
     settle(deps.github ?? (() => getGithubActivity()), null),
     settle(deps.trends ?? (() => readPublicTrends()), null),
-    settle(deps.zone ?? (() => masonTimeZone(serviceClient())), process.env.HUB_TIME_ZONE || null),
+    readSunOffset(deps.zone),
   ]);
-  return { now, github, trends, sunOffsetMinutes: zone ? offsetMinutesAt(zone, new Date()) : null };
+  return { now, github, trends, sunOffsetMinutes };
 }
 
 const FULL = "md:col-span-6 lg:col-span-12";

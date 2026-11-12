@@ -23,10 +23,19 @@ function useFinePointer() {
 }
 
 /** The board's live effects; loaded only after first paint by LazyBoardMotion. */
-export function BoardMotion({ sunOffsetMinutes }: { sunOffsetMinutes: number | null }) {
+/** `scope`: selector of the container whose tiles lean; `doodle` is off where there's no board to draw on. */
+export function BoardMotion({
+  sunOffsetMinutes,
+  scope = "[data-board-grid]",
+  doodle = true,
+}: {
+  sunOffsetMinutes: number | null;
+  scope?: string;
+  doodle?: boolean;
+}) {
   const reduce = useReducedMotion();
   const fine = useFinePointer();
-  useLean(reduce);
+  useLean(reduce, scope);
   useStickerBurst(reduce);
 
   useEffect(() => {
@@ -39,7 +48,7 @@ export function BoardMotion({ sunOffsetMinutes }: { sunOffsetMinutes: number | n
   return (
     <>
       {fine && !reduce && <DotField />}
-      <Doodle />
+      {doodle && <Doodle />}
       {sunOffsetMinutes !== null && <SunClock offsetMinutes={sunOffsetMinutes} />}
     </>
   );

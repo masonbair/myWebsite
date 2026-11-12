@@ -165,7 +165,8 @@ html[data-lean] [data-tile] .shadow-tile {
 
   /* Tied to scroll position, so a tile already in view at load is already at rest. */
   @supports (animation-timeline: view()) {
-    [data-board-grid] > .reveal {
+    [data-board-grid] > .reveal,
+    [data-coffee-grid] > .reveal {
       transform-origin: top left;
       animation: swing-in linear both;
       animation-timeline: view();

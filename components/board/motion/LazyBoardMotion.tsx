@@ -5,7 +5,7 @@ import { useEffect, useState, type ComponentType } from "react";
 // Starts anyway if the load event is held up, e.g. by a slow third-party request.
 const LOAD_FALLBACK_MS = 4000;
 
-type Props = { sunOffsetMinutes: number | null };
+type Props = { sunOffsetMinutes: number | null; scope?: string; doodle?: boolean };
 
 // Plain import() after load and idle time keeps the board's effects off the first load, like components/game/LazyGame.tsx.
 export function LazyBoardMotion(props: Props) {

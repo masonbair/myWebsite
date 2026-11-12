@@ -10,9 +10,33 @@ test("lower tiles swing in on scroll", async ({ page }) => {
   expect(await animationName(page, ".reveal")).toBe(supported ? "swing-in" : "fade-up");
 });
 
-test("coffee page keeps its fade-up", async ({ page }) => {
+test("coffee tiles swing in like the board", async ({ page }) => {
   await page.goto(`${fixtureUrl("full")}coffee`);
-  expect(await animationName(page, ".reveal")).toBe("fade-up");
+  const supported = await page.evaluate(() => CSS.supports("animation-timeline: view()"));
+  expect(await animationName(page, "[data-coffee-grid] > .reveal")).toBe(supported ? "swing-in" : "fade-up");
+});
+
+test.describe("coffee motion", () => {
+  test.skip(({ isMobile }) => isMobile, "mouse only");
+
+  test("coffee tiles lean under the mouse and the dots and colors run", async ({ page }) => {
+    await page.goto(`${fixtureUrl("full")}coffee`);
+    await ready(page);
+    const box = (await page.locator('[data-tile="coffee-hero"]').boundingBox())!;
+    await page.mouse.move(box.x + box.width - 20, box.y + 40);
+    await expect.poll(() => tileVar(page, "coffee-hero", "--lean-r")).not.toBe("");
+    await expect(page.locator("canvas[data-dots]")).toHaveCount(1);
+    await expect(page.locator("html")).toHaveAttribute("data-sun", /^(dawn|day|dusk|night)$/);
+    await expect(page.locator("canvas[data-doodle]")).toHaveCount(0);
+  });
+
+  test("Book a time throws stickers", async ({ page }) => {
+    await page.goto(`${fixtureUrl("full")}coffee`);
+    await ready(page);
+    await page.evaluate(() => document.addEventListener("click", (e) => (e.target as Element).closest("[data-burst]") && e.preventDefault()));
+    await page.locator("[data-burst]").first().click();
+    expect(await page.locator("[data-burst-sticker]").count()).toBeGreaterThan(5);
+  });
 });
 
 test("swing is off with reduced motion", async ({ page }) => {
