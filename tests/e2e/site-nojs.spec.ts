@@ -23,6 +23,12 @@ test("home shows its headings and photo tile without JavaScript", async ({ page 
   await expect.poll(() => shownOpacity(tile)).toBe(1);
 });
 
+test("no draw button without JS", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Hey! I'm Mason.", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Draw on the board" })).toHaveCount(0);
+});
+
 test("coffee page shows its headings without JavaScript", async ({ page }) => {
   await page.goto("/coffee");
   for (const name of ["Coffee chat with Mason Bair", "Things I like talking about", "Some chats I'm hoping for", "Book by email instead", "Questions"]) {

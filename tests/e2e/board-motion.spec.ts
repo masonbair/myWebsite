@@ -10,6 +10,11 @@ test("lower tiles swing in on scroll", async ({ page }) => {
   expect(await animationName(page, ".reveal")).toBe(supported ? "swing-in" : "fade-up");
 });
 
+test("coffee page keeps its fade-up", async ({ page }) => {
+  await page.goto(`${fixtureUrl("full")}coffee`);
+  expect(await animationName(page, ".reveal")).toBe("fade-up");
+});
+
 test("swing is off with reduced motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(fixtureUrl("full"));
@@ -101,7 +106,90 @@ test.describe("dot field", () => {
   });
 });
 
+const doodleInk = (page: Page) =>
+  page.locator("canvas[data-doodle]").evaluate((el) => {
+    const c = el as HTMLCanvasElement;
+    const data = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) return true;
+    return false;
+  });
+
+async function scribble(page: Page) {
+  await page.mouse.move(200, 300);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(200 + i * 20, 300 + (i % 2) * 15);
+  await page.mouse.up();
+}
+
+test.describe("doodle", () => {
+  test.skip(({ isMobile }) => isMobile, "mouse only");
+
+  test("draw button is a labeled toggle", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    const draw = page.getByRole("button", { name: "Draw on the board" });
+    await expect(draw).toHaveAttribute("aria-pressed", "false", { timeout: 15_000 });
+    await draw.click();
+    await expect(draw).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("draw mode paints a line", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await page.getByRole("button", { name: "Draw on the board" }).click({ timeout: 15_000 });
+    await scribble(page);
+    expect(await doodleInk(page)).toBe(true);
+  });
+
+  test("escape leaves draw mode and tiles click again", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    const draw = page.getByRole("button", { name: "Draw on the board" });
+    await draw.click({ timeout: 15_000 });
+    await page.keyboard.press("Escape");
+    await expect(draw).toHaveAttribute("aria-pressed", "false");
+    const link = page.getByRole("link", { name: "See what I'm building" });
+    const box = (await link.boundingBox())!;
+    const hit = await page.evaluate(
+      ([x, y]) => document.elementFromPoint(x, y)?.closest("a")?.getAttribute("href") ?? null,
+      [box.x + box.width / 2, box.y + box.height / 2],
+    );
+    expect(hit).toBe("https://github.com/masonbair");
+  });
+
+  test("clear wipes the doodle", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await page.getByRole("button", { name: "Draw on the board" }).click({ timeout: 15_000 });
+    await scribble(page);
+    await page.getByRole("button", { name: "Clear drawing" }).click();
+    expect(await doodleInk(page)).toBe(false);
+  });
+
+  test("doodle is gone after reload", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await page.getByRole("button", { name: "Draw on the board" }).click({ timeout: 15_000 });
+    await scribble(page);
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Draw on the board" })).toBeVisible({ timeout: 15_000 });
+    expect(await doodleInk(page)).toBe(false);
+  });
+});
+
 test.describe("touch", () => {
+  test("scrolling never draws", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await expect(page.getByRole("button", { name: "Draw on the board" })).toBeVisible({ timeout: 15_000 });
+    for (const [type, y] of [
+      ["pointerdown", 400],
+      ["pointermove", 300],
+      ["pointerup", 200],
+    ] as const) {
+      await page.mouse.move(150, y);
+      await page.evaluate(
+        ([t, yy]) => document.elementFromPoint(150, yy)?.dispatchEvent(new PointerEvent(t, { pointerType: "touch", clientX: 150, clientY: yy, bubbles: true })),
+        [type, y] as const,
+      );
+    }
+    expect(await doodleInk(page)).toBe(false);
+  });
+
   test("no dot field on touch", async ({ page }) => {
     await page.goto(fixtureUrl("full"));
     await ready(page);

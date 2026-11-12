@@ -2,6 +2,7 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { useReducedMotion } from "@/lib/use-reduced-motion";
+import { Doodle } from "./Doodle";
 import { DotField } from "./DotField";
 import { useLean } from "./useLean";
 
@@ -33,5 +34,10 @@ export function BoardMotion({ sunOffsetMinutes }: { sunOffsetMinutes: number | n
   }, []);
 
   void sunOffsetMinutes;
-  return <>{fine && !reduce && <DotField />}</>;
+  return (
+    <>
+      {fine && !reduce && <DotField />}
+      <Doodle />
+    </>
+  );
 }

@@ -100,7 +100,7 @@ html[data-dots] body {
 
   /* Tied to scroll position, so a tile already in view at load is already at rest. */
   @supports (animation-timeline: view()) {
-    .reveal {
+    [data-board-grid] > .reveal {
       transform-origin: top left;
       animation: swing-in linear both;
       animation-timeline: view();
