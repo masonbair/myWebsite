@@ -53,17 +53,46 @@ describe.skipIf(!enabled)("learn-voice storage against local Supabase", () => {
     stranger = await signedIn(strangerEmail, strangerPassword);
   });
 
-  it("lets the owner upload a clip once, and nobody else read, replace or remove it", async () => {
+  it("lets the owner replace a clip until its answer is saved, and nobody else read, replace or remove it", async () => {
     const name = `answers/${randomUUID()}.webm`;
     expect((await owner.storage.from(BUCKET).upload(name, CLIP, { contentType: "audio/webm" })).error).toBeNull();
-
     expect((await owner.storage.from(BUCKET).upload(name, CLIP, { contentType: "audio/webm" })).error).not.toBeNull();
+
+    const RERECORD = new Blob([new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x01])], { type: "audio/webm" });
+    expect((await owner.storage.from(BUCKET).upload(name, RERECORD, { contentType: "audio/webm", upsert: true })).error).toBeNull();
+    const replaced = await service().storage.from(BUCKET).download(name);
+    expect(new Uint8Array(await replaced.data!.arrayBuffer())).toEqual(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x01]));
+
+    // Once the answer is saved, the clip it points at is fixed.
+    const date = new Date(Date.UTC(2200, 0, 1) + Math.floor(Math.random() * 300 * 365) * 86_400_000).toISOString().slice(0, 10);
+    const exercise = await service()
+      .from("learn_exercises")
+      .insert({
+        date,
+        position: 2,
+        type: "voice",
+        topic: "communication",
+        question: "Tell a client their launch slips a week.",
+        reading_title: "R",
+        reading_url: "https://example.com/r",
+        reading_summary: "S",
+        model: "claude-sonnet-5-5",
+      })
+      .select("id")
+      .single();
+    expect(exercise.error).toBeNull();
+    const answer = await service()
+      .from("learn_answers")
+      .insert({ exercise_id: exercise.data!.id, kind: "voice", clip_path: name, clip_mime: "audio/webm", clip_duration_ms: 5000, status: "awaiting_transcript" });
+    expect(answer.error).toBeNull();
     expect((await owner.storage.from(BUCKET).upload(name, CLIP, { contentType: "audio/webm", upsert: true })).error).not.toBeNull();
+
     await owner.storage.from(BUCKET).remove([name]);
     await owner.storage.from(BUCKET).move(name, `answers/${randomUUID()}.webm`);
+    await stranger.storage.from(BUCKET).upload(name, CLIP, { contentType: "audio/webm", upsert: true });
 
     const kept = await service().storage.from(BUCKET).download(name);
-    expect(new Uint8Array(await kept.data!.arrayBuffer())).toEqual(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]));
+    expect(new Uint8Array(await kept.data!.arrayBuffer())).toEqual(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x01]));
 
     expect((await fetch(`${apiUrl}/storage/v1/object/public/${BUCKET}/${name}`)).status).not.toBe(200);
     expect((await owner.storage.from(BUCKET).download(name)).error).not.toBeNull();

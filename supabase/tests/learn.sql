@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(74);
+select plan(79);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a4', 'learn-owner@example.com'),
@@ -216,14 +216,29 @@ select throws_ok($$ insert into storage.objects (bucket_id, name) values ('learn
   '42501', null, 'a path that climbs out is refused');
 select throws_ok($$ insert into storage.objects (bucket_id, name) values ('learn-voice', 'other/a2000000-0000-0000-0000-000000000009.webm') $$,
   '42501', null, 'a path outside answers/ is refused');
-select pg_temp.try_sql($$ update storage.objects set name = 'answers/a2000000-0000-0000-0000-000000000008.webm'
-  where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000009.webm' $$);
+select is((select count(*)::int from storage.objects
+           where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000009.webm'), 1,
+  'the owner can read a clip no answer points at yet');
+select throws_ok($$ update storage.objects set name = 'other/a2000000-0000-0000-0000-000000000009.webm'
+  where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000009.webm' $$,
+  '42501', null, 'a replace cannot move a clip off the answers/<uuid> path');
 select pg_temp.try_sql($$ delete from storage.objects
   where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000009.webm' $$);
+-- The voice answer a2...001 points at this clip, so it is fixed and hidden from the owner.
+select lives_ok($$ insert into storage.objects (bucket_id, name) values ('learn-voice', 'answers/a2000000-0000-0000-0000-000000000001.webm') $$,
+  'the owner uploads the clip a saved answer points at');
+select is((select count(*)::int from storage.objects
+           where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000001.webm'), 0,
+  'the owner cannot read a clip once an answer points at it');
+select pg_temp.try_sql($$ update storage.objects set name = 'answers/a2000000-0000-0000-0000-000000000007.webm'
+  where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000001.webm' $$);
 reset role;
 select is((select count(*)::int from storage.objects
            where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000009.webm'), 1,
-  'the owner can neither rename nor delete an uploaded clip');
+  'the owner cannot delete a clip');
+select is((select count(*)::int from storage.objects
+           where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000001.webm'), 1,
+  'the owner cannot replace or rename a clip once an answer points at it');
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-0000000000b4","role":"authenticated"}';
 select throws_ok($$ insert into storage.objects (bucket_id, name) values ('learn-voice', 'answers/a2000000-0000-0000-0000-00000000000a.webm') $$,

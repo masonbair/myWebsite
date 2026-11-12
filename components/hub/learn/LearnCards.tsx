@@ -193,8 +193,9 @@ function AnswerSide({ card, onNext }: { card: LearnCardView; onNext: (() => void
     const clip = recorder.take();
     if (clip) {
       const path = `answers/${card.exerciseId}${EXT[clip.mime] ?? ".webm"}`;
-      const { error: uploadError } = await browserClient().storage.from("learn-voice").upload(path, clip.blob, { contentType: clip.mime, upsert: false });
-      if (uploadError && !/exists|duplicate/i.test(uploadError.message)) {
+      // Upsert so a re-record replaces the clip; storage refuses it once an answer points at the clip.
+      const { error: uploadError } = await browserClient().storage.from("learn-voice").upload(path, clip.blob, { contentType: clip.mime, upsert: true });
+      if (uploadError) {
         setBusy(false);
         return setError("The recording did not upload. Record again.");
       }

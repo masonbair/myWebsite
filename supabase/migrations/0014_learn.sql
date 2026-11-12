@@ -302,4 +302,17 @@ create policy learn_voice_owner_insert on storage.objects
   for insert to authenticated
   with check (bucket_id = 'learn-voice' and name ~ '^answers/[0-9a-f-]{36}\.(webm|m4a|ogg)$' and public.is_owner());
 
+-- A re-record replaces the clip only until an answer points at it; after that the graded clip is fixed.
+-- Postgres checks select rules on the existing row of an insert-or-update, so the replace needs this narrow read too.
+create policy learn_voice_owner_read_unsent on storage.objects
+  for select to authenticated
+  using (bucket_id = 'learn-voice' and objects.name ~ '^answers/[0-9a-f-]{36}\.(webm|m4a|ogg)$' and public.is_owner()
+         and not exists (select 1 from public.learn_answers a where a.clip_path = objects.name));
+create policy learn_voice_owner_replace on storage.objects
+  for update to authenticated
+  using (bucket_id = 'learn-voice' and objects.name ~ '^answers/[0-9a-f-]{36}\.(webm|m4a|ogg)$' and public.is_owner()
+         and not exists (select 1 from public.learn_answers a where a.clip_path = objects.name))
+  with check (bucket_id = 'learn-voice' and objects.name ~ '^answers/[0-9a-f-]{36}\.(webm|m4a|ogg)$' and public.is_owner()
+              and not exists (select 1 from public.learn_answers a where a.clip_path = objects.name));
+
 select cron.schedule('hub-learn', '*/15 * * * *', $$ select public.hub_post_event('learn') $$);
