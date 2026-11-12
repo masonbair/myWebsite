@@ -1,8 +1,12 @@
 import { anthropicClient } from "@/lib/ai/claude";
 import { createSnapshotSource, runBackup, vercelBlobs } from "@/lib/hub/backup";
-import { handleEventRequest, readLatestPlaceZone } from "@/lib/hub/events";
+import { DEFAULT_TIME_ZONE, handleEventRequest, masonTimeZone, readLatestPlaceZone } from "@/lib/hub/events";
 import { createHubStore } from "@/lib/hub/store";
 import { ideasRunner } from "@/lib/ideas/runner";
+import { learnCapUsd } from "@/lib/learn/budget";
+import { signingKey } from "@/lib/learn/grant";
+import { runLearnJob } from "@/lib/learn/job";
+import { supabaseLearnStore } from "@/lib/learn/store";
 import { capUsd } from "@/lib/news/budget";
 import { NEWS_MODEL, runNewsJob } from "@/lib/news/job";
 import { serviceClient } from "@/lib/supabase/server";
@@ -29,6 +33,24 @@ function newsRunner() {
     });
 }
 
+function learnRunner() {
+  const anthropic = anthropicClient("learn");
+  if (!anthropic) return null;
+  return async () => {
+    const client = serviceClient();
+    return runLearnJob({
+      store: supabaseLearnStore(client),
+      anthropic,
+      key: signingKey(process.env.LEARN_GRANT_PRIVATE_KEY),
+      now: () => new Date(),
+      timeZone: await masonTimeZone(client),
+      defaultTimeZone: process.env.HUB_TIME_ZONE || DEFAULT_TIME_ZONE,
+      cap: learnCapUsd(process.env),
+      fetchFn: fetch,
+    });
+  };
+}
+
 // Called by pg_cron and the items trigger through pg_net; the service role still cannot complete or delete anything.
 export async function POST(request: Request, ctx: { params: Promise<{ event: string }> }) {
   const { event } = await ctx.params;
@@ -48,5 +70,6 @@ export async function POST(request: Request, ctx: { params: Promise<{ event: str
       : null,
     ideas: ideasRunner(),
     news: newsRunner(),
+    learn: learnRunner(),
   });
 }

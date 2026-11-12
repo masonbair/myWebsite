@@ -1,8 +1,34 @@
+import { createPrivateKey, createPublicKey, randomBytes, randomInt } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
 import { FIXTURES, fixturePort, type Fixture } from "./tests/e2e/fixture-servers";
-import { HUB_E2E_AGENT_TOKEN, HUB_E2E_MEMO_TOKEN, HUB_E2E_WORKER_TOKEN, HUB_LIVE_PORT, HUB_PORT } from "./tests/e2e/hub-ports";
+import {
+  HUB_ANTHROPIC_STUB_PORT,
+  HUB_E2E_AGENT_TOKEN,
+  HUB_E2E_MEMO_TOKEN,
+  HUB_E2E_WORKER_TOKEN,
+  HUB_LIVE_PORT,
+  HUB_PORT,
+  LEARN_E2E_FOCUSLOCK_TOKEN,
+  LEARN_E2E_HINOTE_TOKEN,
+  LEARN_E2E_ROUTINE_TOKEN,
+} from "./tests/e2e/hub-ports";
 import { localSupabaseEnv } from "./tests/e2e/local-supabase";
+
+// Set once in the main process so workers, which reload this file, inherit the same values. Learn rows are never deleted,
+// so each run gets its own far-future "today"; the signing seed lives only in this process's environment.
+process.env.LEARN_E2E_TODAY ??= new Date(Date.UTC(2100, 0, 1) + randomInt(0, 300 * 365) * 86_400_000).toISOString().slice(0, 10);
+process.env.LEARN_E2E_SEED ??= randomBytes(32).toString("base64");
+process.env.LEARN_E2E_PUBLIC_KEY ??= createPublicKey(
+  createPrivateKey({
+    key: Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), Buffer.from(process.env.LEARN_E2E_SEED, "base64")]),
+    format: "der",
+    type: "pkcs8",
+  }),
+)
+  .export({ format: "der", type: "spki" })
+  .subarray(12)
+  .toString("base64");
 
 const PORT = 3100;
 const HUB_SPECS = /(^|\/)hub-[^/]*\.spec\.ts$/;
@@ -79,6 +105,14 @@ function hubServer(port: number, name: "hub" | "hub-live", workerLive: boolean) 
       GOOGLE_OAUTH_CLIENT_SECRET: "e2e-client-secret",
       IDEAS_MONTHLY_BUDGET_USD: "25",
       ANALYTICS_SALT: "analytics-e2e-salt-local-only",
+      // Learn grades against the local stub, never Claude; the date, key and tokens exist only for this run.
+      ANTHROPIC_API_KEY_LEARN: "e2e-local-only",
+      ANTHROPIC_BASE_URL: `http://127.0.0.1:${HUB_ANTHROPIC_STUB_PORT}`,
+      LEARN_E2E_TODAY: process.env.LEARN_E2E_TODAY!,
+      LEARN_GRANT_PRIVATE_KEY: process.env.LEARN_E2E_SEED!,
+      LEARN_FOCUSLOCK_TOKEN: LEARN_E2E_FOCUSLOCK_TOKEN,
+      LEARN_HINOTE_TOKEN: LEARN_E2E_HINOTE_TOKEN,
+      LEARN_ROUTINE_TOKEN: LEARN_E2E_ROUTINE_TOKEN,
       // Set explicitly so a value in .env.local can never decide which state a test sees.
       HUB_WORKER_LIVE: workerLive ? "true" : "false",
       // Only the live server registers the service worker, so the other hub specs never run behind one.
@@ -131,6 +165,18 @@ export default defineConfig({
           ...fixtureServers,
         ]
       : []),
-    ...(serverSets.includes("hub") ? [hubServer(HUB_PORT, "hub", false), hubServer(HUB_LIVE_PORT, "hub-live", true)] : []),
+    ...(serverSets.includes("hub")
+      ? [
+          {
+            command: "node tests/e2e/anthropic-stub.mjs",
+            url: `http://127.0.0.1:${HUB_ANTHROPIC_STUB_PORT}`,
+            reuseExistingServer: false,
+            timeout: 30_000,
+            env: { HUB_ANTHROPIC_STUB_PORT: String(HUB_ANTHROPIC_STUB_PORT) },
+          },
+          hubServer(HUB_PORT, "hub", false),
+          hubServer(HUB_LIVE_PORT, "hub-live", true),
+        ]
+      : []),
   ],
 });

@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type ModelId = "claude-opus-5-5" | "claude-sonnet-5-5" | "claude-haiku-5-5";
-export type AiFeature = "ideas" | "news";
+export type AiFeature = "ideas" | "news" | "learn";
 
 /** USD per million tokens. Cache reads bill at 0.1x input, cache writes at 1.25x input; web search $0.01 each. */
 export const PRICES: Record<ModelId, { input: number; output: number }> = {
@@ -107,6 +107,7 @@ export async function monthSpend(
 const KEY_VAR: Record<AiFeature, string> = {
   ideas: "ANTHROPIC_API_KEY_IDEAS",
   news: "ANTHROPIC_API_KEY_NEWS",
+  learn: "ANTHROPIC_API_KEY_LEARN",
 };
 
 /** Null when the feature's own key is unset, so callers answer 503 instead of throwing. */

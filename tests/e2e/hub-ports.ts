@@ -8,3 +8,9 @@ export const HUB_E2E_WORKER_TOKEN = "hub-e2e-worker-token-local-only";
 export const HUB_E2E_MEMO_TOKEN = "hub-e2e-memo-token-local-only";
 // Only the local hub servers accept this agent connector token; it is not a secret.
 export const HUB_E2E_AGENT_TOKEN = "hub-e2e-agent-token-local-only";
+// A fake Anthropic API for the learn grader, so e2e never calls Claude.
+export const HUB_ANTHROPIC_STUB_PORT = HUB_PORT + 10;
+// Only the local hub servers accept these learn tokens; they are not secrets.
+export const LEARN_E2E_FOCUSLOCK_TOKEN = "learn-e2e-focuslock-token-local-only";
+export const LEARN_E2E_HINOTE_TOKEN = "learn-e2e-hinote-token-local-only";
+export const LEARN_E2E_ROUTINE_TOKEN = "learn-e2e-routine-token-local-only";
