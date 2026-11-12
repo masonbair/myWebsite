@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
 
+// The board's effects set these variables on the tile's wrapper; the tilt uses the separate `rotate` property, so both apply.
+const lean =
+  "[transform:perspective(900px)_rotateX(var(--lean-y,0deg))_rotateY(var(--lean-x,0deg))_translateY(var(--lift,0px))] transition-[transform,box-shadow] duration-300 ease-spring motion-reduce:transition-none";
+
 const tilts = { none: "", left: "md:-rotate-[1.5deg]", right: "md:rotate-[2deg]" };
 
 /** Sticker tile: thick ink outline with a hard offset shadow; `tilt` cocks it a little on wider screens. */
@@ -14,7 +18,7 @@ export function Tile({
 }) {
   return (
     <div
-      className={`relative h-full overflow-hidden rounded-tile border-[2.5px] border-line shadow-tile ${tilts[tilt]} ${core}`}
+      className={`relative h-full overflow-hidden rounded-tile border-[2.5px] border-line shadow-tile ${lean} ${tilts[tilt]} ${core}`}
     >
       {children}
     </div>

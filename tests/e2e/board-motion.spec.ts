@@ -23,3 +23,54 @@ test("first-screen tiles never animate", async ({ page }) => {
     .evaluate((el) => getComputedStyle(el.closest("[data-board-grid] > *")!).animationName);
   expect(name).toBe("none");
 });
+
+const ready = (page: Page) => expect(page.locator("html[data-board-motion=ready]")).toHaveCount(1, { timeout: 15_000 });
+const tileVar = (page: Page, tile: string, name: string) =>
+  page.locator(`[data-tile="${tile}"]`).evaluate((el, n) => (el as HTMLElement).style.getPropertyValue(n), name);
+
+test.describe("desktop lean", () => {
+  test.skip(({ isMobile }) => isMobile, "mouse only");
+
+  test("tile leans toward cursor", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await ready(page);
+    const box = (await page.locator('[data-tile="location"]').boundingBox())!;
+    await page.mouse.move(box.x + box.width - 5, box.y + 5);
+    await expect.poll(() => tileVar(page, "location", "--lean-x")).toMatch(/^[1-9]/);
+  });
+
+  test("press lifts a tile", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await ready(page);
+    const box = (await page.locator('[data-tile="location"]').boundingBox())!;
+    await page.mouse.move(box.x + 20, box.y + box.height - 20);
+    await page.mouse.down();
+    await expect.poll(() => tileVar(page, "location", "--lift")).toBe("-4px");
+    await page.mouse.up();
+    await expect.poll(() => tileVar(page, "location", "--lift")).toBe("");
+  });
+
+  test("no lean with reduced motion", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await ready(page);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const box = (await page.locator('[data-tile="location"]').boundingBox())!;
+    await page.mouse.move(box.x + box.width - 5, box.y + 5);
+    await page.waitForTimeout(300);
+    expect(await tileVar(page, "location", "--lean-x")).toBe("");
+  });
+});
+
+test.describe("touch", () => {
+  test.skip(({ isMobile }) => !isMobile, "touch only");
+
+  test("no lean on touch, press still lifts", async ({ page }) => {
+    await page.goto(fixtureUrl("full"));
+    await ready(page);
+    const tile = page.locator('[data-tile="location"]');
+    await tile.dispatchEvent("pointermove", { pointerType: "touch", clientX: 10, clientY: 10, bubbles: true });
+    await tile.dispatchEvent("pointerdown", { pointerType: "touch", bubbles: true });
+    await expect.poll(() => tileVar(page, "location", "--lift")).toBe("-4px");
+    expect(await tileVar(page, "location", "--lean-x")).toBe("");
+  });
+});

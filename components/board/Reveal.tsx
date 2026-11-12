@@ -1,9 +1,19 @@
 import type { CSSProperties, ReactNode } from "react";
 
-/** Fades a tile up on first paint; `index` sets its place in the 60ms stagger. */
-export function Reveal({ index, className, children }: { index: number; className?: string; children: ReactNode }) {
+/** Brings a tile in (fade-up, or swing-in on scroll); `index` sets its place in the 60ms stagger, `tile` names it for the board's effects. */
+export function Reveal({
+  index,
+  tile,
+  className,
+  children,
+}: {
+  index: number;
+  tile?: string;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
-    <div className={`reveal ${className ?? ""}`} style={{ "--i": index } as CSSProperties}>
+    <div data-tile={tile} className={`reveal ${className ?? ""}`} style={{ "--i": index } as CSSProperties}>
       {children}
     </div>
   );

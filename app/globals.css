@@ -18,6 +18,7 @@
   --color-night: #1f1d33;
 
   --shadow-tile: 5px 5px 0 var(--color-night);
+  --shadow-tile-lift: 9px 9px 0 var(--color-night);
   --shadow-sticker-sm: 3px 3px 0 var(--color-night);
   --shadow-cta: 4px 4px 0 var(--color-accent);
   --radius-tile: 18px;
@@ -41,6 +42,7 @@
     --color-line: #e9e7fb;
     --color-dot: rgb(233 231 251 / 0.08);
     --shadow-tile: 5px 5px 0 var(--color-accent);
+    --shadow-tile-lift: 9px 9px 0 var(--color-accent);
     --shadow-sticker-sm: 3px 3px 0 var(--color-accent);
   }
 }
@@ -50,6 +52,11 @@ body {
   background-image: radial-gradient(var(--color-dot) 1.2px, transparent 1.3px);
   background-size: 18px 18px;
   color: var(--color-ink);
+}
+
+/* A pressed tile is held up off the board, so its shadow grows. */
+[data-lifted] .shadow-tile {
+  box-shadow: var(--shadow-tile-lift);
 }
 
 /* Blinking terminal caret after the name in the nav. */

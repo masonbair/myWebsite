@@ -1,6 +1,7 @@
 import { lowerKeys, lowerSpans, type Board as BoardData } from "@/lib/board";
 import { movers, risingTopics } from "@/lib/news/movers";
 import type { Photo } from "@/lib/now";
+import { LazyBoardMotion } from "./motion/LazyBoardMotion";
 import { Reveal } from "./Reveal";
 import { BakeTile } from "./tiles/BakeTile";
 import { GithubTile } from "./tiles/GithubTile";
@@ -59,16 +60,17 @@ export function Board({ board }: { board: BoardData }) {
       >
         {tiles.map((t, i) =>
           FIRST_SCREEN.has(t.key) ? (
-            <div key={t.key} className={t.span}>
+            <div key={t.key} data-tile={t.key} className={t.span}>
               {t.node}
             </div>
           ) : (
-            <Reveal key={t.key} index={i} className={t.span}>
+            <Reveal key={t.key} tile={t.key} index={i} className={t.span}>
               {t.node}
             </Reveal>
           ),
         )}
       </div>
+      <LazyBoardMotion sunOffsetMinutes={null} />
     </section>
   );
 }
