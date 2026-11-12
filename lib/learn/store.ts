@@ -46,6 +46,8 @@ export class LearnCapError extends Error {}
 
 export type LearnStore = {
   exercisesFor(date: string): Promise<Exercise[]>;
+  exerciseById(id: string): Promise<Exercise | null>;
+  readingExists(exerciseId: string): Promise<boolean>;
   recentQuestions(days: number, today: string): Promise<{ question: string; readingUrl: string }[]>;
   insertExercises(rows: NewExercise[]): Promise<"ok" | "exists">;
   loadAnswer(id: string): Promise<{ answer: Answer; exercise: Exercise } | null>;
@@ -141,6 +143,21 @@ export function supabaseLearnStore(client: SupabaseClient): LearnStore {
       const { data, error } = await client.from("learn_exercises").select("*").eq("date", date).order("position");
       if (error) throw error;
       return (data as ExerciseRow[]).map(toExercise);
+    },
+
+    async exerciseById(id) {
+      const { data, error } = await client.from("learn_exercises").select("*").eq("id", id).maybeSingle();
+      if (error) throw error;
+      return data ? toExercise(data as ExerciseRow) : null;
+    },
+
+    async readingExists(exerciseId) {
+      const { count, error } = await client
+        .from("learn_readings")
+        .select("exercise_id", { count: "exact", head: true })
+        .eq("exercise_id", exerciseId);
+      if (error) throw error;
+      return (count ?? 0) > 0;
     },
 
     async recentQuestions(days, today) {
