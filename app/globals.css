@@ -172,6 +172,23 @@ html[data-lean] [data-tile] .shadow-tile {
       animation-timeline: view();
       animation-range: entry 0% entry 70%;
     }
+
+    /* Coffee tiles are tall and full of reading text, so they swing without fading: their words are never see-through. */
+    [data-coffee-grid] > .reveal {
+      animation-name: swing-in-solid;
+    }
+  }
+}
+
+@keyframes swing-in-solid {
+  from {
+    transform: translateY(32px) rotate(-4deg);
+  }
+  80% {
+    transform: translateY(0) rotate(1deg);
+  }
+  to {
+    transform: none;
   }
 }
 

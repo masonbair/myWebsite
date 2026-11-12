@@ -13,7 +13,7 @@ test("lower tiles swing in on scroll", async ({ page }) => {
 test("coffee tiles swing in like the board", async ({ page }) => {
   await page.goto(`${fixtureUrl("full")}coffee`);
   const supported = await page.evaluate(() => CSS.supports("animation-timeline: view()"));
-  expect(await animationName(page, "[data-coffee-grid] > .reveal")).toBe(supported ? "swing-in" : "fade-up");
+  expect(await animationName(page, "[data-coffee-grid] > .reveal")).toBe(supported ? "swing-in-solid" : "fade-up");
 });
 
 test.describe("coffee motion", () => {
