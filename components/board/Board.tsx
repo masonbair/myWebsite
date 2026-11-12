@@ -71,7 +71,10 @@ export function Board({ board }: { board: BoardData }) {
           ),
         )}
       </div>
-      <LazyBoardMotion sunOffsetMinutes={board.sunOffsetMinutes} />
+      {/* Reserved height for the Draw buttons, which arrive after first paint. */}
+      <div className="mt-4 h-11">
+        <LazyBoardMotion sunOffsetMinutes={board.sunOffsetMinutes} />
+      </div>
     </section>
   );
 }

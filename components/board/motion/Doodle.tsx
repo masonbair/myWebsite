@@ -21,7 +21,7 @@ export function Doodle() {
     if (!canvas || !ctx) return;
 
     const paint = () => {
-      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
       ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--color-accent-ink").trim();
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
@@ -39,8 +39,8 @@ export function Doodle() {
     };
     const size = () => {
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.round(window.innerWidth * dpr);
-      canvas.height = Math.round(window.innerHeight * dpr);
+      canvas.width = Math.round(canvas.clientWidth * dpr);
+      canvas.height = Math.round(canvas.clientHeight * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       paint();
     };
@@ -74,27 +74,22 @@ export function Doodle() {
     canvas.addEventListener("pointerup", onUp);
     canvas.addEventListener("pointercancel", onUp);
     canvas.addEventListener("doodle:clear", clear);
-    window.addEventListener("scroll", paint, { passive: true });
-    window.addEventListener("resize", size);
+    const onScroll = () => {
+      if (strokes.current.length > 0) paint();
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    // Follows the canvas box, which on phones changes as the browser toolbar shows and hides.
+    const resized = new ResizeObserver(size);
+    resized.observe(canvas);
     return () => {
       canvas.removeEventListener("pointerdown", onDown);
       canvas.removeEventListener("pointermove", onMove);
       canvas.removeEventListener("pointerup", onUp);
       canvas.removeEventListener("pointercancel", onUp);
       canvas.removeEventListener("doodle:clear", clear);
-      window.removeEventListener("scroll", paint);
-      window.removeEventListener("resize", size);
+      window.removeEventListener("scroll", onScroll);
+      resized.disconnect();
     };
-  }, []);
-
-  // The buttons are fixed, so they only show while the board is on screen; elsewhere they would sit on top of reading text.
-  const [boardInView, setBoardInView] = useState(true);
-  useEffect(() => {
-    const grid = document.querySelector("[data-board-grid]");
-    if (!grid) return;
-    const observer = new IntersectionObserver(([entry]) => setBoardInView(entry.isIntersecting));
-    observer.observe(grid);
-    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -112,9 +107,10 @@ export function Doodle() {
         ref={ref}
         data-doodle
         aria-hidden="true"
-        className={`fixed inset-0 z-30 h-screen w-screen ${drawing ? "cursor-crosshair touch-none" : "pointer-events-none"}`}
+        className={`fixed inset-0 z-30 size-full ${drawing ? "cursor-crosshair touch-none" : "pointer-events-none"}`}
       />
-      <div className="fixed bottom-4 left-4 z-40 flex gap-2" hidden={!boardInView && !drawing}>
+      {/* In the page under the board, in a slot Board reserves, so the buttons never sit on a tile or shift the layout; z-40 keeps them above the drawing canvas. */}
+      <div className="relative z-40 flex gap-2">
         <button
           type="button"
           aria-pressed={drawing}

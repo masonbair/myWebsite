@@ -36,8 +36,9 @@ export function useLean(reduce: boolean) {
     const paint = () => {
       frame = 0;
       if (!pointer) return;
-      for (const t of tiles()) {
-        const { x, y } = leanFor(t.getBoundingClientRect(), pointer);
+      // All reads before any write, so the browser lays out once per frame instead of once per tile.
+      const leans = tiles().map((t) => [t, leanFor(t.getBoundingClientRect(), pointer!)] as const);
+      for (const [t, { x, y }] of leans) {
         t.style.setProperty("--lean-x", `${x.toFixed(2)}deg`);
         t.style.setProperty("--lean-y", `${y.toFixed(2)}deg`);
       }
@@ -58,12 +59,17 @@ export function useLean(reduce: boolean) {
       tile.dataset.lifted = "";
     };
 
+    document.documentElement.dataset.lean = "";
     window.addEventListener("pointermove", onMove, { passive: true });
     document.documentElement.addEventListener("pointerleave", onLeave);
     window.addEventListener("pointerdown", onDown, { passive: true });
     window.addEventListener("pointerup", drop);
     window.addEventListener("pointercancel", drop);
+    // A release outside the window sends no pointerup.
+    window.addEventListener("blur", drop);
     return () => {
+      delete document.documentElement.dataset.lean;
+      window.removeEventListener("blur", drop);
       cancelAnimationFrame(frame);
       window.removeEventListener("pointermove", onMove);
       document.documentElement.removeEventListener("pointerleave", onLeave);

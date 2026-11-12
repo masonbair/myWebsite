@@ -31,19 +31,19 @@ export function DotField() {
 
     const size = () => {
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.round(window.innerWidth * dpr);
-      canvas.height = Math.round(window.innerHeight * dpr);
+      canvas.width = Math.round(canvas.clientWidth * dpr);
+      canvas.height = Math.round(canvas.clientHeight * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
     const draw = () => {
-      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
       ctx.fillStyle = color;
       ctx.beginPath();
       const offsetY = -(window.scrollY % GRID);
       const pointer = shown && strength > 0.01 ? shown : null;
-      for (let y = GRID / 2 + offsetY; y < window.innerHeight + GRID; y += GRID) {
-        for (let x = GRID / 2; x < window.innerWidth + GRID; x += GRID) {
+      for (let y = GRID / 2 + offsetY; y < canvas.clientHeight + GRID; y += GRID) {
+        for (let x = GRID / 2; x < canvas.clientWidth + GRID; x += GRID) {
           const near = pointer && Math.abs(x - pointer.x) < REACH && Math.abs(y - pointer.y) < REACH;
           const { dx, dy } = near ? dotPush({ x, y }, pointer) : { dx: 0, dy: 0 };
           ctx.moveTo(x + dx * strength + DOT_RADIUS, y + dy * strength);
@@ -131,6 +131,6 @@ export function DotField() {
   }, []);
 
   return (
-    <canvas ref={ref} data-dots aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 h-screen w-screen" />
+    <canvas ref={ref} data-dots aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 size-full" />
   );
 }

@@ -105,9 +105,9 @@ test.describe("dot field", () => {
     const fillsDuringBurst = await page.evaluate(() => {
       let fills = 0;
       const fill = CanvasRenderingContext2D.prototype.fill;
-      CanvasRenderingContext2D.prototype.fill = function (...args: []) {
+      CanvasRenderingContext2D.prototype.fill = function (this: CanvasRenderingContext2D, ...args: never[]) {
         fills++;
-        return fill.apply(this, args);
+        return Reflect.apply(fill, this, args);
       };
       for (let i = 0; i < 20; i++) window.dispatchEvent(new Event("scroll"));
       CanvasRenderingContext2D.prototype.fill = fill;
@@ -175,6 +175,7 @@ test.describe("doodle", () => {
     await page.keyboard.press("Escape");
     await expect(draw).toHaveAttribute("aria-pressed", "false");
     const link = page.getByRole("link", { name: "See what I'm building" });
+    await page.evaluate(() => window.scrollTo(0, 0));
     const box = (await link.boundingBox())!;
     const hit = await page.evaluate(
       ([x, y]) => document.elementFromPoint(x, y)?.closest("a")?.getAttribute("href") ?? null,
@@ -201,16 +202,30 @@ test.describe("doodle", () => {
   });
 });
 
-test("draw button hides once the board scrolls away", async ({ page }) => {
+test("draw buttons sit under the board, never on a tile", async ({ page }) => {
   await page.goto(fixtureUrl("full"));
   const draw = page.getByRole("button", { name: "Draw on the board" });
   await expect(draw).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("heading", { name: "Work and experience", exact: true }).scrollIntoViewIfNeeded();
-  await expect(draw).toBeHidden();
+  const grid = (await page.locator("[data-board-grid]").boundingBox())!;
+  const button = (await draw.boundingBox())!;
+  expect(button.y).toBeGreaterThanOrEqual(grid.y + grid.height);
+});
+
+test("draw toggles from the keyboard", async ({ page }) => {
+  await page.goto(fixtureUrl("full"));
+  const draw = page.getByRole("button", { name: "Draw on the board" });
+  await expect(draw).toBeVisible({ timeout: 15_000 });
+  await draw.focus();
+  await page.keyboard.press("Enter");
+  await expect(draw).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Space");
+  await expect(draw).toHaveAttribute("aria-pressed", "false");
 });
 
 test.describe("touch", () => {
-  test("scrolling never draws", async ({ page }) => {
+  test.skip(({ isMobile }) => !isMobile, "touch only");
+
+  test("touch outside draw mode never draws", async ({ page }) => {
     await page.goto(fixtureUrl("full"));
     await expect(page.getByRole("button", { name: "Draw on the board" })).toBeVisible({ timeout: 15_000 });
     for (const [type, y] of [
@@ -232,8 +247,6 @@ test.describe("touch", () => {
     await ready(page);
     await expect(page.locator("canvas[data-dots]")).toHaveCount(0);
   });
-
-  test.skip(({ isMobile }) => !isMobile, "touch only");
 
   test("no lean on touch, press still lifts", async ({ page }) => {
     await page.goto(fixtureUrl("full"));

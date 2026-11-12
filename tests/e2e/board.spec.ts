@@ -187,7 +187,7 @@ test("reading tile shows three rising topics and links to trends", async ({ page
 
 test("reading tile is hidden without rising topics", async ({ page }) => {
   await page.goto(fixtureUrl("empty"));
-  await expect(page.getByRole("heading", { name: "Hi, I'm Mason." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hey! I'm Mason." })).toBeVisible();
   await expect(page.getByRole("region", { name: "What I'm reading about" })).toHaveCount(0);
 });
 

@@ -103,6 +103,14 @@ html[data-dots] body {
 }
 
 /* A pressed tile is held up off the board, so its shadow grows. */
+/* Only while the board's lean is live, so tiles elsewhere never get their own 3D layer; the tilt uses the separate `rotate` property, so both apply. */
+html[data-lean] [data-board-grid] [data-tile] .shadow-tile {
+  transform: perspective(1600px) rotateX(var(--lean-y, 0deg)) rotateY(var(--lean-x, 0deg)) translateY(var(--lift, 0px));
+  transition:
+    transform 300ms var(--ease-spring),
+    box-shadow 300ms var(--ease-spring);
+}
+
 [data-lifted] .shadow-tile {
   box-shadow: var(--shadow-tile-lift);
 }
