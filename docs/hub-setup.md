@@ -320,6 +320,10 @@ Turning a newsletter private or switching a topic off changes what the public tr
 
 `scripts/news-backfill.ts`, run with `npm run news:backfill -- <command>`. It reads its settings from the shell. Load them once per terminal: `vercel env pull --environment=production .env.production.local`, then `set -a; . ./.env.production.local; set +a`. It needs `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY_NEWS`, and `BLOB_STORE_ID` with `VERCEL_OIDC_TOKEN` (good for 12 hours; pull again when it expires). It refuses a Supabase URL that is not https unless you pass `--local`, which also keeps raw emails in a temp folder instead of Blob.
 
+Two traps from the first import (2026-11-12):
+- `vercel env pull` writes the literal text `[SENSITIVE]` for every Sensitive variable, including `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `ANTHROPIC_API_KEY_NEWS`. After loading the file, export the real values from a local `.env.local` that has them, and `export HUB_TIME_ZONE=America/New_York`.
+- The Blob store only accepts the laptop's token when its connection to `my-website` includes the Development environment. Turn Development on in the store's project connection for the import, then set it back to Production + Preview.
+
 1. Fill each newsletter's `sender_addresses` or `sender_domains` in `news_sources` first. Mail that matches no newsletter is held back (quarantined), not read.
 2. `import --mbox <Takeout .mbox> --since <YYYY-MM-DD>`: stores every message dated on or after that day as a `backfill` issue. It prints counts per newsletter, duplicates (safe to run twice), held-back mail, and mail before the date. Run `import` once for each Takeout file (one per account). A newsletter that sits in both accounts is stored once, because its Message-ID matches.
 3. `reclean`: refills empty issue text from the raw email in Blob (after a restore, or if cleaning failed at import).

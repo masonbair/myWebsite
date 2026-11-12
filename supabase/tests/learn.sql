@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(79);
+select plan(82);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a4', 'learn-owner@example.com'),
@@ -222,6 +222,15 @@ select is((select count(*)::int from storage.objects
 select throws_ok($$ update storage.objects set name = 'other/a2000000-0000-0000-0000-000000000009.webm'
   where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000009.webm' $$,
   '42501', null, 'a replace cannot move a clip off the answers/<uuid> path');
+select lives_ok($$ update storage.objects set metadata = '{"replaced": true}'
+  where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000009.webm' $$,
+  'the owner can replace a clip no answer points at yet');
+select is((select metadata->>'replaced' from storage.objects
+           where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000009.webm'), 'true',
+  'the replace took effect');
+select throws_ok($$ update storage.objects set name = 'answers/a2000000-0000-0000-0000-000000000001.webm'
+  where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000009.webm' $$,
+  '42501', null, 'a clip cannot be renamed onto the name a saved answer points at');
 select pg_temp.try_sql($$ delete from storage.objects
   where bucket_id = 'learn-voice' and name = 'answers/a2000000-0000-0000-0000-000000000009.webm' $$);
 -- The voice answer a2...001 points at this clip, so it is fixed and hidden from the owner.

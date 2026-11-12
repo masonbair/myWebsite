@@ -292,7 +292,7 @@ grant select, insert, update on public.learn_exercises, public.learn_answers to 
 alter table public.ai_usage drop constraint ai_usage_feature_check;
 alter table public.ai_usage add constraint ai_usage_feature_check check (feature in ('ideas', 'news', 'learn'));
 
--- No select, update or delete policy: only the service role reads clips, and an upload can never replace one.
+-- Private bucket: the owner may add clips and, below, read or replace one only until an answer points at it; nobody but the service role reads a sent clip.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('learn-voice', 'learn-voice', false, 15728640, array['audio/webm', 'audio/mp4', 'audio/ogg'])
 on conflict (id) do update
@@ -303,7 +303,6 @@ create policy learn_voice_owner_insert on storage.objects
   with check (bucket_id = 'learn-voice' and name ~ '^answers/[0-9a-f-]{36}\.(webm|m4a|ogg)$' and public.is_owner());
 
 -- A re-record replaces the clip only until an answer points at it; after that the graded clip is fixed.
--- Postgres checks select rules on the existing row of an insert-or-update, so the replace needs this narrow read too.
 create policy learn_voice_owner_read_unsent on storage.objects
   for select to authenticated
   using (bucket_id = 'learn-voice' and objects.name ~ '^answers/[0-9a-f-]{36}\.(webm|m4a|ogg)$' and public.is_owner()
