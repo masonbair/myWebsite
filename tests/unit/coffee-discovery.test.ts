@@ -53,9 +53,9 @@ describe("email booking fallback", () => {
 });
 
 describe("sitemap", () => {
-  it("lists home, coffee and trends, with coffee dated by its own update", () => {
-    const entries = sitemap();
-    expect(entries.map((e) => e.url)).toEqual(["https://masonbair.com", "https://masonbair.com/coffee", "https://masonbair.com/trends"]);
+  it("lists home and coffee, with coffee dated by its own update, and leaves out /trends with no data", async () => {
+    const entries = await sitemap();
+    expect(entries.map((e) => e.url)).toEqual(["https://masonbair.com", "https://masonbair.com/coffee"]);
     expect(entries[1].lastModified).toEqual(new Date(coffeeUpdated));
   });
 });

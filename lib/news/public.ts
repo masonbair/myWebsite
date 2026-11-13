@@ -137,6 +137,11 @@ export async function readPublicTrends(deps: Deps = {}): Promise<PublicTrends | 
   }
 }
 
+/** True when there is at least one trend row to show. */
+export function hasTrendData(trends: PublicTrends | null): trends is PublicTrends {
+  return Boolean(trends && trends.rows.length > 0);
+}
+
 /** One topic or company over 52 weeks with its newsletter links; null when unknown, inactive or unreadable. */
 export async function readSubject(kind: string, key: string, deps: Deps = {}): Promise<Subject | null> {
   if (!isTrendKind(kind) || !isTrendKey(kind, key)) return null;

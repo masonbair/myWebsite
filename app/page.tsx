@@ -8,7 +8,7 @@ import { Resume } from "@/components/sections/Resume";
 import { Work } from "@/components/sections/Work";
 import { siteUpdated } from "@/content/site";
 import { getBoard } from "@/lib/board";
-import { homeJsonLd } from "@/lib/jsonld";
+import { homeJsonLd, websiteJsonLd } from "@/lib/jsonld";
 
 export const revalidate = 3600;
 
@@ -21,6 +21,7 @@ export default async function Home() {
       {/* The tall bottom padding keeps the last section clear of the corner cat. */}
       <main className="pt-24 pb-48">
         <JsonLd data={homeJsonLd(new Date(siteUpdated))} />
+        <JsonLd data={websiteJsonLd()} />
         <Board board={board} />
         <About />
         <Work />

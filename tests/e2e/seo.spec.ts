@@ -39,9 +39,11 @@ test.describe("json-ld", () => {
 
   test("home has a ProfilePage for the Person with a coffee ScheduleAction", async ({ request }) => {
     const { raw, data } = await jsonLdBlocks(request, "/");
-    expect(data).toHaveLength(1);
+    expect(data.map((d) => d["@type"])).toEqual(["ProfilePage", "WebSite"]);
     raw.forEach((r) => expect(r).not.toContain("<"));
-    const [page] = data;
+    const [page, site] = data;
+    expect(site.name).toBe("Mason Bair");
+    expect(site.publisher).toEqual({ "@id": PERSON_ID });
     expect(page["@context"]).toBe("https://schema.org");
     expect(page["@type"]).toBe("ProfilePage");
     expect(typeof page.dateModified).toBe("string");
@@ -91,13 +93,13 @@ test.describe("crawl files", () => {
     expect(text).not.toMatch(/Disallow: \/\s*$/m);
   });
 
-  test("sitemap lists home, coffee and trends", async ({ request }) => {
+  // /trends joins only when it has data, which this server never does; tests/unit/seo/trends-index.test.ts covers that.
+  test("sitemap lists home and coffee", async ({ request }) => {
     const res = await request.get("/sitemap.xml");
     expect(res.status()).toBe(200);
     const xml = await res.text();
     expect(xml).toContain("<loc>https://masonbair.com</loc>");
     expect(xml).toContain("<loc>https://masonbair.com/coffee</loc>");
-    expect(xml).toContain("<loc>https://masonbair.com/trends</loc>");
   });
 
   test("llms.txt is plain text with the coffee link and no phone", async ({ request }) => {

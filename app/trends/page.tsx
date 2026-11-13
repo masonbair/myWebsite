@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import Link from "next/link";
 import { Newspaper, TrendUp } from "@phosphor-icons/react/dist/ssr";
 import { Reveal } from "@/components/board/Reveal";
@@ -13,7 +14,7 @@ import {
 import { siteUrl } from "@/content/site";
 import { PERSON_ID } from "@/lib/jsonld";
 import { moveText, trendsOverview } from "@/lib/news/movers";
-import { readPublicTrends } from "@/lib/news/public";
+import { hasTrendData, readPublicTrends } from "@/lib/news/public";
 
 export const revalidate = 3600;
 
@@ -21,7 +22,17 @@ const TITLE = "Newsletter trends";
 const DESCRIPTION =
   "Which topics and companies six newsletters I read covered over the last 30 days, what is rising or falling, and the tone.";
 
-export const metadata: Metadata = {
+const loadTrends = cache(() => readPublicTrends());
+
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    ...baseMetadata,
+    // An empty page reads as thin content to search engines, so it stays out of the index until counts exist.
+    ...(hasTrendData(await loadTrends()) ? {} : { robots: { index: false, follow: true } }),
+  };
+}
+
+const baseMetadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/trends" },
@@ -37,7 +48,7 @@ export const metadata: Metadata = {
 const LIST_SIZE = 12;
 
 export default async function TrendsPage() {
-  const { byId, rising, topics: allTopics, companies: allCompanies } = trendsOverview(await readPublicTrends());
+  const { byId, rising, topics: allTopics, companies: allCompanies } = trendsOverview(await loadTrends());
   const topics = allTopics.slice(0, LIST_SIZE);
   const companies = allCompanies.slice(0, LIST_SIZE);
   const counts = [

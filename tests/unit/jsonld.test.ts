@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PHONE } from "../e2e/phone";
-import { coffeeJsonLd, homeJsonLd, PERSON_ID, serializeJsonLd } from "@/lib/jsonld";
+import { coffeeJsonLd, homeJsonLd, PERSON_ID, serializeJsonLd, websiteJsonLd } from "@/lib/jsonld";
 
 const home = homeJsonLd(new Date("2026-11-04T00:00:00Z"));
 const coffee = coffeeJsonLd();
@@ -21,6 +21,18 @@ describe("json-ld", () => {
     expect(person.knowsAbout.length).toBeGreaterThan(2);
   });
 
+  it("names the site Mason Bair and credits the same Person", () => {
+    const site = websiteJsonLd();
+    expect(site["@type"]).toBe("WebSite");
+    expect(site.name).toBe("Mason Bair");
+    expect(site.url).toBe("https://masonbair.com");
+    expect(site.publisher).toEqual({ "@id": PERSON_ID });
+  });
+
+  it("lists his current interests", () => {
+    expect(home.mainEntity.knowsAbout).toEqual(expect.arrayContaining(["Forward deployed engineering", "Artificial intelligence"]));
+  });
+
   it("home offers a coffee chat ScheduleAction", () => {
     const action = home.mainEntity.potentialAction;
     expect(action["@type"]).toBe("ScheduleAction");
@@ -36,7 +48,7 @@ describe("json-ld", () => {
   });
 
   it("never holds a phone, address, or coordinates", () => {
-    const text = JSON.stringify([home, coffee]);
+    const text = JSON.stringify([home, coffee, websiteJsonLd()]);
     for (const banned of ["telephone", "address", "geo", "latitude", "FAQPage", "—", "–"]) {
       expect(text).not.toContain(banned);
     }

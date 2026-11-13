@@ -16,9 +16,14 @@ const person = {
   url: siteUrl,
   sameAs: [contact.github, contact.linkedin],
   worksFor: { "@type": "Organization", name: "Fullsend Solutions" },
-  alumniOf: { "@type": "CollegeOrUniversity", name: "Kent State University" },
+  alumniOf: {
+    "@type": "CollegeOrUniversity",
+    name: "Kent State University",
+    url: "https://www.kent.edu",
+    sameAs: "https://en.wikipedia.org/wiki/Kent_State_University",
+  },
   award: ["Distinguished Student Leadership Award (2026)", "Choose Ohio First Scholarship in Computer Science", "Eagle Scout"],
-  knowsAbout: ["DevSecOps", "System administration", "Software development", "CI/CD", "Ansible", "Docker", "AWS", "Hackathons"],
+  knowsAbout: ["Forward deployed engineering", "Artificial intelligence", "DevSecOps", "System administration", "Software development", "CI/CD", "Ansible", "Docker", "AWS", "Hackathons"],
   potentialAction: { "@type": "ScheduleAction", name: "Book a coffee chat", target: COFFEE_URL },
 };
 
@@ -29,6 +34,19 @@ export function homeJsonLd(dateModified: Date) {
     url: siteUrl,
     dateModified: dateModified.toISOString(),
     mainEntity: person,
+  };
+}
+
+/** The site itself, so search results can show "Mason Bair" as the site name. */
+export function websiteJsonLd() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": `${siteUrl}/#website`,
+    url: siteUrl,
+    name: "Mason Bair",
+    alternateName: "masonbair.com",
+    publisher: { "@id": PERSON_ID },
   };
 }
 

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { vercelHostRedirects } from "./lib/seo/vercel-host-redirect";
 
 // Both env vars are set only by playwright.config.ts, to run one dev server per now.json fixture.
 const nextConfig: NextConfig = {
@@ -8,6 +9,9 @@ const nextConfig: NextConfig = {
   images: { formats: ["image/avif", "image/webp"] },
   // Vercel serves public/ from the CDN, not the function, so /hub/now's bake action needs /misc traced in to check a photo exists.
   outputFileTracingIncludes: { "/hub/now": ["./public/misc/*"] },
+  async redirects() {
+    return vercelHostRedirects(process.env.VERCEL_ENV);
+  },
   async headers() {
     return [
       {
