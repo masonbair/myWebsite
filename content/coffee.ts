@@ -5,7 +5,7 @@ import { contact } from "./site";
 export const bookingUrl = "https://calendar.app.google/suAxGdTVkbEB2GFN6";
 
 // Bump when the coffee page copy changes; feeds the visible "Last updated" line, dateModified, and the sitemap.
-export const coffeeUpdated = "2026-11-09";
+export const coffeeUpdated = "2026-11-13";
 
 const emailSubject = "Coffee chat request";
 const emailBody = [
@@ -22,7 +22,7 @@ const emailBody = [
 /** Booking that needs no JavaScript: a prefilled email any mail client or text-only agent can send. */
 export const bookingMailto = `mailto:${contact.email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
 
-export type TopicIcon = "shield" | "trophy" | "compass" | "plane";
+export type TopicIcon = "handshake" | "globe" | "cpu" | "storefront" | "plane" | "sneaker";
 
 export type Niche = { id: string; heading: string; body: string[] };
 
@@ -63,10 +63,12 @@ export const coffee: {
   bookLabel: "Book a time: 30 minute coffee chat with Mason Bair on Google Calendar, opens in a new tab",
   topicsHeading: "Things I like talking about",
   topics: [
-    { icon: "shield", label: "DevSecOps", detail: "CI/CD, security checks, and what I learned at Nationwide." },
-    { icon: "trophy", label: "Hackathons", detail: "Running Kent Hack Enough, and how we placed at NexHacks." },
-    { icon: "compass", label: "CS careers", detail: "Internships, first jobs, and how you found your way in." },
-    { icon: "plane", label: "Nomad life", detail: `Working from the road, ${now.countriesVisited} countries in.` },
+    { icon: "handshake", label: "Forward deployed engineering", detail: "Building right next to the customer, and what that job is really like." },
+    { icon: "globe", label: "AI around the world", detail: "How people in different countries are building with AI and using it." },
+    { icon: "cpu", label: "Tech", detail: "New tools, side projects, and whatever you're excited about right now." },
+    { icon: "storefront", label: "Running your own business", detail: "I want to learn more here. If you've started something, I'd love to hear how." },
+    { icon: "plane", label: "Travel", detail: `Working from the road, ${now.countriesVisited} countries in.` },
+    { icon: "sneaker", label: "Running and baking", detail: "Favorite routes, races, and recipes worth trying." },
   ],
   audience: "Anyone with something interesting to share. No agenda needed, a question or a story is plenty.",
   timeZoneHeading: "Time zones",

@@ -4,12 +4,14 @@ import {
   AirplaneTilt,
   ArrowUpRight,
   CalendarPlus,
-  Compass,
+  Cpu,
   GithubLogo,
+  Globe,
   GlobeHemisphereWest,
+  Handshake,
   LinkedinLogo,
-  ShieldCheck,
-  Trophy,
+  Sneaker,
+  Storefront,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 import { LazyBoardMotion } from "@/components/board/motion/LazyBoardMotion";
@@ -30,10 +32,12 @@ export const metadata: Metadata = {
 };
 
 const topicIcons: Record<TopicIcon, Icon> = {
-  shield: ShieldCheck,
-  trophy: Trophy,
-  compass: Compass,
+  handshake: Handshake,
+  globe: Globe,
+  cpu: Cpu,
+  storefront: Storefront,
   plane: AirplaneTilt,
+  sneaker: Sneaker,
 };
 
 const photo = {

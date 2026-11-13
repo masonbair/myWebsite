@@ -45,7 +45,7 @@ export function coffeeJsonLd() {
       "@type": "Service",
       name: "Coffee chat with Mason Bair",
       serviceType: "Career coffee chat",
-      description: "A free 30 minute video call with anyone who has something interesting to share. Topics often include DevSecOps, hackathons, CS careers, and working remotely while traveling.",
+      description: "A free 30 minute video call with anyone who has something interesting to share. Topics often include forward deployed engineering, AI around the world, tech, running your own business, travel, running and baking.",
       provider: { "@id": PERSON_ID },
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD", url: COFFEE_URL },
     },
