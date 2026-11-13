@@ -120,7 +120,7 @@ test.describe("crawl files", () => {
 
   test("home canonical and title", async ({ page }) => {
     await page.goto("/");
-    await expectTitles(page, "Mason Bair | Software Engineer & Digital Nomad");
+    await expectTitles(page, "Mason Bair | Forward Deployed Engineer & Digital Nomad");
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://masonbair.com");
     await expect(page.locator('meta[property="og:image"]').first()).toHaveAttribute("content", /opengraph-image/);
   });
@@ -143,7 +143,7 @@ test.describe("coffee page", () => {
     expect(questions).toBeGreaterThanOrEqual(3);
     expect(questions).toBeLessThanOrEqual(8);
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://masonbair.com/coffee");
-    await expectTitles(page, "Free Coffee Chat with Mason Bair, Software Engineer");
+    await expectTitles(page, "Free Coffee Chat with Mason Bair, Forward Deployed Engineer");
     await expect(page.getByRole("main").getByRole("link", { name: /GitHub/ })).toHaveAttribute("href", "https://github.com/masonbair");
     await expect(page.getByRole("main").getByRole("link", { name: /LinkedIn/ })).toHaveAttribute(
       "href",

@@ -16,7 +16,7 @@ export function fence(text: string): { tag: string; block: string } {
   return { tag, block: `<${tag}>\n${text}\n</${tag}>` };
 }
 
-const COMMON = `You grade one practice answer from Mason, a software engineer and digital nomad who is learning business skills.
+const COMMON = `You grade one practice answer from Mason, a forward deployed engineer and digital nomad who is learning business skills.
 Grade from A down to F: A, A-, B+, B, B-, C, D or F. Be fair and specific; a C means the core was missing, not that it was short.
 Return:
 - worked: 1 to 3 sentences on what worked, naming his own words where you can.

@@ -18,7 +18,7 @@ export const about: string[] = [
   "As for some fun facts, I spent a full school year at Tartu University in Estonia, August 2024 to June 2025. I still miss it. My classmates came from all over the world and I built some relationships there that will last a lifetime. This was not a cheap trip either, I worked hard to get over $12,000 worth in scholarship to help pay for the 2 semesters of tuition, and because of my job during university, I used this money I made to pay for my room and food.",
   "Some work that I did while in school, I was the industry outreach intern for the CS department at my university. I helped work side by side with our industry liaison professor to reach out to companies to invite them in to give a presentation to the students for our industry seminar series. As well, I was an Assistant System Administrator. I set up GPU servers for research and used Ansible to keep 20+ research servers in line with security rules. Before that I interned in DevSecOps at Nationwide, writing Python tools for security data and upgrading CI/CD pipelines.",
   "When I'm home I bake a lot. Mostly banana bread and pumpkin bread, sometimes pumpkin pie, brownies or cookies. I don't use white sugar, everything gets sweetened with honey. Baking's on hold while I travel though. Also, I'm an Eagle Scout and in April 2026 I got the Distinguished Student Leadership Award granted from Kent State University.",
-  "As for travel, I have been to 23 countries, all over North America, and Europe. My favorite countries to visit have been Estonia, Japan, and Guatemala. I am a slow traveller, taking my time to explore every city I visit. I also volunteered for 1.5 months in Puerto Escondido at a Vaijaero hostel, leading all of the evening social events. I organized everything from Karaoke, to trivia and bar games.",
+  "As for travel, I have been to 23 countries, all over North America, Europe and Asia. My favorite countries to visit have been Estonia, Japan, and Guatemala. I am a slow traveller, taking my time to explore every city I visit. I also volunteered for 1.5 months in Puerto Escondido at a Viajero hostel, leading all of the evening social events. I organized everything from Karaoke, to trivia and bar games.",
 ];
 
 export const portrait: SiteImage = {
@@ -30,7 +30,7 @@ export const portrait: SiteImage = {
 
 export const work: Work[] = [
   {
-    title: "Software Engineer",
+    title: "Forward Deployed Engineer",
     org: "Fullsend Solutions",
     dates: "May 2026 to now",
     summary: "My first full-time job after graduating. I build software for Fullsend, fully remote, so I can work from wherever I'm traveling.",
@@ -257,6 +257,6 @@ export const siteUpdated = "2026-11-09";
 export const hello = {
   tag: "Open to coffee chats",
   heading: "Hey! I'm Mason.",
-  body: "I'm a software engineer and a digital nomad. I work from wherever I'm at, and I'm always up for a coffee chat with someone who has something interesting to share.",
+  body: "I'm a forward deployed engineer and a digital nomad. I work from wherever I'm at, and I'm always up for a coffee chat with someone who has something interesting to share.",
   note: "30 min, video, free",
 };

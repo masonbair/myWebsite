@@ -9,9 +9,9 @@ const person = {
   "@type": "Person",
   "@id": PERSON_ID,
   name: "Mason Bair",
-  jobTitle: "Software Engineer",
+  jobTitle: "Forward Deployed Engineer",
   description:
-    "Software engineer at Fullsend Solutions and digital nomad. Background in DevSecOps, system administration, and software development. Kent State computer science graduate, May 2026.",
+    "Forward deployed engineer at Fullsend Solutions and digital nomad. Background in DevSecOps, system administration, and software development. Kent State computer science graduate, May 2026.",
   image: `${siteUrl}/misc/Mason_web.webp`,
   url: siteUrl,
   sameAs: [contact.github, contact.linkedin],

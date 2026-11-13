@@ -28,7 +28,7 @@ function projects(d: TerminalData): string[] {
 
 function whoami(d: TerminalData): string[] {
   const busy = d.contributions30d ? ` ${d.contributions30d.toLocaleString("en-US")} GitHub contributions in the last 30 days.` : "";
-  return [`Mason. Software engineer, digital nomad, and a baker on the side.${busy}`];
+  return [`Mason. Forward deployed engineer, digital nomad, and a baker on the side.${busy}`];
 }
 
 /** The lines a command prints; `clear` is handled by the terminal itself. */

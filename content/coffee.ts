@@ -50,13 +50,13 @@ export const coffee: {
   faqs: { q: string; a: string }[];
   linksHeading: string;
 } = {
-  title: "Free Coffee Chat with Mason Bair, Software Engineer",
+  title: "Free Coffee Chat with Mason Bair, Forward Deployed Engineer",
   description:
-    "Book a free 30 minute video coffee chat with Mason Bair, a software engineer and digital nomad. He likes meeting people who have something interesting to share, whatever they do.",
+    "Book a free 30 minute video coffee chat with Mason Bair, a forward deployed engineer and digital nomad. He likes meeting people who have something interesting to share, whatever they do.",
   heading: "Coffee chat with Mason Bair",
   bio: [
     "I like meeting people who have something interesting to share. Doesn't matter what you do or how long you've done it.",
-    "I'm a software engineer at Fullsend and I work remotely while I travel. Grab a coffee and pick a time that works for you.",
+    "I'm a forward deployed engineer at Fullsend and I work remotely while I travel. Grab a coffee and pick a time that works for you.",
   ],
   format: [
     { label: "Length", value: "30 min" },
@@ -90,7 +90,7 @@ export const coffee: {
     },
     {
       id: "nomad",
-      heading: "Digital nomad software engineer",
+      heading: "Digital nomad engineer",
       body: [
         `I'm a digital nomad. I work remotely while I travel, and I've been to ${now.countriesVisited} countries so far. Before that I spent a full school year studying CS at Tartu University in Estonia.`,
         "Ask me about working across time zones or staying reliable on the road. If you've done this too, I'd love to hear your tips.",

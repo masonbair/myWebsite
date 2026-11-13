@@ -1,6 +1,6 @@
 # Mason Bair
 
-> Mason Bair is a software engineer at Fullsend Solutions and a digital nomad who works remotely while he travels. His background is DevSecOps, system administration, and software development. He graduated from Kent State University in May 2026 with a B.S. in Computer Science, and received the Distinguished Student Leadership Award in April 2026.
+> Mason Bair is a forward deployed engineer at Fullsend Solutions and a digital nomad who works remotely while he travels. His background is DevSecOps, system administration, and software development. He graduated from Kent State University in May 2026 with a B.S. in Computer Science, and received the Distinguished Student Leadership Award in April 2026.
 
 ## Coffee chats
 
@@ -22,7 +22,7 @@ Topics Mason likes talking about:
 Longer notes on chats he's hoping for:
 
 - [DevSecOps](https://masonbair.com/coffee#devsecops): CI/CD, security checks in pipelines, getting a first DevSecOps role. Mason was a DevSecOps intern at Nationwide.
-- [Digital nomad software engineering](https://masonbair.com/coffee#nomad): Working remotely while traveling, across time zones.
+- [Digital nomad engineering](https://masonbair.com/coffee#nomad): Working remotely while traveling, across time zones.
 - [Kent State CS](https://masonbair.com/coffee#kent-state): Classes, campus jobs, internships, HacKSU, industry outreach, and running the Kent Hack Enough hackathon.
 
 ## Connect
