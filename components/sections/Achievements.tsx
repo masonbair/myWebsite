@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { achievements, gallery, type Achievement } from "@/content/site";
+import { focusRing } from "@/components/ui/sticker";
 import { Tile } from "../board/Tile";
 import { Chips, Section } from "./Section";
 
@@ -7,6 +8,7 @@ type Cell = { span: string; tone: "surface" | "accent" | "tea"; sizes: string; t
 
 // One entry per achievement, in order; spans fill the 6 and 12 column grids with no holes.
 const cells: Cell[] = [
+  { span: "md:col-span-6 lg:col-span-12", tone: "surface", sizes: "" },
   {
     span: "md:col-span-6 lg:col-span-7 lg:row-span-2",
     tone: "surface",
@@ -43,7 +45,15 @@ function AchievementCell({ a, cell }: { a: Achievement; cell: Cell }) {
         )}
         <div className="flex flex-1 flex-col justify-between gap-5 p-6 md:p-7 lg:flex-none">
           <div>
-            <h3 className={`text-xl leading-tight font-semibold tracking-tight md:text-2xl ${tone.title}`}>{a.title}</h3>
+            <h3 className={`text-xl leading-tight font-semibold tracking-tight md:text-2xl ${tone.title}`}>
+              {a.href ? (
+                <a href={a.href} className={`underline decoration-2 underline-offset-4 ${focusRing}`}>
+                  {a.title} <span aria-hidden>↗</span>
+                </a>
+              ) : (
+                a.title
+              )}
+            </h3>
             <p className={`mt-2 max-w-[60ch] leading-relaxed ${tone.body}`}>{a.summary}</p>
           </div>
           <Chips items={a.tech} className={tone.chip} />

@@ -9,7 +9,7 @@ export type Work = {
   image: SiteImage;
 };
 
-export type Achievement = { title: string; summary: string; tech: string[]; image?: SiteImage };
+export type Achievement = { title: string; summary: string; tech: string[]; image?: SiteImage; href?: string };
 
 export const about: string[] = [
   "Good day beautiful people, my name is Mason. Welcome to my site. I am a 22 year old with a hunger for excitement. Each day is a new day, and I like to say yolo!",
@@ -142,6 +142,13 @@ export const work: Work[] = [
 ];
 
 export const achievements: Achievement[] = [
+  {
+    title: "Where Are My Friends",
+    summary:
+      "My newest side project: a free iPhone and Android app that shows which city each of your friends is in, and who just landed somewhere new. City only, never an exact dot. Not in the app stores yet.",
+    tech: ["iOS", "Android", "Maps"],
+    href: "https://wamf.masonbair.com",
+  },
   {
     title: "NexHacks, 1st and 2nd place",
     summary:

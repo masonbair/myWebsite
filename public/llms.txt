@@ -25,6 +25,10 @@ Longer notes on chats he's hoping for:
 - [Digital nomad engineering](https://masonbair.com/coffee#nomad): Working remotely while traveling, across time zones.
 - [Kent State CS](https://masonbair.com/coffee#kent-state): Classes, campus jobs, internships, HacKSU, industry outreach, and running the Kent Hack Enough hackathon.
 
+## Projects
+
+- [Where Are My Friends](https://wamf.masonbair.com): Mason's newest side project. A free iPhone and Android app that shows which city each friend is in. City only, never an exact location. Not in the app stores yet.
+
 ## Connect
 
 - [GitHub](https://github.com/masonbair): Code and projects.
