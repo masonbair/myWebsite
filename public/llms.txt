@@ -10,11 +10,19 @@ Mason takes free 30 minute video coffee chats with anyone who has something inte
 - [Booking calendar](https://calendar.app.google/suAxGdTVkbEB2GFN6): Google Calendar booking page that shows open times in the visitor's time zone. Needs JavaScript.
 - [Book by email](https://masonbair.com/coffee#book-by-email): Works without JavaScript. Email bair.s.mason@gmail.com with the subject "Coffee chat request", the person's name, what they want to talk about, three times that work with their time zone, and how they found the page. Mason replies with a calendar invite and a video link.
 
-Topics:
+Topics Mason likes talking about:
+
+- Forward deployed engineering: building right next to the customer, and what that job is really like.
+- AI around the world: how people in different countries build with AI and use it.
+- Tech: new tools, side projects, and whatever the other person is excited about.
+- Running your own business: Mason wants to learn more here and loves hearing from people who started something.
+- Travel: working remotely from the road.
+- Running and baking: routes, races, and recipes.
+
+Longer notes on chats he's hoping for:
 
 - [DevSecOps](https://masonbair.com/coffee#devsecops): CI/CD, security checks in pipelines, getting a first DevSecOps role. Mason was a DevSecOps intern at Nationwide.
 - [Digital nomad software engineering](https://masonbair.com/coffee#nomad): Working remotely while traveling, across time zones.
-- [Hackathons](https://masonbair.com/coffee#kent-state): Organizing Kent Hack Enough as HacKSU President, and placing 1st and 2nd at NexHacks.
 - [Kent State CS](https://masonbair.com/coffee#kent-state): Classes, campus jobs, internships, HacKSU, industry outreach, and running the Kent Hack Enough hackathon.
 
 ## Connect
