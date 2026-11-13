@@ -2,8 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import sitemap from "@/app/sitemap";
 import { bookingMailto, bookingUrl, coffee, coffeeUpdated } from "@/content/coffee";
-import { contact } from "@/content/site";
+import { contact, roleLower } from "@/content/site";
 import { coffeeJsonLd } from "@/lib/jsonld";
+import { llmsText } from "@/lib/llms";
 import { INDEXNOW_KEY, indexNowPayload } from "@/scripts/indexnow";
 
 const ld = coffeeJsonLd();
@@ -34,7 +35,7 @@ describe("coffee json-ld", () => {
     expect(coffee.description).toMatch(/\bfree\b/);
     expect(coffee.format).toContainEqual({ label: "Cost", value: "Free" });
     expect(coffee.faqs.find((f) => f.q === "Is it free?")?.a).toMatch(/^Yes\./);
-    expect(readFileSync("public/llms.txt", "utf8")).toMatch(/\bfree 30 minute\b/);
+    expect(llmsText()).toMatch(/\bfree 30 minute\b/);
   });
 
   it("leaves hiring and referrals unanswered until Mason decides", () => {
@@ -62,10 +63,18 @@ describe("sitemap", () => {
 
 describe("llms.txt", () => {
   it("matches the page's booking URL, email, and niche anchors", () => {
-    const text = readFileSync("public/llms.txt", "utf8");
+    const text = llmsText();
     expect(text).toContain(bookingUrl);
     expect(text).toContain(contact.email);
     for (const { id } of coffee.niches) expect(text).toContain(`https://masonbair.com/coffee#${id}`);
+  });
+
+  it("follows the page: the job title, every coffee topic, and linked projects", () => {
+    const text = llmsText();
+    expect(text).toContain(`a ${roleLower} at`);
+    for (const { label } of coffee.topics) expect(text).toContain(`- ${label}:`);
+    expect(text).toContain("[Where Are My Friends](https://wamf.masonbair.com)");
+    expect(text).not.toMatch(/[—–]/);
   });
 });
 

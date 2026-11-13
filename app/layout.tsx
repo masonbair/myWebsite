@@ -3,16 +3,16 @@ import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { PublicOnly } from "@/components/PublicOnly";
 import now from "@/content/now.json";
-import { siteUrl } from "@/content/site";
+import { role, roleLower, siteUrl } from "@/content/site";
 import "./globals.css";
 
 const grotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-grotesk" });
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 
-const title = "Mason Bair | Forward Deployed Engineer & Digital Nomad";
+const title = `Mason Bair | ${role.title} & Digital Nomad`;
 
 const description =
-  `I'm Mason Bair, a forward deployed engineer at Fullsend. I'm a digital nomad (${now.countriesVisited} countries so far) and I bake with honey instead of sugar.`;
+  `I'm Mason Bair, a ${roleLower} at ${role.employer}. I'm a digital nomad (${now.countriesVisited} countries so far) and I bake with honey instead of sugar.`;
 
 // Share images come from the opengraph-image files, so none are listed here.
 export const metadata: Metadata = {

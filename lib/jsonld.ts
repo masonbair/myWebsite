@@ -1,5 +1,8 @@
-import { contact, siteUrl } from "@/content/site";
+import { contact, role, siteUrl } from "@/content/site";
 import { bookingUrl, coffee, coffeeUpdated } from "@/content/coffee";
+
+// "AI around the world" keeps its capitals; "Tech" becomes "tech".
+const midSentence = (label: string) => (/^[A-Z]{2}/.test(label) ? label : label[0].toLowerCase() + label.slice(1));
 
 export const PERSON_ID = `${siteUrl}/#person`;
 const COFFEE_URL = `${siteUrl}/coffee`;
@@ -9,13 +12,13 @@ const person = {
   "@type": "Person",
   "@id": PERSON_ID,
   name: "Mason Bair",
-  jobTitle: "Forward Deployed Engineer",
+  jobTitle: role.title,
   description:
-    "Forward deployed engineer at Fullsend Solutions and digital nomad. Background in DevSecOps, system administration, and software development. Kent State computer science graduate, May 2026.",
+    `${role.title} at ${role.employerFull} and digital nomad. Background in DevSecOps, system administration, and software development. Kent State computer science graduate, May 2026.`,
   image: `${siteUrl}/misc/Mason_web.webp`,
   url: siteUrl,
   sameAs: [contact.github, contact.linkedin],
-  worksFor: { "@type": "Organization", name: "Fullsend Solutions" },
+  worksFor: { "@type": "Organization", name: role.employerFull },
   alumniOf: {
     "@type": "CollegeOrUniversity",
     name: "Kent State University",
@@ -63,7 +66,7 @@ export function coffeeJsonLd() {
       "@type": "Service",
       name: "Coffee chat with Mason Bair",
       serviceType: "Career coffee chat",
-      description: "A free 30 minute video call with anyone who has something interesting to share. Topics often include forward deployed engineering, AI around the world, tech, running your own business, travel, running and baking.",
+      description: `A free 30 minute video call with anyone who has something interesting to share. Topics often include ${coffee.topics.map((t) => midSentence(t.label)).join(", ")}.`,
       provider: { "@id": PERSON_ID },
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD", url: COFFEE_URL },
     },

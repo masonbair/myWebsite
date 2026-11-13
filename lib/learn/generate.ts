@@ -4,6 +4,7 @@ import type { BetaMessageParam } from "@anthropic-ai/sdk/resources/beta/messages
 import { transformJSONSchema } from "@anthropic-ai/sdk/lib/transform-json-schema";
 import { convert } from "html-to-text";
 import { z } from "zod";
+import { roleLower } from "@/content/site";
 import { PRICES, type ClaudeUsage, type ModelId } from "@/lib/ai/claude";
 import type { dayPlan } from "./day";
 import type { NewExercise } from "./store";
@@ -35,7 +36,7 @@ export type Charge = { model: ModelId; usage: ClaudeUsage };
 type Plan = ReturnType<typeof dayPlan>;
 type Reply = { model?: string; stop_reason?: string | null; content: { type: string; text?: string }[]; usage: ClaudeUsage };
 
-const ABOUT = `You write daily business practice for Mason, a forward deployed engineer and digital nomad who wants to get better at business.
+const ABOUT = `You write daily business practice for Mason, a ${roleLower} and digital nomad who wants to get better at business.
 His topics: understanding value and where he brings the most value; building great products; communication; and, most of all,
 explaining technical things simply. He tends to open with tool names and jargon ("do you know GitHub?") instead of the big idea.
 Plain words, no em dashes, no invented statistics.`;

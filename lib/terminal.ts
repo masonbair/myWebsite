@@ -1,3 +1,5 @@
+import { role, roleLower } from "@/content/site";
+
 /** Only what the board already shows publicly; the terminal can never say more than the tiles do. */
 export type TerminalData = {
   place: string | null;
@@ -28,7 +30,7 @@ function projects(d: TerminalData): string[] {
 
 function whoami(d: TerminalData): string[] {
   const busy = d.contributions30d ? ` ${d.contributions30d.toLocaleString("en-US")} GitHub contributions in the last 30 days.` : "";
-  return [`Mason. Forward deployed engineer, digital nomad, and a baker on the side.${busy}`];
+  return [`Mason. ${role.title[0]}${roleLower.slice(1)}, digital nomad, and a baker on the side.${busy}`];
 }
 
 /** The lines a command prints; `clear` is handled by the terminal itself. */

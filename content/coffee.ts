@@ -1,5 +1,5 @@
 import now from "./now.json";
-import { contact } from "./site";
+import { contact, role, roleLower } from "./site";
 
 // The booking URL lives only here.
 export const bookingUrl = "https://calendar.app.google/suAxGdTVkbEB2GFN6";
@@ -24,7 +24,8 @@ export const bookingMailto = `mailto:${contact.email}?subject=${encodeURICompone
 
 export type TopicIcon = "handshake" | "globe" | "cpu" | "storefront" | "plane" | "sneaker";
 
-export type Niche = { id: string; heading: string; body: string[] };
+/** `summary` is the one line llms.txt shows for this section. */
+export type Niche = { id: string; heading: string; body: string[]; summary?: string };
 
 export const coffee: {
   title: string;
@@ -50,13 +51,13 @@ export const coffee: {
   faqs: { q: string; a: string }[];
   linksHeading: string;
 } = {
-  title: "Free Coffee Chat with Mason Bair, Forward Deployed Engineer",
+  title: `Free Coffee Chat with Mason Bair, ${role.title}`,
   description:
-    "Book a free 30 minute video coffee chat with Mason Bair, a forward deployed engineer and digital nomad. He likes meeting people who have something interesting to share, whatever they do.",
+    `Book a free 30 minute video coffee chat with Mason Bair, a ${roleLower} and digital nomad. He likes meeting people who have something interesting to share, whatever they do.`,
   heading: "Coffee chat with Mason Bair",
   bio: [
     "I like meeting people who have something interesting to share. Doesn't matter what you do or how long you've done it.",
-    "I'm a forward deployed engineer at Fullsend and I work remotely while I travel. Grab a coffee and pick a time that works for you.",
+    `I'm a ${roleLower} at ${role.employer} and I work remotely while I travel. Grab a coffee and pick a time that works for you.`,
   ],
   format: [
     { label: "Length", value: "30 min" },
@@ -81,6 +82,7 @@ export const coffee: {
   niches: [
     {
       id: "devsecops",
+      summary: "CI/CD, security checks in pipelines, getting a first DevSecOps role. Mason was a DevSecOps intern at Nationwide.",
       heading: "DevSecOps coffee chat",
       body: [
         "If you're getting into DevSecOps, or you're a developer who keeps getting handed security findings, let's talk. Same if you've been doing this for years and have stories.",
@@ -90,6 +92,7 @@ export const coffee: {
     },
     {
       id: "nomad",
+      summary: "Working remotely while traveling, across time zones.",
       heading: "Digital nomad engineer",
       body: [
         `I'm a digital nomad. I work remotely while I travel, and I've been to ${now.countriesVisited} countries so far. Before that I spent a full school year studying CS at Tartu University in Estonia.`,
@@ -98,6 +101,7 @@ export const coffee: {
     },
     {
       id: "kent-state",
+      summary: "Classes, campus jobs, internships, HacKSU, industry outreach, and running the Kent Hack Enough hackathon.",
       heading: "Kent State CS students and alumni",
       body: [
         "I graduated from Kent State in May 2026 with a B.S. in Computer Science. I was President of HacKSU, the biggest CS club on campus, and I did industry outreach for the university.",

@@ -11,6 +11,12 @@ export type Work = {
 
 export type Achievement = { title: string; summary: string; tech: string[]; image?: SiteImage; href?: string };
 
+/** The one place Mason's job title lives; pages, search data, llms.txt and the Learn prompts read it from here. */
+export const role = { title: "Forward Deployed Engineer", employer: "Fullsend", employerFull: "Fullsend Solutions" };
+
+/** The title for use mid-sentence: "forward deployed engineer". */
+export const roleLower = role.title.toLowerCase();
+
 export const about: string[] = [
   "Good day beautiful people, my name is Mason. Welcome to my site. I am a 22 year old with a hunger for excitement. Each day is a new day, and I like to say yolo!",
   "I am currently a Forward Deployed Engineer and a digital nomad traveling around the world. It has always been a dream of mine to explore the world, and I am so lucky and fortunate I am able to do this. But the journey here was not easy.",
@@ -30,8 +36,8 @@ export const portrait: SiteImage = {
 
 export const work: Work[] = [
   {
-    title: "Forward Deployed Engineer",
-    org: "Fullsend Solutions",
+    title: role.title,
+    org: role.employerFull,
     dates: "May 2026 to now",
     summary: "My first full-time job after graduating. I build software for Fullsend, fully remote, so I can work from wherever I'm traveling.",
     tech: ["Software development", "Remote work"],
@@ -264,6 +270,6 @@ export const siteUpdated = "2026-11-09";
 export const hello = {
   tag: "Open to coffee chats",
   heading: "Hey! I'm Mason.",
-  body: "I'm a forward deployed engineer and a digital nomad. I work from wherever I'm at, and I'm always up for a coffee chat with someone who has something interesting to share.",
+  body: `I'm a ${roleLower} and a digital nomad. I work from wherever I'm at, and I'm always up for a coffee chat with someone who has something interesting to share.`,
   note: "30 min, video, free",
 };
