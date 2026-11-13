@@ -40,6 +40,9 @@ export const coffee: {
   timeZoneNote: string;
   nichesHeading: string;
   niches: Niche[];
+  pastChatsHeading: string;
+  pastChatsIntro: string;
+  pastChats: Niche[];
   emailHeading: string;
   emailSteps: string[];
   emailLink: string;
@@ -100,6 +103,28 @@ export const coffee: {
         "I graduated from Kent State in May 2026 with a B.S. in Computer Science. I was President of HacKSU, the biggest CS club on campus, and I did industry outreach for the university.",
         "I also worked at the IT help desk and as an assistant sysadmin on campus, and did undergrad research on a web version of ImageJ.",
         "Happy to talk about anything Kent State, especially study abroad or running a hackathon.",
+      ],
+    },
+  ],
+  pastChatsHeading: "Past chats",
+  pastChatsIntro: "A couple of recent ones, shared without names.",
+  pastChats: [
+    {
+      id: "past-hostel-friend",
+      heading: "Reconnecting with a friend from a hostel",
+      body: [
+        "We met at a hostel in Brussels in 2025 and hadn't talked in a year and a half. She found this page and booked a time.",
+        "She works with data for a city government in Europe and builds AI tools for kindergartens, like a story phone that helps kids practice the local language. I told her about testing nomad life in Europe while working US hours.",
+        "What I took away: some of the most useful AI work I hear about isn't in big tech. It's people inside public services fixing real problems.",
+      ],
+    },
+    {
+      id: "past-estonia-classmate",
+      heading: "Catching up with a classmate from Estonia",
+      body: [
+        "We studied together in Tartu. I saw her new job on LinkedIn and reached out.",
+        "She just started at a software consultancy that works for a big bank, where AI tools are blocked on her work laptops. My days run on AI tools, so we compared how differently companies are taking it on.",
+        "What I took away: AI at work looks very different from one country and company to the next. And the people you meet abroad are worth keeping in touch with.",
       ],
     },
   ],

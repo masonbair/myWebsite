@@ -177,6 +177,25 @@ export default async function CoffeePage() {
         </div>
       </section>
 
+      <section aria-labelledby="past-chats-title" className="mt-24 md:mt-32">
+        <h2 id="past-chats-title" className="text-4xl leading-none font-bold tracking-[-0.04em] text-ink md:text-5xl">
+          {coffee.pastChatsHeading}
+        </h2>
+        <p className="mt-4 max-w-[60ch] leading-relaxed text-mute">{coffee.pastChatsIntro}</p>
+        <div className="mt-10 grid gap-5 md:grid-cols-2">
+          {coffee.pastChats.map(({ id, heading, body }) => (
+            <article key={id} id={id} className="scroll-mt-28 rounded-tile border-[2.5px] border-line bg-surface p-6 shadow-sticker-sm">
+              <h3 className="text-xl font-semibold tracking-tight text-ink">{heading}</h3>
+              <div className="mt-3 max-w-[60ch] space-y-3 leading-relaxed text-mute">
+                {body.map((line) => (
+                  <p key={line}>{line}</p>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section id="book-by-email" aria-labelledby="email-title" className="mt-24 scroll-mt-28 md:mt-32">
         <h2 id="email-title" className="text-2xl font-bold tracking-tight text-ink">
           {coffee.emailHeading}
