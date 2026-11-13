@@ -111,7 +111,7 @@ export async function gradeAnswer(
   input: GradeInput,
 ): Promise<{ card: ReportCard; usage: ClaudeUsage; model: ModelId }> {
   const fenced = fence(input.answerText);
-  const { value, usage, model } = await ask(anthropic, GRADE_MODEL, graderSystem(input.type), graderUser(input, fenced), cardSchema, 4000);
+  const { value, usage, model } = await ask(anthropic, GRADE_MODEL, graderSystem(input.type, input.durationMs !== null), graderUser(input, fenced), cardSchema, 4000);
   const card: ReportCard = {
     grade: value.grade,
     worked: value.worked,

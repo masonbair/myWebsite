@@ -20,16 +20,26 @@ describe("fence", () => {
 
 describe("graderSystem", () => {
   it("caps jargon openings for explain", () => {
-    const s = graderSystem("explain");
+    const s = graderSystem("explain", false);
     expect(s).toMatch(/jargon/i);
     expect(s).toMatch(/cap/i);
     expect(s).toMatch(/data to grade/i);
   });
 
   it("judges delivery for voice", () => {
-    const s = graderSystem("voice");
+    const s = graderSystem("voice", true);
     expect(s).toMatch(/filler words/i);
     expect(s).toMatch(/words per minute/i);
+  });
+
+  it("judges delivery when a written exercise is answered by voice", () => {
+    const s = graderSystem("explain", true);
+    expect(s).toMatch(/jargon/i);
+    expect(s).toMatch(/words per minute/i);
+  });
+
+  it("skips delivery for a typed answer", () => {
+    expect(graderSystem("scenario", false)).not.toMatch(/words per minute/i);
   });
 });
 

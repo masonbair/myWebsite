@@ -46,7 +46,7 @@ describe("gradeAnswer", () => {
     const req = create.mock.calls[0][0];
     expect(req.model).toBe("claude-opus-5-5");
     expect("tools" in req).toBe(false);
-    expect(JSON.stringify(req.system)).toContain(JSON.stringify(graderSystem("explain")).slice(1, 60));
+    expect(JSON.stringify(req.system)).toContain(JSON.stringify(graderSystem("explain", false)).slice(1, 60));
     expect(out.card.grade).toBe("B+");
     expect(out.model).toBe("claude-opus-5-5");
     expect(create.mock.calls[0][1]).toEqual({ timeout: 50_000, maxRetries: 0 });
