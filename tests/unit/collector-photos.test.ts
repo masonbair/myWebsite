@@ -106,6 +106,14 @@ describe("placePhotos", () => {
     expect(BOARD_PHOTO_LIMIT).toBe(30);
   });
 
+  it("uses a pinned photo for its spot while it is visible, and Claude's pick once it is hidden", () => {
+    const rows = [labeled("top", ["coffee"], 9), labeled("boat", ["slideshow"], 3)];
+    expect(placePhotos(rows, { coffee: "boat" }).coffee?.src).toBe("/photos/boat");
+    expect(placePhotos(rows, { coffee: "missing" }).coffee?.src).toBe("/photos/top");
+    const hidden = [labeled("top", ["coffee"], 9), { ...labeled("boat", ["slideshow"], 3), hidden: true }];
+    expect(placePhotos(hidden, { coffee: "boat" }).coffee?.src).toBe("/photos/top");
+  });
+
   it("gives About and coffee the highest-scoring labeled photo tagged for each, newest on a tie", () => {
     const rows = [
       row({ asset_id: "unlabeled", places: ["about", "coffee"], score: 10 }),

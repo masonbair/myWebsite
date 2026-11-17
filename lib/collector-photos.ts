@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { photoPins } from "@/content/site";
 
 export const ASSET_ID = /^[A-Za-z0-9_-]{1,200}$/;
 /** Where the site serves a visible phone photo; see app/photos/[assetId]/route.ts. */
@@ -35,6 +36,8 @@ export function toCollectorPhoto(row: CollectorPhotoRow): CollectorPhoto | null 
   return { src: `/photos/${row.asset_id}`, alt: row.description ?? collectorPhotoAlt(row.taken_at) };
 }
 
+/** Asset ids Mason chose by hand for a spot, overriding Claude's pick. */
+export type PhotoPins = { about?: string; coffee?: string };
 export type PlacedPhotos = { slideshow: CollectorPhoto[]; about: CollectorPhoto | null; coffee: CollectorPhoto | null };
 export const NO_PLACED_PHOTOS: PlacedPhotos = { slideshow: [], about: null, coffee: null };
 
@@ -52,14 +55,16 @@ function best(rows: CollectorPhotoRow[], place: string): CollectorPhotoRow | nul
  * Where each visible photo goes, from rows sorted newest first. The slideshow takes photos tagged for it plus any not
  * labeled yet; the About and coffee spots take only the highest-scoring labeled photo tagged for them.
  */
-export function placePhotos(rows: CollectorPhotoRow[]): PlacedPhotos {
+export function placePhotos(rows: CollectorPhotoRow[], pins: PhotoPins = {}): PlacedPhotos {
   const visible = rows.filter((r) => toCollectorPhoto(r) !== null);
+  // A pinned photo wins its spot while it is visible; hidden or gone, Claude's pick takes over.
+  const pinned = (place: keyof PhotoPins) => visible.find((r) => r.asset_id === pins[place]) ?? null;
   const slideshow = visible.filter((r) => !isLabeled(r) || tagged(r, "slideshow")).slice(0, BOARD_PHOTO_LIMIT);
   const pick = (row: CollectorPhotoRow | null) => (row ? toCollectorPhoto(row) : null);
   return {
     slideshow: slideshow.map(toCollectorPhoto).filter((p): p is CollectorPhoto => p !== null),
-    about: pick(best(visible, "about")),
-    coffee: pick(best(visible, "coffee")),
+    about: pick(pinned("about") ?? best(visible, "about")),
+    coffee: pick(pinned("coffee") ?? best(visible, "coffee")),
   };
 }
 
@@ -80,7 +85,7 @@ export async function readCollectorPhotos(
 
 /** The visible photos for the slideshow, the About portrait and the coffee page. */
 export async function readPlacedPhotos(client: SupabaseClient): Promise<PlacedPhotos> {
-  return placePhotos(await readCollectorPhotos(client, { limit: PLACEMENT_SCAN_LIMIT }));
+  return placePhotos(await readCollectorPhotos(client, { limit: PLACEMENT_SCAN_LIMIT }), photoPins);
 }
 
 const WIDTHS: readonly number[] = [256, 640, 1080, 1600];

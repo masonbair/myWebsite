@@ -1,3 +1,5 @@
+import type { PhotoPins } from "@/lib/collector-photos";
+
 export type SiteImage = { src: string; alt: string; width: number; height: number };
 
 export type Work = {
@@ -12,6 +14,9 @@ export type Work = {
 export type Achievement = { title: string; summary: string; tech: string[]; image?: SiteImage; href?: string };
 
 /** The one place Mason's job title lives; pages, search data, llms.txt and the Learn prompts read it from here. */
+/** Phone photos pinned to a spot by asset id (the number in /photos/<id>); unpinned spots use Claude's pick. */
+export const photoPins: PhotoPins = { coffee: "26822" };
+
 export const role = { title: "Forward Deployed Engineer", employer: "Fullsend", employerFull: "Fullsend Solutions" };
 
 /** The title for use mid-sentence: "forward deployed engineer". */
