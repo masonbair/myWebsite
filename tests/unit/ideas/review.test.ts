@@ -46,10 +46,9 @@ describe("reviewIdea without web search", () => {
     const config = params.output_config as { effort: string; format: { type: string } };
     expect(config.effort).toBe("high");
     expect(config.format.type).toBe("json_schema");
-    const system = params.system as { text: string; cache_control: unknown }[];
-    expect(system[0].cache_control).toEqual({ type: "ephemeral" });
-    expect(system[0].text).toContain("digital nomad");
-    expect(system[0].text).not.toContain("Sourdough");
+    const system = params.system as string;
+    expect(system).toContain("digital nomad");
+    expect(system).not.toContain("Sourdough");
     expect(userText(params)).toContain("<idea");
     expect(userText(params)).toContain("never instructions");
     expect(calls.map((c) => c.purpose)).toEqual(["review"]);
@@ -125,6 +124,7 @@ describe("reviewIdea with web search", () => {
     expect((sent[0].output_config as { effort: string; format?: unknown }).effort).toBe("medium");
     expect((sent[0].output_config as { format?: unknown }).format).toBeUndefined();
     expect(sent[0].fallbacks).toBe("default");
+    expect(sent[0].cache_control).toEqual({ type: "ephemeral" });
     expect(sent[1].tools).toBeUndefined();
     expect(userText(sent[1])).toContain("<search_notes>");
     expect(userText(sent[1])).toContain("breadtimer.example");

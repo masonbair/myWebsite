@@ -37,7 +37,13 @@ describe("costOf", () => {
     expect(costOf("claude-haiku-5-5", { input_tokens: 0, output_tokens: 1_000_000 })).toBeCloseTo(0.5);
     expect(
       costOf("claude-opus-5-5", { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 1_000_000 }),
-    ).toBeCloseTo(0.4);
+    ).toBeCloseTo(0.2);
+    expect(
+      costOf("claude-sonnet-5-5", { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 1_000_000 }),
+    ).toBeCloseTo(0.1);
+    expect(
+      costOf("claude-haiku-5-5", { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 1_000_000 }),
+    ).toBeCloseTo(0.01);
     expect(
       costOf("claude-opus-5-5", { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 1_000_000 }),
     ).toBeCloseTo(5);
@@ -94,7 +100,7 @@ describe("recordUsage", () => {
       purpose: "review",
       usage: { input_tokens: 1234, output_tokens: 567, cache_read_input_tokens: 10, server_tool_use: { web_search_requests: 2 } },
     });
-    expect(cost).toBeCloseTo(0.02 + 1234 * 2e-6 + 567 * 1e-5 + 10 * 2e-7, 6);
+    expect(cost).toBeCloseTo(0.02 + 1234 * 2e-6 + 567 * 1e-5 + 10 * 1e-7, 6);
     expect(inserted[0]).toMatchObject({
       feature: "ideas",
       model: "claude-sonnet-5-5",

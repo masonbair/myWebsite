@@ -145,6 +145,7 @@ async function findSimilar(input: ReviewInput): Promise<string> {
       max_tokens: 16000,
       betas: [FALLBACK_BETA],
       fallbacks: "default",
+      cache_control: { type: "ephemeral" },
       thinking: { type: "adaptive" },
       system: SEARCH_SYSTEM,
       tools: [WEB_SEARCH_TOOL],
@@ -192,7 +193,7 @@ export async function reviewIdea(input: ReviewInput): Promise<{ review: IdeaRevi
     betas: [FALLBACK_BETA],
     fallbacks: "default",
     thinking: { type: "adaptive" },
-    system: [{ type: "text", text: ABOUT_MASON, cache_control: { type: "ephemeral" } }],
+    system: ABOUT_MASON,
     output_config: { effort: "high", format: REVIEW_FORMAT },
     messages: [{ role: "user", content: reviewPrompt(input, searchNotes) }],
   });
