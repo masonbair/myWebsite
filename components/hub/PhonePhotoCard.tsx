@@ -14,7 +14,7 @@ export type PhonePhotoLabel = {
   kind: string | null;
   /** null when not labeled yet, or when the description failed the privacy check. */
   description: string | null;
-  /** Where the site shows it right now: slideshow, About or coffee. */
+  /** Where the site shows it right now: slideshow or coffee. */
   shownOn: string[];
 };
 

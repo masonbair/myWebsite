@@ -9,7 +9,7 @@ import { safeDescription } from "./privacy";
 
 export const LABEL_MODEL: ModelId = "claude-haiku-5-5";
 export const KINDS = ["portrait", "travel", "event", "food", "scenery", "other"] as const;
-export const PLACES = ["slideshow", "about", "coffee"] as const;
+export const PLACES = ["slideshow", "coffee"] as const;
 export type PhotoKind = (typeof KINDS)[number];
 export type PhotoPlace = (typeof PLACES)[number];
 export type PhotoLabel = { description: string | null; kind: PhotoKind; places: PhotoPlace[]; score: number };
@@ -21,7 +21,7 @@ const REQUEST_OPTIONS = { timeout: 60_000, maxRetries: 1 } as const;
 const replySchema = z.object({
   description: z.string().min(1).max(400),
   kind: z.enum(KINDS),
-  places: z.array(z.enum(PLACES)).max(3),
+  places: z.array(z.enum(PLACES)).max(PLACES.length),
   score: z.number().int().min(1).max(10),
 });
 
@@ -32,7 +32,6 @@ Return JSON only, matching the schema:
 - kind: portrait (Mason is the main subject), travel, event, food, scenery or other.
 - places: where the photo fits on the site. Any of:
   - slideshow: almost every decent photo. Leave it out only for blurry, dark, screenshots, documents, or anything private or embarrassing.
-  - about: a clear, flattering photo where Mason alone is the main subject and his face is visible. Good for the About me portrait.
   - coffee: Mason looks friendly and approachable, face visible, alone or clearly the focus. Good for a "book a coffee chat with me" page.
 - score: 1-10, how good this photo would look on the site.
 

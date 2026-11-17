@@ -84,8 +84,8 @@ describe("readCollectorPhotos", () => {
   });
 
   it("drops a hidden row even if the database returned one to the board", async () => {
-    const { client } = fakeClient([row({ hidden: true }), labeled("h", ["slideshow", "about", "coffee"], 9, { hidden: true })]);
-    expect(await readPlacedPhotos(client)).toEqual({ slideshow: [], about: null, coffee: null });
+    const { client } = fakeClient([row({ hidden: true }), labeled("h", ["slideshow", "coffee"], 9, { hidden: true })]);
+    expect(await readPlacedPhotos(client)).toEqual({ slideshow: [], coffee: null });
   });
 
   it("throws a database error so loadNow can fall back", async () => {
@@ -96,7 +96,7 @@ describe("readCollectorPhotos", () => {
 
 describe("placePhotos", () => {
   it("fills the slideshow with photos tagged for it and ones not labeled yet, newest first", () => {
-    const rows = [row({ asset_id: "new" }), labeled("tagged", ["slideshow"], 4), labeled("food", [], 8), labeled("both", ["slideshow", "about"], 6)];
+    const rows = [row({ asset_id: "new" }), labeled("tagged", ["slideshow"], 4), labeled("food", [], 8), labeled("both", ["slideshow", "coffee"], 6)];
     expect(placePhotos(rows).slideshow.map((p) => p.src)).toEqual(["/photos/new", "/photos/tagged", "/photos/both"]);
   });
 
@@ -114,28 +114,24 @@ describe("placePhotos", () => {
     expect(placePhotos(hidden, { coffee: "boat" }).coffee?.src).toBe("/photos/top");
   });
 
-  it("gives About and coffee the highest-scoring labeled photo tagged for each, newest on a tie", () => {
+  it("gives coffee the highest-scoring labeled photo tagged for it, newest on a tie", () => {
     const rows = [
-      row({ asset_id: "unlabeled", places: ["about", "coffee"], score: 10 }),
-      labeled("aboutNew", ["about"], 7),
-      labeled("aboutOld", ["about"], 7),
-      labeled("coffeeBest", ["coffee", "slideshow"], 9),
+      row({ asset_id: "unlabeled", places: ["coffee"], score: 10 }),
+      labeled("coffeeNew", ["coffee"], 9),
+      labeled("coffeeOld", ["coffee", "slideshow"], 9),
       labeled("coffeeLow", ["coffee"], 3),
     ];
-    const placed = placePhotos(rows);
-    expect(placed.about).toEqual({ src: "/photos/aboutNew", alt: "Mason in photo aboutNew." });
-    expect(placed.coffee?.src).toBe("/photos/coffeeBest");
+    expect(placePhotos(rows).coffee).toEqual({ src: "/photos/coffeeNew", alt: "Mason in photo coffeeNew." });
   });
 
-  it("leaves About and coffee empty when nothing is tagged for them", () => {
-    expect(placePhotos([row(), labeled("a", ["slideshow"], 9)])).toMatchObject({ about: null, coffee: null });
-    expect(placePhotos([])).toEqual({ slideshow: [], about: null, coffee: null });
+  it("leaves coffee empty when nothing is tagged for it", () => {
+    expect(placePhotos([row(), labeled("a", ["slideshow"], 9)])).toMatchObject({ coffee: null });
+    expect(placePhotos([])).toEqual({ slideshow: [], coffee: null });
   });
 
   it("never places a hidden photo", () => {
-    const placed = placePhotos([labeled("h", ["slideshow", "about", "coffee"], 10, { hidden: true }), labeled("v", ["about"], 2)]);
-    expect(placed.about?.src).toBe("/photos/v");
-    expect(placed.coffee).toBeNull();
+    const placed = placePhotos([labeled("h", ["slideshow", "coffee"], 10, { hidden: true }), labeled("v", ["coffee"], 2)]);
+    expect(placed.coffee?.src).toBe("/photos/v");
     expect(placed.slideshow).toEqual([]);
   });
 });

@@ -20,7 +20,7 @@ const grade = {
 const photoLabel = {
   description: "Mason smiling at a small table with a coffee.",
   kind: "portrait",
-  places: ["slideshow", "about", "coffee"],
+  places: ["slideshow", "coffee"],
   score: 9,
 };
 

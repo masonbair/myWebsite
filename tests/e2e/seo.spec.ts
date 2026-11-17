@@ -153,7 +153,7 @@ test.describe("coffee page", () => {
 
   test("niche sections, email fallback, and last updated date are on the page", async ({ page }) => {
     await page.goto("/coffee");
-    for (const id of ["devsecops", "nomad", "kent-state"]) {
+    for (const id of ["open-to-anyone"]) {
       await expect(page.locator(`#${id}`).getByRole("heading", { level: 3 })).toBeVisible();
     }
     const email = page.getByRole("link", { name: "Email Mason to request a coffee chat" });

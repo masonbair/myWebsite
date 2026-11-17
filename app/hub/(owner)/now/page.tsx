@@ -102,7 +102,6 @@ function shownOn(assetId: string, placed: PlacedPhotos): string[] {
   const src = `/photos/${assetId}`;
   return [
     placed.slideshow.some((p) => p.src === src) && "slideshow",
-    placed.about?.src === src && "About",
     placed.coffee?.src === src && "coffee",
   ].filter((p): p is string => typeof p === "string");
 }
