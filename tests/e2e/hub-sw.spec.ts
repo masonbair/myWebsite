@@ -26,6 +26,24 @@ test.describe("hub service worker", () => {
     await expect(page.getByRole("textbox", { name: "Capture" })).toBeVisible();
   });
 
+  test("opens walk offline with a working deck, and capture still opens offline after it", async ({ page, context }) => {
+    await page.goto(`${SW_BASE}/hub/capture`);
+    await page.evaluate(async () => (await navigator.serviceWorker.ready).scope);
+    await page.reload();
+    await page.getByRole("link", { name: "Walk" }).click();
+    await expect(page.getByRole("heading", { name: "Walk" })).toBeVisible();
+    await expect.poll(() => page.evaluate(async () => Boolean(await caches.match("/hub/walk")))).toBe(true);
+
+    await context.setOffline(true);
+    const walk = await page.goto(`${SW_BASE}/hub/walk`);
+    expect(walk?.fromServiceWorker()).toBe(true);
+    await expect(page.getByRole("region", { name: "Walk prompt" })).toBeVisible();
+
+    const capture = await page.goto(`${SW_BASE}/hub/capture`);
+    expect(capture?.fromServiceWorker()).toBe(true);
+    await expect(page.getByRole("textbox", { name: "Capture" })).toBeVisible();
+  });
+
   test("keeps the plain capture page as the offline copy and drops old build files it no longer names", async ({ page }) => {
     const stale = "/_next/static/chunks/old-deploy-e2e.js";
     await page.goto(`${SW_BASE}/hub/capture`);

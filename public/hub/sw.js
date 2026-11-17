@@ -1,14 +1,16 @@
-// Only the capture page and build files are cached, never API or other signed-in data; Samsung Internet installs only with a fetch handler.
+// Only the offline pages and build files are cached, never API or other signed-in data; Samsung Internet installs only with a fetch handler.
 const CACHE = "hub-v1";
 const CAPTURE = "/hub/capture";
+// Walk holds the day's prompts inside its HTML, so the saved copy is the deck Mason saw last with signal.
+const OFFLINE_PAGES = [CAPTURE, "/hub/walk"];
 // The page names some files as "static/chunks/..." inside its React payload, without the /_next/ prefix.
 const STATIC_ASSET = /static\/(?:chunks|css|media)\/[^"'\s\\]+?\.(?:js|css|woff2)/g;
 
 // Only the plain page becomes the offline copy; a share-target visit (/hub/capture?share=empty) renders differently.
-function isCapturePage(response) {
-  if (!response.ok || response.redirected) return false;
+function offlinePagePath(response) {
+  if (!response.ok || response.redirected) return null;
   const url = new URL(response.url);
-  return url.pathname === CAPTURE && url.search === "";
+  return OFFLINE_PAGES.includes(url.pathname) && url.search === "" ? url.pathname : null;
 }
 
 const samePath = (path) => decodeURI(path);
@@ -34,29 +36,42 @@ async function isFresh(cache, request) {
   return at > 0 && Date.now() - at < KEEP_FRESH_MS;
 }
 
-// Caches the capture page plus the scripts and styles it names, then drops build files it no longer names so old deploys don't pile up.
-async function cacheCapture(response) {
+const assetsNamedIn = (html) => [...new Set((html.match(STATIC_ASSET) ?? []).map((path) => `/_next/${path}`))];
+
+// Caches one offline page plus the scripts and styles it names, then drops build files no saved page names so old deploys don't pile up.
+async function cachePage(path, response) {
   const cache = await caches.open(CACHE);
   const html = await response.clone().text();
-  await cache.put(CAPTURE, response);
-  const assets = [...new Set((html.match(STATIC_ASSET) ?? []).map((path) => `/_next/${path}`))];
-  await Promise.all(assets.map((path) => cacheAsset(cache, path).catch(() => undefined)));
-  const keep = new Set(assets.map(samePath));
+  await cache.put(path, response);
+  await Promise.all(assetsNamedIn(html).map((asset) => cacheAsset(cache, asset).catch(() => undefined)));
+  const keep = new Set();
+  for (const page of OFFLINE_PAGES) {
+    const saved = await cache.match(page);
+    if (saved) for (const asset of assetsNamedIn(await saved.text())) keep.add(samePath(asset));
+  }
   const unnamed = (await cache.keys()).filter((request) => {
-    const path = new URL(request.url).pathname;
-    return path.startsWith("/_next/static/") && !keep.has(samePath(path));
+    const assetPath = new URL(request.url).pathname;
+    return assetPath.startsWith("/_next/static/") && !keep.has(samePath(assetPath));
   });
   for (const request of unnamed) {
     if (!(await isFresh(cache, request))) await cache.delete(request);
   }
 }
 
+async function cacheIfOffline(response) {
+  const path = offlinePagePath(response);
+  if (path) await cachePage(path, response);
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    fetch(CAPTURE, { credentials: "same-origin" })
-      .then((response) => (isCapturePage(response) ? cacheCapture(response) : undefined))
-      .catch(() => undefined)
-      .then(() => self.skipWaiting()),
+    Promise.all(
+      OFFLINE_PAGES.map((path) =>
+        fetch(path, { credentials: "same-origin" })
+          .then(cacheIfOffline)
+          .catch(() => undefined),
+      ),
+    ).then(() => self.skipWaiting()),
   );
 });
 
@@ -69,13 +84,25 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// A tab tap inside the app loads no full page, so an offline page asks to be saved when it opens.
+self.addEventListener("message", (event) => {
+  const path = event.data?.savePage;
+  if (!OFFLINE_PAGES.includes(path)) return;
+  event.waitUntil(
+    fetch(path, { credentials: "same-origin" })
+      .then(cacheIfOffline)
+      .catch(() => undefined),
+  );
+});
+
 async function navigate(event) {
   try {
     const response = await fetch(event.request);
-    if (isCapturePage(response)) event.waitUntil(cacheCapture(response.clone()));
+    if (offlinePagePath(response)) event.waitUntil(cacheIfOffline(response.clone()));
     return response;
   } catch (error) {
-    const cached = await caches.match(CAPTURE);
+    const path = new URL(event.request.url).pathname;
+    const cached = (OFFLINE_PAGES.includes(path) && (await caches.match(path))) || (await caches.match(CAPTURE));
     if (cached) return cached;
     throw error;
   }
