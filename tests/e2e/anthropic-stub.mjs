@@ -1,4 +1,4 @@
-// A tiny stand-in for the Anthropic Messages API, for the learn e2e spec only: it never calls Claude.
+// A tiny stand-in for the Anthropic Messages API, for the learn and photo label e2e specs: it never calls Claude.
 import { createServer } from "node:http";
 
 const port = Number(process.env.HUB_ANTHROPIC_STUB_PORT);
@@ -14,6 +14,14 @@ const grade = {
   ],
   jargonOpening: false,
   delivery: "Two filler words; about 130 words per minute; a clear opening.",
+};
+
+// Any request carrying an image is the photo labeler.
+const photoLabel = {
+  description: "Mason smiling at a small table with a coffee.",
+  kind: "portrait",
+  places: ["slideshow", "about", "coffee"],
+  score: 9,
 };
 
 function reply(model, body) {
@@ -40,7 +48,9 @@ createServer((req, res) => {
     try {
       model = JSON.parse(raw).model ?? model;
     } catch {}
-    const body = model.includes("haiku")
+    const body = raw.includes('"type":"image"')
+      ? photoLabel
+      : model.includes("haiku")
       ? { accepted: raw.includes("STUB-ACCEPT"), feedback: raw.includes("STUB-ACCEPT") ? "Specific and from the article." : "Too general." }
       : grade;
     res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(reply(model, body)));

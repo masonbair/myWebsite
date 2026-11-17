@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import {
   AirplaneTilt,
   ArrowUpRight,
@@ -18,11 +17,13 @@ import { LazyBoardMotion } from "@/components/board/motion/LazyBoardMotion";
 import { Reveal } from "@/components/board/Reveal";
 import { Prompt, Tile } from "@/components/board/Tile";
 import { focusRing, focusRingOnColor, stickerButtonShape, tag } from "@/components/ui/sticker";
+import { CollectorImage } from "@/components/ui/CollectorImage";
 import { JsonLd } from "@/components/JsonLd";
 import { bookingMailto, bookingUrl, coffee, coffeeUpdated, type TopicIcon } from "@/content/coffee";
 import { contact } from "@/content/site";
 import { readSunOffset } from "@/lib/board";
 import { coffeeJsonLd } from "@/lib/jsonld";
+import { loadPlacedPhotos } from "@/lib/photos/placed";
 
 export const metadata: Metadata = {
   title: { absolute: coffee.title },
@@ -40,12 +41,6 @@ const topicIcons: Record<TopicIcon, Icon> = {
   sneaker: Sneaker,
 };
 
-const photo = {
-  src: "/misc/Mason_traveling.webp",
-  alt: "Mason smiling in a red bucket hat and sunglasses, taking a selfie on a roadside with green mountains and a river valley behind him",
-};
-
-
 const updated = new Date(coffeeUpdated);
 const updatedLabel = updated.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 
@@ -57,14 +52,14 @@ const elsewhere = [
 export const revalidate = 3600;
 
 export default async function CoffeePage() {
-  const sunOffsetMinutes = await readSunOffset();
+  const [sunOffsetMinutes, { coffee: photo }] = await Promise.all([readSunOffset(), loadPlacedPhotos()]);
   return (
     // Clipped sideways so a tile mid-swing (rotated) never widens the page on a phone.
     <main className="mx-auto w-full max-w-[1400px] overflow-x-clip px-4 pt-24 pb-24 md:px-8">
       <JsonLd data={coffeeJsonLd()} />
 
       <div data-coffee-grid className="grid gap-4 lg:grid-cols-12">
-        <div data-tile="coffee-hero" className="lg:col-span-7">
+        <div data-tile="coffee-hero" className={photo ? "lg:col-span-7" : "lg:col-span-12"}>
           <Tile core="flex flex-col bg-tea p-7 text-night md:p-12">
             <Prompt>book --coffee</Prompt>
             <h1 className="mt-2 max-w-[14ch] text-5xl leading-[0.95] font-bold tracking-[-0.04em] md:text-7xl">
@@ -107,18 +102,20 @@ export default async function CoffeePage() {
           </Tile>
         </div>
 
-        <div data-tile="coffee-photo" className="lg:col-span-5">
-          <Tile tilt="right" core="aspect-[4/5] bg-ink/5 lg:aspect-auto lg:min-h-[36rem]">
-            <Image
-              src={photo.src}
-              alt={photo.alt}
-              fill
-              preload
-              sizes="(min-width: 1400px) 540px, (min-width: 1024px) 40vw, calc(100vw - 32px)"
-              className="object-cover object-[50%_35%]"
-            />
-          </Tile>
-        </div>
+        {photo && (
+          <div data-tile="coffee-photo" className="lg:col-span-5">
+            <Tile tilt="right" core="aspect-[4/5] bg-ink/5 lg:aspect-auto lg:min-h-[36rem]">
+              <CollectorImage
+                src={photo.src}
+                alt={photo.alt}
+                fill
+                preload
+                sizes="(min-width: 1400px) 540px, (min-width: 1024px) 40vw, calc(100vw - 32px)"
+                className="object-cover object-[50%_35%]"
+              />
+            </Tile>
+          </div>
+        )}
 
         <Reveal index={2} tile="coffee-topics" className="lg:col-span-8">
           <Tile core="bg-surface p-7 md:p-10">

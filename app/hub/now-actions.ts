@@ -18,6 +18,12 @@ function refreshNow() {
   revalidatePath("/hub/now");
 }
 
+// Phone photos also sit on the coffee page, which keeps its own hourly cache.
+function refreshPhotos() {
+  refreshNow();
+  revalidatePath("/coffee");
+}
+
 // parseBakeInput has already matched the /misc pattern, so the path cannot leave public/misc.
 const photoExists = (src: string) => existsSync(path.join(process.cwd(), "public", src));
 
@@ -67,6 +73,6 @@ export async function setPhotoHiddenAction(assetId: string, hidden: boolean): Pr
   const { data, error } = await (await sessionClient()).rpc(RPC.setPhotoHidden, { p_asset_id: assetId, p_hidden: hidden });
   if (error) return { ok: false, error: "Could not save. Try again." };
   if (data !== true) return { ok: false, error: "That photo is not in the database." };
-  refreshNow();
+  refreshPhotos();
   return { ok: true };
 }

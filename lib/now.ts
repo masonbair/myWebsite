@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isCollectorPhotoSrc, readBoardPhotos } from "@/lib/collector-photos";
+import { isCollectorPhotoSrc } from "@/lib/collector-photos";
+import { hasDatabase, loadPlacedPhotos } from "@/lib/photos/placed";
 import { serviceClient } from "@/lib/supabase/server";
 
 /** city is null only for a private place: inside one, the phone sends region and country alone. */
@@ -124,20 +125,20 @@ export async function readNowRows(client: SupabaseClient): Promise<NowRows> {
   };
 }
 
-// Empty on the e2e site servers and in tests, so they never read a real database.
-const hasDatabase = () => Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-
 async function databaseRows(): Promise<NowRows | null> {
   return hasDatabase() ? readNowRows(serviceClient()) : null;
 }
 
 async function databasePhotos(): Promise<Photo[]> {
-  return hasDatabase() ? readBoardPhotos(serviceClient()) : [];
+  return (await loadPlacedPhotos()).slideshow;
 }
 
 type LoadNowDeps = { file?: () => Promise<NowData>; rows?: () => Promise<NowRows | null>; photos?: () => Promise<Photo[]> };
 
-/** The board's now data: database rows first, then content/now.json for any field the database has none of or fails on; phone photos go before the file's. */
+/**
+ * The board's now data: database rows first, then content/now.json for any field the database has none of or fails on.
+ * The slideshow is the phone album's photos only; a file's photos are used only where there is no database (e2e fixtures).
+ */
 export async function loadNow(deps: LoadNowDeps = {}): Promise<NowData> {
   const [file, rows, phonePhotos] = await Promise.all([
     (deps.file ?? readNow)(),
@@ -152,7 +153,6 @@ export async function loadNow(deps: LoadNowDeps = {}): Promise<NowData> {
   const place: Place | null = dbPlace
     ? { city: dbPlace.city, region: dbPlace.region, country: dbPlace.country, private: dbPlace.private, updatedAt: dbPlace.updatedAt }
     : file.place;
-  const seen = new Set(phonePhotos.map((p) => p.src));
-  const photos = [...phonePhotos, ...file.photos.filter((p) => !seen.has(p.src))];
+  const photos = hasDatabase() ? phonePhotos : file.photos;
   return { ...file, place, bake: rows?.bake ?? file.bake, photos };
 }

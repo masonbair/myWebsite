@@ -47,4 +47,17 @@ Backups hold the `collector_photo` and `collector_daylio_export` rows. They do n
 
 ## Hiding a photo
 
-Photos publish straight away. The undo is on the private side: `collector_set_photo_hidden(p_asset_id, p_hidden)` (`RPC.setPhotoHidden`) sets `hidden` and returns `false` when no photo has that asset id. Only Mason's session can call it; `hidden` is the only column that can ever change.
+Photos publish straight away. The undo is on the private side: `collector_set_photo_hidden(p_asset_id, p_hidden)` (`RPC.setPhotoHidden`) sets `hidden` and returns `false` when no photo has that asset id. Only Mason's session can call it; `hidden` is the only column Mason's session can ever change. A hidden photo leaves the slideshow, the About portrait and the coffee page within a few minutes.
+
+## Photo labels
+
+After upload, the site's server describes and tags each photo once with Claude (`lib/photos/job.ts`, every 15 minutes through the `hub-photos` cron; migration `0016_photo_labels.sql`). Only the server (service role) writes these columns; the phone's insert grant covers just `path`, `asset_id`, `taken_at`, `width` and `height`.
+
+| Column | Value |
+| --- | --- |
+| `description` | One short sentence of alt text, or `null`. Never names a place, landmark, business, sign text or anyone but Mason; a description that might is dropped (`lib/photos/privacy.ts`) and the site shows the month and year instead. |
+| `kind` | `portrait`, `travel`, `event`, `food`, `scenery` or `other`. |
+| `places` | Where it may go: any of `slideshow`, `about`, `coffee`. |
+| `score` | 1-10; the highest-scoring photo tagged `about` (or `coffee`) takes that spot, the newer one on a tie. |
+| `labeled_at` | When it was labeled; `null` until then. A photo not labeled yet can show in the slideshow only. |
+| `label_attempts`, `label_error` | Failed tries that were the photo's fault and the last reason; after 3 the photo is not tried again. |

@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { anthropicClient } from "@/lib/ai/claude";
 import { createSnapshotSource, runBackup, vercelBlobs } from "@/lib/hub/backup";
 import { DEFAULT_TIME_ZONE, handleEventRequest, masonTimeZone, readLatestPlaceZone } from "@/lib/hub/events";
@@ -9,6 +10,8 @@ import { runLearnJob } from "@/lib/learn/job";
 import { supabaseLearnStore } from "@/lib/learn/store";
 import { capUsd } from "@/lib/news/budget";
 import { NEWS_MODEL, runNewsJob } from "@/lib/news/job";
+import { photoCapUsd, runPhotoLabelJob } from "@/lib/photos/job";
+import { supabasePhotoLabelStore } from "@/lib/photos/store";
 import { serviceClient } from "@/lib/supabase/server";
 
 // The ideas run (lib/ideas/runner.ts) stops starting reviews 90 seconds before its 270-second budget, inside this limit.
@@ -51,6 +54,30 @@ function learnRunner() {
   };
 }
 
+// Each label is a few seconds, so this leaves room inside maxDuration.
+const PHOTOS_DEADLINE_MS = 200_000;
+
+function photosRunner() {
+  const anthropic = anthropicClient("photos");
+  if (!anthropic) return null;
+  return async () => {
+    const result = await runPhotoLabelJob({
+      store: supabasePhotoLabelStore(serviceClient()),
+      anthropic,
+      now: () => new Date(),
+      cap: photoCapUsd(process.env),
+      deadlineMs: PHOTOS_DEADLINE_MS,
+    });
+    // New labels move photos into the slideshow, About and coffee spots; the pages otherwise wait out their hourly cache.
+    if (result.labeled.length > 0) {
+      revalidatePath("/");
+      revalidatePath("/coffee");
+      revalidatePath("/hub/now");
+    }
+    return result;
+  };
+}
+
 // Called by pg_cron and the items trigger through pg_net; the service role still cannot complete or delete anything.
 export async function POST(request: Request, ctx: { params: Promise<{ event: string }> }) {
   const { event } = await ctx.params;
@@ -71,5 +98,6 @@ export async function POST(request: Request, ctx: { params: Promise<{ event: str
     ideas: ideasRunner(),
     news: newsRunner(),
     learn: learnRunner(),
+    photos: photosRunner(),
   });
 }

@@ -1,9 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import {
+  BOARD_PHOTO_LIMIT,
   collectorPhotoLoader,
-  readBoardPhotos,
+  placePhotos,
   readCollectorPhotos,
+  readPlacedPhotos,
   isServedPhotoWidth,
   snapPhotoWidth,
   toCollectorPhoto,
@@ -14,8 +16,16 @@ const row = (over: Partial<CollectorPhotoRow> = {}): CollectorPhotoRow => ({
   asset_id: "abc_DEF-123",
   taken_at: "2026-11-03T18:00:00Z",
   hidden: false,
+  description: null,
+  kind: null,
+  places: null,
+  score: null,
+  labeled_at: null,
   ...over,
 });
+
+const labeled = (asset_id: string, places: string[], score: number, over: Partial<CollectorPhotoRow> = {}) =>
+  row({ asset_id, places, score, kind: "portrait", description: `Mason in photo ${asset_id}.`, labeled_at: "2026-11-04T00:00:00Z", ...over });
 
 /** Records the query the code builds, and answers it with the given rows. */
 function fakeClient(rows: CollectorPhotoRow[], error: Error | null = null) {
@@ -35,6 +45,11 @@ describe("toCollectorPhoto", () => {
     expect(toCollectorPhoto(row())).toEqual({ src: "/photos/abc_DEF-123", alt: "Photo from Mason's phone, November 2026" });
   });
 
+  it("uses Claude's description as the alt once the photo is labeled", () => {
+    expect(toCollectorPhoto(labeled("x", ["slideshow"], 5))?.alt).toBe("Mason in photo x.");
+    expect(toCollectorPhoto(labeled("x", ["slideshow"], 5, { description: null }))?.alt).toBe("Photo from Mason's phone, November 2026");
+  });
+
   it("drops hidden rows, unsafe asset ids and bad dates", () => {
     expect(toCollectorPhoto(row({ hidden: true }))).toBeNull();
     for (const asset_id of ["../x", "a/b", "a.jpg", "", "a b", "%2e%2e", "x".repeat(201)]) {
@@ -45,19 +60,19 @@ describe("toCollectorPhoto", () => {
 });
 
 describe("readCollectorPhotos", () => {
-  it("asks for visible rows only, newest taken first, at most 12 for the board", async () => {
+  it("asks for visible rows only, newest taken first, with their labels", async () => {
     const { client, calls } = fakeClient([row({ asset_id: "b" }), row({ asset_id: "a" })]);
-    expect(await readBoardPhotos(client)).toEqual([
+    expect((await readPlacedPhotos(client)).slideshow).toEqual([
       { src: "/photos/b", alt: "Photo from Mason's phone, November 2026" },
       { src: "/photos/a", alt: "Photo from Mason's phone, November 2026" },
     ]);
     expect(calls).toEqual([
       ["from", "collector_photo"],
-      ["select", "asset_id, taken_at, hidden"],
+      ["select", "asset_id, taken_at, hidden, description, kind, places, score, labeled_at"],
       ["eq", "hidden", false],
       ["order", "taken_at", { ascending: false }],
       ["order", "id", { ascending: false }],
-      ["limit", 12],
+      ["limit", 500],
     ]);
   });
 
@@ -69,13 +84,51 @@ describe("readCollectorPhotos", () => {
   });
 
   it("drops a hidden row even if the database returned one to the board", async () => {
-    const { client } = fakeClient([row({ hidden: true })]);
-    expect(await readBoardPhotos(client)).toEqual([]);
+    const { client } = fakeClient([row({ hidden: true }), labeled("h", ["slideshow", "about", "coffee"], 9, { hidden: true })]);
+    expect(await readPlacedPhotos(client)).toEqual({ slideshow: [], about: null, coffee: null });
   });
 
   it("throws a database error so loadNow can fall back", async () => {
     const { client } = fakeClient([], new Error("down"));
-    await expect(readBoardPhotos(client)).rejects.toThrow("down");
+    await expect(readPlacedPhotos(client)).rejects.toThrow("down");
+  });
+});
+
+describe("placePhotos", () => {
+  it("fills the slideshow with photos tagged for it and ones not labeled yet, newest first", () => {
+    const rows = [row({ asset_id: "new" }), labeled("tagged", ["slideshow"], 4), labeled("food", [], 8), labeled("both", ["slideshow", "about"], 6)];
+    expect(placePhotos(rows).slideshow.map((p) => p.src)).toEqual(["/photos/new", "/photos/tagged", "/photos/both"]);
+  });
+
+  it("caps the slideshow at the board limit", () => {
+    const rows = Array.from({ length: BOARD_PHOTO_LIMIT + 5 }, (_, i) => row({ asset_id: `p${i}` }));
+    expect(placePhotos(rows).slideshow).toHaveLength(BOARD_PHOTO_LIMIT);
+    expect(BOARD_PHOTO_LIMIT).toBe(30);
+  });
+
+  it("gives About and coffee the highest-scoring labeled photo tagged for each, newest on a tie", () => {
+    const rows = [
+      row({ asset_id: "unlabeled", places: ["about", "coffee"], score: 10 }),
+      labeled("aboutNew", ["about"], 7),
+      labeled("aboutOld", ["about"], 7),
+      labeled("coffeeBest", ["coffee", "slideshow"], 9),
+      labeled("coffeeLow", ["coffee"], 3),
+    ];
+    const placed = placePhotos(rows);
+    expect(placed.about).toEqual({ src: "/photos/aboutNew", alt: "Mason in photo aboutNew." });
+    expect(placed.coffee?.src).toBe("/photos/coffeeBest");
+  });
+
+  it("leaves About and coffee empty when nothing is tagged for them", () => {
+    expect(placePhotos([row(), labeled("a", ["slideshow"], 9)])).toMatchObject({ about: null, coffee: null });
+    expect(placePhotos([])).toEqual({ slideshow: [], about: null, coffee: null });
+  });
+
+  it("never places a hidden photo", () => {
+    const placed = placePhotos([labeled("h", ["slideshow", "about", "coffee"], 10, { hidden: true }), labeled("v", ["about"], 2)]);
+    expect(placed.about?.src).toBe("/photos/v");
+    expect(placed.coffee).toBeNull();
+    expect(placed.slideshow).toEqual([]);
   });
 });
 

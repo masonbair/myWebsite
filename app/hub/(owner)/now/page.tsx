@@ -6,7 +6,7 @@ import { PhonePhotoCard } from "@/components/hub/PhonePhotoCard";
 import { PlacePrivacySwitch } from "@/components/hub/PlacePrivacySwitch";
 import { panel } from "@/components/hub/styles";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { HUB_PHOTO_LIMIT, readCollectorPhotos, type CollectorPhotoRow } from "@/lib/collector-photos";
+import { HUB_PHOTO_LIMIT, NO_PLACED_PHOTOS, readCollectorPhotos, readPlacedPhotos, type CollectorPhotoRow, type PlacedPhotos } from "@/lib/collector-photos";
 import { MAX_BAKE_NAME } from "@/lib/hub/now-input";
 import { formatLocation } from "@/lib/location";
 import { loadNow, readNowRows, type Bake, type NowRows, type Place } from "@/lib/now";
@@ -17,10 +17,11 @@ export const metadata = { title: "Now" };
 
 export default async function NowPage() {
   await requireOwner();
-  const [now, db, photos] = await Promise.all([
+  const [now, db, photos, placed] = await Promise.all([
     loadNow(),
     readNowRows(serviceClient()).catch(() => null),
     readCollectorPhotos(serviceClient(), { limit: HUB_PHOTO_LIMIT, includeHidden: true }).catch(() => null),
+    readPlacedPhotos(serviceClient()).catch(() => NO_PLACED_PHOTOS),
   ]);
 
   return (
@@ -41,9 +42,11 @@ export default async function NowPage() {
         <h2 id="phone-photos" className="mb-1 px-1 text-lg font-semibold tracking-tight text-ink">
           Photos from the phone
         </h2>
-        <p className="mb-4 max-w-[60ch] px-1 text-sm text-mute">New photos go on the board by themselves. Hide one to take it off within a few minutes.</p>
+        <p className="mb-4 max-w-[60ch] px-1 text-sm text-mute">
+          New photos go on the site by themselves. Claude labels each one within about 15 minutes and picks where it fits. Hide one to take it off everywhere within a few minutes.
+        </p>
         <div className={`${panel} p-5 sm:p-6`}>
-          <PhonePhotos photos={photos} />
+          <PhonePhotos photos={photos} placed={placed} />
         </div>
       </section>
 
@@ -95,13 +98,28 @@ function PlaceCard({ place, db }: { place: Place; db: NowRows | null }) {
   );
 }
 
-function PhonePhotos({ photos }: { photos: CollectorPhotoRow[] | null }) {
+function shownOn(assetId: string, placed: PlacedPhotos): string[] {
+  const src = `/photos/${assetId}`;
+  return [
+    placed.slideshow.some((p) => p.src === src) && "slideshow",
+    placed.about?.src === src && "About",
+    placed.coffee?.src === src && "coffee",
+  ].filter((p): p is string => typeof p === "string");
+}
+
+function PhonePhotos({ photos, placed }: { photos: CollectorPhotoRow[] | null; placed: PlacedPhotos }) {
   if (!photos) return <p className="text-sm text-mute">Could not reach the database, so the photos cannot load right now.</p>;
   if (photos.length === 0) return <p className="text-sm text-mute">No photos yet. The phone sends the ones in its Website album.</p>;
   return (
     <ul className="grid grid-cols-2 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]">
       {photos.map((p) => (
-        <PhonePhotoCard key={p.asset_id} assetId={p.asset_id} takenAt={p.taken_at} hidden={p.hidden} />
+        <PhonePhotoCard
+          key={p.asset_id}
+          assetId={p.asset_id}
+          takenAt={p.taken_at}
+          hidden={p.hidden}
+          label={{ kind: p.labeled_at ? p.kind : null, description: p.description, shownOn: shownOn(p.asset_id, placed) }}
+        />
       ))}
     </ul>
   );

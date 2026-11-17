@@ -5,6 +5,7 @@ import { FIXTURES, fixturePort, type Fixture } from "./tests/e2e/fixture-servers
 import {
   HUB_ANTHROPIC_STUB_PORT,
   HUB_E2E_AGENT_TOKEN,
+  HUB_E2E_EVENTS_TOKEN,
   HUB_E2E_MEMO_TOKEN,
   HUB_E2E_WORKER_TOKEN,
   HUB_LIVE_PORT,
@@ -107,6 +108,9 @@ function hubServer(port: number, name: "hub" | "hub-live", workerLive: boolean) 
       ANALYTICS_SALT: "analytics-e2e-salt-local-only",
       // Learn grades against the local stub, never Claude; the date, key and tokens exist only for this run.
       ANTHROPIC_API_KEY_LEARN: "e2e-local-only",
+      // The photo labeler also talks only to the stub; hub-now.spec.ts runs it through the events route.
+      ANTHROPIC_API_KEY_PHOTOS: "e2e-local-only",
+      HUB_EVENTS_TOKEN: HUB_E2E_EVENTS_TOKEN,
       ANTHROPIC_BASE_URL: `http://127.0.0.1:${HUB_ANTHROPIC_STUB_PORT}`,
       LEARN_E2E_TODAY: process.env.LEARN_E2E_TODAY!,
       LEARN_GRANT_PRIVATE_KEY: process.env.LEARN_E2E_SEED!,
@@ -160,7 +164,8 @@ export default defineConfig({
             reuseExistingServer: false,
             timeout: SERVER_TIMEOUT,
             // Empty beats .env.local, so e2e never calls live GitHub or writes to the real leaderboard.
-            env: { GITHUB_TOKEN: "", SUPABASE_URL: "" },
+            // With no database there are no album photos, so the slideshow specs get theirs from this fixture.
+            env: { GITHUB_TOKEN: "", SUPABASE_URL: "", NOW_FIXTURE: "site.json" },
           },
           ...fixtureServers,
         ]

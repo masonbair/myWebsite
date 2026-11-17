@@ -134,6 +134,13 @@ describe("event auth", () => {
     expect(runs).toBe(1);
   });
 
+  it("knows the photos event the 0016 cron posts, so it never 404s", async () => {
+    expect((await harness({ photos: null }).call("photos")).status).toBe(503);
+    const res = await harness({ photos: async () => ({ labeled: ["a"], failed: [], capped: false }) }).call("photos");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ labeled: ["a"], failed: [], capped: false });
+  });
+
   it("exports only POST and the time limit from the route", () => {
     expect(Object.keys(route).sort()).toEqual(["POST", "maxDuration"]);
     expect(route.maxDuration).toBe(300);

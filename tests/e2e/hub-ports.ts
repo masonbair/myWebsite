@@ -14,3 +14,5 @@ export const HUB_ANTHROPIC_STUB_PORT = HUB_PORT + 10;
 export const LEARN_E2E_FOCUSLOCK_TOKEN = "learn-e2e-focuslock-token-local-only";
 export const LEARN_E2E_HINOTE_TOKEN = "learn-e2e-hinote-token-local-only";
 export const LEARN_E2E_ROUTINE_TOKEN = "learn-e2e-routine-token-local-only";
+// Only the local hub servers accept this events token; it is not a secret.
+export const HUB_E2E_EVENTS_TOKEN = "hub-e2e-events-token-local-only";

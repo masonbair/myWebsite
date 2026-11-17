@@ -4,9 +4,10 @@ import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { beforeAll, describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { readBoardPhotos } from "@/lib/collector-photos";
+import { readPlacedPhotos } from "@/lib/collector-photos";
 import { readNowRows } from "@/lib/now";
 import { servePhoto, supabasePhotoStore } from "@/lib/photo-server";
+import { supabasePhotoLabelStore } from "@/lib/photos/store";
 import { BUCKET, DAYLIO_PREFIX, PHOTO_PREFIX, RPC, TABLE, daylioPath, type PlaceRow } from "@/shared/collector-contract";
 
 // Run with: HUB_TEST_DB_URL=1 HUB_TEST_SUPABASE_URL=http://127.0.0.1:54321 HUB_TEST_SERVICE_KEY=<SERVICE_ROLE_KEY> HUB_TEST_ANON_KEY=<ANON_KEY> (from `supabase status -o env`)
@@ -302,7 +303,7 @@ describe.skipIf(!enabled)("collector tables, RPCs and storage against local Supa
       expect((await owner.rpc(RPC.addPhoto, add)).error).toBeNull();
       const options = { store: () => supabasePhotoStore(service()), includeHidden: false, cacheControl: "public, max-age=300" };
 
-      expect((await readBoardPhotos(service())).map((p) => p.src)).toContain(`/photos/${assetId}`);
+      expect((await readPlacedPhotos(service())).slideshow.map((p) => p.src)).toContain(`/photos/${assetId}`);
       const res = await servePhoto(assetId, null, options);
       expect(res.status).toBe(200);
       const body = Buffer.from(await res.arrayBuffer());
@@ -310,12 +311,55 @@ describe.skipIf(!enabled)("collector tables, RPCs and storage against local Supa
       expect(body.includes(Buffer.from("GPS"))).toBe(false);
 
       expect((await owner.rpc(RPC.setPhotoHidden, { p_asset_id: assetId, p_hidden: true })).data).toBe(true);
-      expect((await readBoardPhotos(service())).map((p) => p.src)).not.toContain(`/photos/${assetId}`);
+      expect((await readPlacedPhotos(service())).slideshow.map((p) => p.src)).not.toContain(`/photos/${assetId}`);
       expect((await servePhoto(assetId, null, options)).status).toBe(404);
       expect((await servePhoto(assetId, "256", { ...options, includeHidden: true })).status).toBe(200);
 
       expect((await owner.rpc(RPC.setPhotoHidden, { p_asset_id: assetId, p_hidden: false })).data).toBe(true);
       expect((await servePhoto(assetId, null, options)).status).toBe(200);
+    });
+  });
+
+  describe("photo labels", () => {
+    async function addPhoto() {
+      const assetId = `lb${randomUUID().slice(0, 8)}`;
+      const add = { p_path: `${PHOTO_PREFIX}${assetId}.jpg`, p_asset_id: assetId, p_taken_at: new Date().toISOString(), p_width: 40, p_height: 30 };
+      expect((await owner.rpc(RPC.addPhoto, add)).error).toBeNull();
+      return assetId;
+    }
+
+    it("lets only the server write a label, and places the photo by it until hidden", async () => {
+      const assetId = await addPhoto();
+      const store = supabasePhotoLabelStore(service());
+      expect((await store.unlabeled(500)).map((p) => p.assetId)).toContain(assetId);
+
+      const forged = await owner.from("collector_photo").insert({
+        path: `${PHOTO_PREFIX}x${assetId}.jpg`, asset_id: `x${assetId}`, taken_at: new Date().toISOString(), width: 1, height: 1, description: "forged",
+      });
+      expect(forged.error).not.toBeNull();
+      expect((await owner.from("collector_photo").update({ description: "forged" }).eq("asset_id", assetId)).error).not.toBeNull();
+
+      await store.saveLabel(assetId, { description: "Mason smiling at a table.", kind: "portrait", places: ["slideshow", "about", "coffee"], score: 10 }, new Date());
+      expect((await store.unlabeled(500)).map((p) => p.assetId)).not.toContain(assetId);
+      const placed = await readPlacedPhotos(service());
+      expect(placed.about).toEqual({ src: `/photos/${assetId}`, alt: "Mason smiling at a table." });
+      expect(placed.coffee?.src).toBe(`/photos/${assetId}`);
+
+      expect((await owner.rpc(RPC.setPhotoHidden, { p_asset_id: assetId, p_hidden: true })).data).toBe(true);
+      const after = await readPlacedPhotos(service());
+      expect(after.about?.src).not.toBe(`/photos/${assetId}`);
+      expect(after.slideshow.map((p) => p.src)).not.toContain(`/photos/${assetId}`);
+    });
+
+    it("refuses an unknown kind or place, and stops retrying after three failures", async () => {
+      const assetId = await addPhoto();
+      const bad = await service().from("collector_photo")
+        .update({ kind: "portrait", places: ["homepage"], score: 5, labeled_at: new Date().toISOString() })
+        .eq("asset_id", assetId);
+      expect(bad.error).not.toBeNull();
+      const store = supabasePhotoLabelStore(service());
+      for (let i = 0; i < 3; i += 1) await store.recordFailure(assetId, "schema");
+      expect((await store.unlabeled(500)).map((p) => p.assetId)).not.toContain(assetId);
     });
   });
 

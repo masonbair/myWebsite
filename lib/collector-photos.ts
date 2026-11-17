@@ -3,10 +3,22 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const ASSET_ID = /^[A-Za-z0-9_-]{1,200}$/;
 /** Where the site serves a visible phone photo; see app/photos/[assetId]/route.ts. */
 const COLLECTOR_PHOTO_SRC = /^\/photos\/[A-Za-z0-9_-]{1,200}$/;
-export const BOARD_PHOTO_LIMIT = 12;
+export const BOARD_PHOTO_LIMIT = 30;
 export const HUB_PHOTO_LIMIT = 24;
+// The About and coffee spots pick the best labeled photo from this many of the newest.
+const PLACEMENT_SCAN_LIMIT = 500;
 
-export type CollectorPhotoRow = { asset_id: string; taken_at: string; hidden: boolean };
+/** Label columns are null until lib/photos/job.ts labels the photo; description is also null when it failed the privacy check. */
+export type CollectorPhotoRow = {
+  asset_id: string;
+  taken_at: string;
+  hidden: boolean;
+  description: string | null;
+  kind: string | null;
+  places: string[] | null;
+  score: number | null;
+  labeled_at: string | null;
+};
 /** A board photo; same shape as Photo in lib/now.ts. */
 export type CollectorPhoto = { src: string; alt: string };
 
@@ -17,10 +29,38 @@ export function collectorPhotoAlt(takenAt: string): string {
   return `Photo from Mason's phone, ${MONTH.format(new Date(takenAt))}`;
 }
 
-/** The board photo for a row, or null when the row is hidden or its asset id or date is not safe to use. */
+/** The site photo for a row, or null when the row is hidden or its asset id or date is not safe to use. */
 export function toCollectorPhoto(row: CollectorPhotoRow): CollectorPhoto | null {
   if (row.hidden !== false || !ASSET_ID.test(row.asset_id) || Number.isNaN(Date.parse(row.taken_at))) return null;
-  return { src: `/photos/${row.asset_id}`, alt: collectorPhotoAlt(row.taken_at) };
+  return { src: `/photos/${row.asset_id}`, alt: row.description ?? collectorPhotoAlt(row.taken_at) };
+}
+
+export type PlacedPhotos = { slideshow: CollectorPhoto[]; about: CollectorPhoto | null; coffee: CollectorPhoto | null };
+export const NO_PLACED_PHOTOS: PlacedPhotos = { slideshow: [], about: null, coffee: null };
+
+const isLabeled = (row: CollectorPhotoRow) => row.labeled_at !== null;
+const tagged = (row: CollectorPhotoRow, place: string) => isLabeled(row) && (row.places ?? []).includes(place);
+
+// Rows arrive newest first, so on a tie the newer photo wins.
+function best(rows: CollectorPhotoRow[], place: string): CollectorPhotoRow | null {
+  let top: CollectorPhotoRow | null = null;
+  for (const row of rows) if (tagged(row, place) && (top === null || (row.score ?? 0) > (top.score ?? 0))) top = row;
+  return top;
+}
+
+/**
+ * Where each visible photo goes, from rows sorted newest first. The slideshow takes photos tagged for it plus any not
+ * labeled yet; the About and coffee spots take only the highest-scoring labeled photo tagged for them.
+ */
+export function placePhotos(rows: CollectorPhotoRow[]): PlacedPhotos {
+  const visible = rows.filter((r) => toCollectorPhoto(r) !== null);
+  const slideshow = visible.filter((r) => !isLabeled(r) || tagged(r, "slideshow")).slice(0, BOARD_PHOTO_LIMIT);
+  const pick = (row: CollectorPhotoRow | null) => (row ? toCollectorPhoto(row) : null);
+  return {
+    slideshow: slideshow.map(toCollectorPhoto).filter((p): p is CollectorPhoto => p !== null),
+    about: pick(best(visible, "about")),
+    coffee: pick(best(visible, "coffee")),
+  };
 }
 
 /** Newest phone photos first; hidden ones are left out unless includeHidden (the hub's list). */
@@ -28,7 +68,7 @@ export async function readCollectorPhotos(
   client: SupabaseClient,
   { limit, includeHidden = false }: { limit: number; includeHidden?: boolean },
 ): Promise<CollectorPhotoRow[]> {
-  let query = client.from("collector_photo").select("asset_id, taken_at, hidden");
+  let query = client.from("collector_photo").select("asset_id, taken_at, hidden, description, kind, places, score, labeled_at");
   if (!includeHidden) query = query.eq("hidden", false);
   const { data, error } = await query
     .order("taken_at", { ascending: false })
@@ -38,10 +78,9 @@ export async function readCollectorPhotos(
   return (data ?? []) as CollectorPhotoRow[];
 }
 
-/** The visible photos the board shows, newest first. */
-export async function readBoardPhotos(client: SupabaseClient): Promise<CollectorPhoto[]> {
-  const rows = await readCollectorPhotos(client, { limit: BOARD_PHOTO_LIMIT });
-  return rows.map(toCollectorPhoto).filter((p): p is CollectorPhoto => p !== null);
+/** The visible photos for the slideshow, the About portrait and the coffee page. */
+export async function readPlacedPhotos(client: SupabaseClient): Promise<PlacedPhotos> {
+  return placePhotos(await readCollectorPhotos(client, { limit: PLACEMENT_SCAN_LIMIT }));
 }
 
 const WIDTHS: readonly number[] = [256, 640, 1080, 1600];

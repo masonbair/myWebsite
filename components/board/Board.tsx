@@ -1,7 +1,6 @@
 import { liveElsewhere, lowerKeys, lowerSpans, type Board as BoardData } from "@/lib/board";
 import { formatLocation } from "@/lib/location";
 import { movers, risingTopics } from "@/lib/news/movers";
-import type { Photo } from "@/lib/now";
 import { LazyBoardMotion } from "./motion/LazyBoardMotion";
 import { Reveal } from "./Reveal";
 import { BakeTile } from "./tiles/BakeTile";
@@ -13,12 +12,8 @@ import { PhotoTile } from "./tiles/PhotoTile";
 import { ProjectsTile } from "./tiles/ProjectsTile";
 import { TerminalTile } from "./tiles/TerminalTile";
 
-const FALLBACK_PHOTO: Photo = {
-  src: "/misc/Mason_traveling.webp",
-  alt: "Mason smiling in a red bucket hat and sunglasses, taking a selfie on a roadside with green mountains behind him",
-};
-
 const TALL = "md:col-span-3 md:row-span-2 lg:col-span-3 lg:row-span-2";
+const HALF = "md:col-span-6 md:row-span-2 lg:col-span-6 lg:row-span-2";
 // These fill the first screen, so they paint at once: a fade-in there blanks Lighthouse's filmstrip and raises Speed Index.
 const FIRST_SCREEN = new Set(["hello", "location", "photo", "github"]);
 
@@ -27,24 +22,29 @@ export function Board({ board }: { board: BoardData }) {
   const { now, github, trends } = board;
   const hasLocation = now.place !== null || now.countriesVisited > 0;
   const online = liveElsewhere(github?.online ?? []);
-  const photos = now.photos.length > 0 ? now.photos : [FALLBACK_PHOTO];
+  const hasPhotos = now.photos.length > 0;
   const rising = trends ? risingTopics(movers(trends.rows, trends.today), 3) : [];
-  const shown = lowerKeys(hasLocation ? 4 : 3, { projects: online.length > 0, news: rising.length >= 3, bake: !!now.bake });
+  const firstScreen = 2 + Number(hasLocation) + Number(hasPhotos);
+  const shown = lowerKeys(firstScreen, { projects: online.length > 0, news: rising.length >= 3, bake: !!now.bake });
   const lower = lowerSpans(shown);
 
   const tiles = [
     { key: "hello", span: "md:col-span-6 md:row-span-2 lg:col-span-6", node: <HelloTile /> },
     hasLocation && {
       key: "location",
-      span: "md:col-span-3 lg:col-span-3",
+      span: hasPhotos ? "md:col-span-3 lg:col-span-3" : TALL,
       node: <LocationTile place={now.place} countriesVisited={now.countriesVisited} />,
     },
-    {
+    hasPhotos && {
       key: "photo",
       span: hasLocation ? "md:col-span-6 lg:col-span-3 lg:row-span-2" : TALL,
-      node: <PhotoTile photos={photos.map(({ src, alt }) => ({ src, alt }))} />,
+      node: <PhotoTile photos={now.photos.map(({ src, alt }) => ({ src, alt }))} />,
     },
-    { key: "github", span: hasLocation ? "md:col-span-3 lg:col-span-3" : TALL, node: <GithubTile github={github} /> },
+    {
+      key: "github",
+      span: hasLocation && hasPhotos ? "md:col-span-3 lg:col-span-3" : hasLocation || hasPhotos ? TALL : HALF,
+      node: <GithubTile github={github} />,
+    },
     shown.includes("projects") && {
       key: "projects",
       span: lower.get("projects"),

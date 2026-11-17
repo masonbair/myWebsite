@@ -4,11 +4,31 @@ import Image from "next/image";
 import { useState, useTransition } from "react";
 import { setPhotoHiddenAction } from "@/app/hub/now-actions";
 import { collectorPhotoAlt, collectorPhotoLoader } from "@/lib/collector-photos";
+import { tag } from "@/components/ui/sticker";
 import { smallButton } from "./styles";
 
 const DAY = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
-export function PhonePhotoCard({ assetId, takenAt, hidden }: { assetId: string; takenAt: string; hidden: boolean }) {
+export type PhonePhotoLabel = {
+  /** null until Claude labels the photo. */
+  kind: string | null;
+  /** null when not labeled yet, or when the description failed the privacy check. */
+  description: string | null;
+  /** Where the site shows it right now: slideshow, About or coffee. */
+  shownOn: string[];
+};
+
+export function PhonePhotoCard({
+  assetId,
+  takenAt,
+  hidden,
+  label,
+}: {
+  assetId: string;
+  takenAt: string;
+  hidden: boolean;
+  label: PhonePhotoLabel;
+}) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const day = DAY.format(new Date(takenAt));
@@ -31,7 +51,7 @@ export function PhonePhotoCard({ assetId, takenAt, hidden }: { assetId: string; 
         <Image
           src={`/hub/photos/${assetId}`}
           loader={collectorPhotoLoader}
-          alt={collectorPhotoAlt(takenAt)}
+          alt={label.description ?? collectorPhotoAlt(takenAt)}
           fill
           sizes="(min-width: 640px) 160px, 45vw"
           className={`object-cover transition-opacity duration-300 ease-spring ${hidden ? "opacity-35 grayscale" : ""}`}
@@ -54,6 +74,20 @@ export function PhonePhotoCard({ assetId, takenAt, hidden }: { assetId: string; 
         >
           {hidden ? "Show" : "Hide"}
         </button>
+      </div>
+      <div className="flex flex-col gap-1.5 px-0.5">
+        <p className="text-xs leading-snug text-ink">
+          {label.kind === null ? <span className="text-mute">Waiting for a label</span> : (label.description ?? <span className="text-mute">No description</span>)}
+        </p>
+        <ul aria-label="Kind and where it shows" className="flex flex-wrap gap-1">
+          {label.kind && <li className={`${tag} border-line bg-canvas text-xs text-mute`}>{label.kind}</li>}
+          {label.shownOn.map((place) => (
+            <li key={place} className={`${tag} border-line bg-accent text-xs text-night`}>
+              {place}
+            </li>
+          ))}
+          {!hidden && label.shownOn.length === 0 && label.kind !== null && <li className="text-xs text-mute">Not on the site</li>}
+        </ul>
       </div>
       {error && (
         <p role="alert" className="px-1 text-sm font-medium text-accent-ink">

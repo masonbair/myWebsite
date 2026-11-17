@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import sharp from "sharp";
+import { HUB_E2E_EVENTS_TOKEN } from "./hub-ports";
 import { seededOwner, serviceClient, signInAs, supabase } from "./hub-session";
 
 // Runs on the hub server, whose `/` reads local Supabase. Rows can never be deleted, so names are unique per run and each test adds the newest row.
@@ -108,6 +109,44 @@ test.describe("now page", () => {
       await card.getByRole("button", { name: /^Show photo from / }).click();
       await expect(card.getByRole("button", { name: /^Hide photo from / })).toBeVisible();
       expect(await boardHtml()).toContain(route);
+    });
+
+    test("the labeler describes a new photo, places it on the slideshow, About and coffee, and hiding takes it off all three", async ({ page, request }) => {
+      const assetId = `e2elabel${randomUUID().slice(0, 8)}`;
+      const jpeg = await sharp({ create: { width: 1600, height: 2000, channels: 3, background: "orange" } }).jpeg().toBuffer();
+      expect((await serviceClient().storage.from("photos").upload(`collector/${assetId}.jpg`, jpeg, { contentType: "image/jpeg" })).error).toBeNull();
+      const added = await serviceClient()
+        .from("collector_photo")
+        .insert({ path: `collector/${assetId}.jpg`, asset_id: assetId, taken_at: new Date().toISOString(), width: 1600, height: 2000 });
+      expect(added.error).toBeNull();
+      const route = `/photos/${assetId}`;
+      const alt = "Mason smiling at a small table with a coffee.";
+
+      // What pg_cron does every 15 minutes; Claude is the local stub.
+      const run = await request.post("/api/hub/events/photos", { headers: { authorization: `Bearer ${HUB_E2E_EVENTS_TOKEN}` } });
+      expect(run.status()).toBe(200);
+      expect((await run.json()).labeled).toContain(assetId);
+      const row = await serviceClient().from("collector_photo").select("kind, places, score, labeled_at").eq("asset_id", assetId).single();
+      expect(row.data).toMatchObject({ kind: "portrait", places: ["slideshow", "about", "coffee"], score: 9 });
+      const usage = await serviceClient().from("ai_usage").select("feature, model").eq("purpose", `label ${assetId}`);
+      expect(usage.data).toEqual([{ feature: "photos", model: "claude-haiku-5-5" }]);
+
+      await page.goto("/");
+      await expect(page.getByRole("group", { name: "Photo slideshow" }).locator(`img[src^="${route}?w="]`)).toHaveAttribute("alt", alt);
+      await expect(page.locator("#about").locator(`img[src^="${route}?w="]`)).toHaveAttribute("alt", alt);
+      await page.goto("/coffee");
+      await expect(page.locator('[data-tile="coffee-photo"]').locator(`img[src^="${route}?w="]`)).toHaveAttribute("alt", alt);
+
+      await page.goto("/hub/now");
+      const card = page.getByRole("region", { name: "Photos from the phone" }).getByRole("listitem").filter({ has: page.locator(`img[src*="${assetId}"]`) });
+      await expect(card.getByText(alt)).toBeVisible();
+      const tags = card.getByRole("list", { name: "Kind and where it shows" });
+      for (const t of ["portrait", "slideshow", "About", "coffee"]) await expect(tags.getByText(t, { exact: true })).toBeVisible();
+
+      await card.getByRole("button", { name: /^Hide photo from / }).click();
+      await expect(card.getByText("Hidden", { exact: true })).toBeVisible();
+      expect(await (await request.get("/")).text()).not.toContain(route);
+      expect(await (await request.get("/coffee")).text()).not.toContain(route);
     });
 
     test("a photo that is not on the site is refused", async ({ page }) => {

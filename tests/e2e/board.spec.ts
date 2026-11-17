@@ -31,11 +31,12 @@ test("board renders when github is null", async ({ page }) => {
   await expect(link).toHaveAttribute("href", "https://github.com/masonbair");
 });
 
-test("empty photos shows fallback", async ({ page }) => {
+test("no photos leaves out the photo tile, with no old photo standing in and no hole in the grid", async ({ page }) => {
   await page.goto(fixtureUrl("empty"));
-  const img = page.locator('img[src*="Mason_traveling"]').first();
-  await expect(img).toBeVisible();
-  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
+  await expect(page.getByRole("heading", { name: "Hey! I'm Mason." })).toBeVisible();
+  await expect(page.locator('[data-tile="photo"]')).toHaveCount(0);
+  await expect(page.locator('img[src*="/misc/"]')).toHaveCount(0);
+  expect(await boardRowGaps(page)).toBe(0);
 });
 
 test("no empty grid cells", async ({ page }) => {

@@ -27,13 +27,6 @@ export const about: string[] = [
   "As for travel, I have been to 23 countries, all over North America, Europe and Asia. My favorite countries to visit have been Estonia, Japan, and Guatemala. I am a slow traveller, taking my time to explore every city I visit. I also volunteered for 1.5 months in Puerto Escondido at a Viajero hostel, leading all of the evening social events. I organized everything from Karaoke, to trivia and bar games.",
 ];
 
-export const portrait: SiteImage = {
-  src: "/misc/Mason_dressed_nicely.webp",
-  alt: "Mason taking a mirror selfie in a khaki button up shirt in front of a blue patterned curtain",
-  width: 3000,
-  height: 4000,
-};
-
 export const work: Work[] = [
   {
     title: role.title,

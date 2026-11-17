@@ -115,22 +115,37 @@ describe("loadNow", () => {
     expect(both).toEqual({ ...file, place: shownPlace, bake: dbBake });
   });
 
-  it("puts phone photos before the file's, without repeating one", async () => {
-    const phone = [
-      { src: "/photos/new", alt: "Photo from Mason's phone, November 2026" },
-      { src: "/misc/a.webp", alt: "dup" },
-    ];
-    const now = await loadNow({ file: async () => file, rows: async () => null, photos: async () => phone });
-    expect(now.photos).toEqual(phone);
-    const more = await loadNow({ file: async () => file, rows: async () => null, photos: async () => phone.slice(0, 1) });
-    expect(more.photos).toEqual([phone[0], { src: "/misc/a.webp", alt: "a" }]);
+  describe("with a database", () => {
+    const withDatabase = () => {
+      vi.stubEnv("SUPABASE_URL", "http://127.0.0.1:54321");
+      vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test");
+    };
+
+    it("shows only the phone album's photos, never the file's", async () => {
+      withDatabase();
+      const phone = [{ src: "/photos/new", alt: "Photo from Mason's phone, November 2026" }];
+      const now = await loadNow({ file: async () => file, rows: async () => null, photos: async () => phone });
+      expect(now.photos).toEqual(phone);
+    });
+
+    it("shows no photos, not the file's, when the album is empty or the photo query fails", async () => {
+      withDatabase();
+      expect((await loadNow({ file: async () => file, rows: async () => null, photos: async () => [] })).photos).toEqual([]);
+      const photos = async () => {
+        throw new Error("relation collector_photo does not exist");
+      };
+      expect(await loadNow({ file: async () => file, rows: async () => null, photos })).toEqual({ ...file, photos: [] });
+    });
   });
 
-  it("shows only the file's photos when the photo query fails", async () => {
-    const photos = async () => {
-      throw new Error("relation collector_photo does not exist");
-    };
-    expect(await loadNow({ file: async () => file, rows: async () => null, photos })).toEqual(file);
+  it("uses a fixture file's photos only where there is no database", async () => {
+    vi.stubEnv("SUPABASE_URL", "");
+    expect((await loadNow({ file: async () => file, rows: async () => null })).photos).toEqual(file.photos);
+  });
+
+  it("content/now.json holds no photos", async () => {
+    vi.stubEnv("NOW_FIXTURE", "");
+    expect((await readNow()).photos).toEqual([]);
   });
 
   it("a private database place still shows only region and country", async () => {
