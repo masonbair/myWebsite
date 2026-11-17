@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireOwner } from "@/lib/auth/require-owner";
+import { fireRoutine } from "@/lib/hub/events";
 import { isItemId } from "@/lib/hub/format";
 import { MAX_COMMENT, parseItemPatch } from "@/lib/hub/input";
 import { masonStore } from "@/lib/hub/mason-store";
@@ -43,8 +44,23 @@ export async function approveItem(id: string): Promise<void> {
   if (!workerLive()) throw new Error(WORKER_OFF);
   const item = await store.getItem(id);
   if (!item || item.state !== "open") throw new Error("only an open item can be approved");
-  if (!item.labels.includes(CLAUDE_LABEL)) await store.updateItem(id, { labels: [...item.labels, CLAUDE_LABEL] });
+  if (!item.labels.includes(CLAUDE_LABEL)) {
+    await store.updateItem(id, { labels: [...item.labels, CLAUDE_LABEL] });
+    await startWorker(id);
+  }
   refreshHub();
+}
+
+// Fired from here, not a database trigger: pg_net's lone calls failed with HTTP/2 framing errors and never retried.
+async function startWorker(id: string): Promise<void> {
+  const url = process.env.ROUTINE_FIRE_URL;
+  const token = process.env.ROUTINE_FIRE_TOKEN;
+  if (!url || !token) return;
+  try {
+    await fireRoutine(id, { url, token }, fetch);
+  } catch (e) {
+    console.error(`approve ${id}: worker not started now (${(e as Error).message}); the next scheduled run takes it`);
+  }
 }
 
 export async function updateItemAction(id: string, patch: ItemPatch): Promise<void> {
@@ -56,6 +72,7 @@ export async function updateItemAction(id: string, patch: ItemPatch): Promise<vo
   const addsClaude = clean.labels?.includes(CLAUDE_LABEL) && !item.labels.includes(CLAUDE_LABEL);
   if (addsClaude && !workerLive()) throw new Error(WORKER_OFF);
   await store.updateItem(id, clean);
+  if (addsClaude) await startWorker(id);
   refreshHub();
 }
 

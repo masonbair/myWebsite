@@ -45,6 +45,54 @@ describe("hub actions", () => {
     expect((await store.getItem(second.id))?.labels).toEqual(["claude"]);
   });
 
+  describe("starting the worker on approval", () => {
+    let fired: { url: string; body: unknown }[];
+    let status: number;
+
+    beforeEach(() => {
+      fired = [];
+      status = 200;
+      vi.stubEnv("HUB_WORKER_LIVE", "true");
+      vi.stubEnv("ROUTINE_FIRE_URL", "https://routine.example/fire");
+      vi.stubEnv("ROUTINE_FIRE_TOKEN", "routine-token");
+      vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+        fired.push({ url, body: JSON.parse(init.body as string) });
+        return new Response("{}", { status });
+      });
+    });
+
+    it("starts the routine once for the approved item, from the button or the label editor", async () => {
+      const first = await store.addItem({ title: "a", source: "test" });
+      const second = await store.addItem({ title: "b", source: "test" });
+      await approveItem(first.id);
+      await updateItemAction(second.id, { labels: ["claude"] });
+      expect(fired).toEqual([
+        { url: "https://routine.example/fire", body: { text: `hub-item-id: ${first.id}` } },
+        { url: "https://routine.example/fire", body: { text: `hub-item-id: ${second.id}` } },
+      ]);
+    });
+
+    it("does not start it for an item already approved or for other label edits", async () => {
+      const item = await store.addItem({ title: "a", labels: ["claude"], source: "test" });
+      await approveItem(item.id);
+      await updateItemAction(item.id, { labels: ["claude", "laptop"] });
+      await updateItemAction(item.id, { labels: ["laptop"] });
+      expect(fired).toEqual([]);
+    });
+
+    it("keeps the approval when the routine refuses or is not configured", async () => {
+      status = 500;
+      const refused = await store.addItem({ title: "a", source: "test" });
+      await approveItem(refused.id);
+      vi.stubEnv("ROUTINE_FIRE_URL", "");
+      const unset = await store.addItem({ title: "b", source: "test" });
+      await approveItem(unset.id);
+      expect((await store.getItem(refused.id))?.labels).toEqual(["claude"]);
+      expect((await store.getItem(unset.id))?.labels).toEqual(["claude"]);
+      expect(fired).toHaveLength(1);
+    });
+  });
+
   it("will not complete or reopen an archived item", async () => {
     const keep = await store.addItem({ title: "keep", source: "test" });
     const dupe = await store.addItem({ title: "dupe", source: "test" });

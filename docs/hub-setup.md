@@ -18,13 +18,14 @@ Vercel env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `S
 
 ## Events: reminders, approval fire and daily backup (Supabase Vault)
 
-Migration `0004_hub_events.sql` adds three calls from the database to the site, all sent through pg_net:
+Migration `0004_hub_events.sql` adds calls from the database to the site, all sent through pg_net:
 
 | What | When | Calls |
 | --- | --- | --- |
 | `hub-reminders` cron job | every 5 minutes | `POST /api/hub/events/reminders` |
 | `hub-backup` cron job | daily at 03:00 UTC | `POST /api/hub/events/backup` |
-| `items_fire_approved` trigger | Mason adds `claude` to an open item | `POST /api/hub/events/approved` with `{ "id": ... }` |
+
+Approvals no longer go through the database: `0015_hub_approve_from_site.sql` dropped the `items_fire_approved` trigger, because pg_net's lone calls failed with HTTP/2 framing errors. The approve actions in `app/hub/actions.ts` start the routine directly with `ROUTINE_FIRE_URL` and `ROUTINE_FIRE_TOKEN`.
 
 They read the site URL and a token from two Vault secrets. Until both exist, every call does nothing, and Mason's edits still save.
 
