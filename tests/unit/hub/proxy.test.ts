@@ -31,4 +31,9 @@ describe("proxy machine API gate", () => {
       expect(res.headers.get("x-middleware-next")).toBeNull();
     }
   });
+
+  it("lets a bearer POST to the session report through, and refuses one without a bearer", async () => {
+    expect((await proxy(request("/api/hub/sessions", "Bearer anything"), event)).headers.get("x-middleware-next")).toBe("1");
+    expect((await proxy(request("/api/hub/sessions"), event)).status).toBe(401);
+  });
 });

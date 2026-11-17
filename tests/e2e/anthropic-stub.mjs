@@ -50,6 +50,8 @@ createServer((req, res) => {
     } catch {}
     const body = raw.includes('"type":"image"')
       ? photoLabel
+      : raw.includes("attention queue")
+      ? { queue: raw.includes("STUB-QUEUE"), state: "needs_you", line: "Session queue built; needs your OK to merge." }
       : model.includes("haiku")
       ? { accepted: raw.includes("STUB-ACCEPT"), feedback: raw.includes("STUB-ACCEPT") ? "Specific and from the article." : "Too general." }
       : grade;
