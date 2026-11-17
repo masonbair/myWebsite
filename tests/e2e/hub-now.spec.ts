@@ -31,7 +31,7 @@ test.describe("now page", () => {
       await expect(page.getByRole("region", { name: "Last bake" }).getByText(name)).toBeVisible();
 
       await page.goto("/");
-      await expect(page.getByText(name)).toBeVisible();
+      await expect(page.getByText(name, { exact: true })).toBeVisible();
     });
 
     test("a bad photo path is refused with a plain message", async ({ page }) => {
@@ -67,7 +67,7 @@ test.describe("now page", () => {
 
       await ping();
       await page.goto("/");
-      await expect(page.getByText("Ohio, United States")).toBeVisible();
+      await expect(page.getByRole("region", { name: "Right now" }).getByText("Ohio, United States")).toBeVisible();
       // Raw response, so the RSC payload is checked too.
       expect(await boardHtml()).not.toContain(city);
 
@@ -76,7 +76,7 @@ test.describe("now page", () => {
       await toggle.click();
       await expect(toggle).toHaveAttribute("aria-checked", "false");
       await page.goto("/");
-      await expect(page.getByText(`${city}, United States`)).toBeVisible();
+      await expect(page.getByRole("region", { name: "Right now" }).getByText(`${city}, United States`)).toBeVisible();
     });
 
     test("a phone photo shows on the board until it is hidden in the hub, and comes back when shown", async ({ page, request }) => {
@@ -111,7 +111,7 @@ test.describe("now page", () => {
       expect(await boardHtml()).toContain(route);
     });
 
-    test("the labeler describes a new photo, places it on the slideshow, About and coffee, and hiding takes it off all three", async ({ page, request }) => {
+    test("the labeler describes a new photo, places it on the slideshow and coffee, and hiding takes it off both", async ({ page, request }) => {
       const assetId = `e2elabel${randomUUID().slice(0, 8)}`;
       const jpeg = await sharp({ create: { width: 1600, height: 2000, channels: 3, background: "orange" } }).jpeg().toBuffer();
       expect((await serviceClient().storage.from("photos").upload(`collector/${assetId}.jpg`, jpeg, { contentType: "image/jpeg" })).error).toBeNull();
@@ -127,13 +127,12 @@ test.describe("now page", () => {
       expect(run.status()).toBe(200);
       expect((await run.json()).labeled).toContain(assetId);
       const row = await serviceClient().from("collector_photo").select("kind, places, score, labeled_at").eq("asset_id", assetId).single();
-      expect(row.data).toMatchObject({ kind: "portrait", places: ["slideshow", "about", "coffee"], score: 9 });
+      expect(row.data).toMatchObject({ kind: "portrait", places: ["slideshow", "coffee"], score: 9 });
       const usage = await serviceClient().from("ai_usage").select("feature, model").eq("purpose", `label ${assetId}`);
       expect(usage.data).toEqual([{ feature: "photos", model: "claude-haiku-5-5" }]);
 
       await page.goto("/");
       await expect(page.getByRole("group", { name: "Photo slideshow" }).locator(`img[src^="${route}?w="]`)).toHaveAttribute("alt", alt);
-      await expect(page.locator("#about").locator(`img[src^="${route}?w="]`)).toHaveAttribute("alt", alt);
       await page.goto("/coffee");
       await expect(page.locator('[data-tile="coffee-photo"]').locator(`img[src^="${route}?w="]`)).toHaveAttribute("alt", alt);
 
@@ -141,7 +140,7 @@ test.describe("now page", () => {
       const card = page.getByRole("region", { name: "Photos from the phone" }).getByRole("listitem").filter({ has: page.locator(`img[src*="${assetId}"]`) });
       await expect(card.getByText(alt)).toBeVisible();
       const tags = card.getByRole("list", { name: "Kind and where it shows" });
-      for (const t of ["portrait", "slideshow", "About", "coffee"]) await expect(tags.getByText(t, { exact: true })).toBeVisible();
+      for (const t of ["portrait", "slideshow", "coffee"]) await expect(tags.getByText(t, { exact: true })).toBeVisible();
 
       await card.getByRole("button", { name: /^Hide photo from / }).click();
       await expect(card.getByText("Hidden", { exact: true })).toBeVisible();

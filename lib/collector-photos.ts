@@ -6,7 +6,7 @@ export const ASSET_ID = /^[A-Za-z0-9_-]{1,200}$/;
 const COLLECTOR_PHOTO_SRC = /^\/photos\/[A-Za-z0-9_-]{1,200}$/;
 export const BOARD_PHOTO_LIMIT = 30;
 export const HUB_PHOTO_LIMIT = 24;
-// The About and coffee spots pick the best labeled photo from this many of the newest.
+// The coffee spot picks the best labeled photo from this many of the newest.
 const PLACEMENT_SCAN_LIMIT = 500;
 
 /** Label columns are null until lib/photos/job.ts labels the photo; description is also null when it failed the privacy check. */
@@ -37,9 +37,9 @@ export function toCollectorPhoto(row: CollectorPhotoRow): CollectorPhoto | null 
 }
 
 /** Asset ids Mason chose by hand for a spot, overriding Claude's pick. */
-export type PhotoPins = { about?: string; coffee?: string };
-export type PlacedPhotos = { slideshow: CollectorPhoto[]; about: CollectorPhoto | null; coffee: CollectorPhoto | null };
-export const NO_PLACED_PHOTOS: PlacedPhotos = { slideshow: [], about: null, coffee: null };
+export type PhotoPins = { coffee?: string };
+export type PlacedPhotos = { slideshow: CollectorPhoto[]; coffee: CollectorPhoto | null };
+export const NO_PLACED_PHOTOS: PlacedPhotos = { slideshow: [], coffee: null };
 
 const isLabeled = (row: CollectorPhotoRow) => row.labeled_at !== null;
 const tagged = (row: CollectorPhotoRow, place: string) => isLabeled(row) && (row.places ?? []).includes(place);
@@ -53,7 +53,7 @@ function best(rows: CollectorPhotoRow[], place: string): CollectorPhotoRow | nul
 
 /**
  * Where each visible photo goes, from rows sorted newest first. The slideshow takes photos tagged for it plus any not
- * labeled yet; the About and coffee spots take only the highest-scoring labeled photo tagged for them.
+ * labeled yet; the coffee spot takes only the highest-scoring labeled photo tagged for them.
  */
 export function placePhotos(rows: CollectorPhotoRow[], pins: PhotoPins = {}): PlacedPhotos {
   const visible = rows.filter((r) => toCollectorPhoto(r) !== null);
@@ -63,7 +63,6 @@ export function placePhotos(rows: CollectorPhotoRow[], pins: PhotoPins = {}): Pl
   const pick = (row: CollectorPhotoRow | null) => (row ? toCollectorPhoto(row) : null);
   return {
     slideshow: slideshow.map(toCollectorPhoto).filter((p): p is CollectorPhoto => p !== null),
-    about: pick(pinned("about") ?? best(visible, "about")),
     coffee: pick(pinned("coffee") ?? best(visible, "coffee")),
   };
 }
@@ -83,7 +82,7 @@ export async function readCollectorPhotos(
   return (data ?? []) as CollectorPhotoRow[];
 }
 
-/** The visible photos for the slideshow, the About portrait and the coffee page. */
+/** The visible photos for the slideshow and the coffee page. */
 export async function readPlacedPhotos(client: SupabaseClient): Promise<PlacedPhotos> {
   return placePhotos(await readCollectorPhotos(client, { limit: PLACEMENT_SCAN_LIMIT }), photoPins);
 }

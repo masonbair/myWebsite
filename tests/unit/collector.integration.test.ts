@@ -339,15 +339,14 @@ describe.skipIf(!enabled)("collector tables, RPCs and storage against local Supa
       expect(forged.error).not.toBeNull();
       expect((await owner.from("collector_photo").update({ description: "forged" }).eq("asset_id", assetId)).error).not.toBeNull();
 
-      await store.saveLabel(assetId, { description: "Mason smiling at a table.", kind: "portrait", places: ["slideshow", "about", "coffee"], score: 10 }, new Date());
+      await store.saveLabel(assetId, { description: "Mason smiling at a table.", kind: "portrait", places: ["slideshow", "coffee"], score: 10 }, new Date());
       expect((await store.unlabeled(500)).map((p) => p.assetId)).not.toContain(assetId);
       const placed = await readPlacedPhotos(service());
-      expect(placed.about).toEqual({ src: `/photos/${assetId}`, alt: "Mason smiling at a table." });
-      expect(placed.coffee?.src).toBe(`/photos/${assetId}`);
+      expect(placed.coffee).toEqual({ src: `/photos/${assetId}`, alt: "Mason smiling at a table." });
 
       expect((await owner.rpc(RPC.setPhotoHidden, { p_asset_id: assetId, p_hidden: true })).data).toBe(true);
       const after = await readPlacedPhotos(service());
-      expect(after.about?.src).not.toBe(`/photos/${assetId}`);
+      expect(after.coffee?.src).not.toBe(`/photos/${assetId}`);
       expect(after.slideshow.map((p) => p.src)).not.toContain(`/photos/${assetId}`);
     });
 
