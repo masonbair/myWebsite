@@ -73,6 +73,12 @@ describe("servePhoto", () => {
     expect(await width("small", "1080")).toBe(64);
   });
 
+  it("gives a tall photo the full requested width, not just its long side", async () => {
+    const { store } = fakeStore({ tall: { hidden: false, bytes: await jpegWithLocation(1800, 2400) } });
+    const meta = await sharp(Buffer.from(await (await servePhoto("tall", "1080", { ...PUBLIC, store: () => store })).arrayBuffer())).metadata();
+    expect([meta.width, meta.height]).toEqual([1080, 1440]);
+  });
+
   it("404s any other w with no cache and without touching the store, so cache keys cannot be sprayed", async () => {
     const { store } = fakeStore({ big: { hidden: false, bytes: await jpegWithLocation() } });
     for (const w of ["300", "99999", "0640", "640.0", "nope", "", "-640", "1e3", " 640"]) {

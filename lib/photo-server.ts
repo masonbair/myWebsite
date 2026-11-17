@@ -32,12 +32,13 @@ const isJpeg = (b: Uint8Array) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8
 // The phone sends at most 2400 px a side (about 6 MP), so this only stops decompression bombs.
 export const MAX_INPUT_PIXELS = 50_000_000;
 
-/** Re-encodes a JPEG as AVIF no wider or taller than maxEdge; sharp drops all EXIF, XMP, IPTC and ICC data unless asked to keep it. */
-export async function cleanPhoto(input: Uint8Array, maxEdge: number): Promise<Uint8Array> {
+/** Re-encodes a JPEG as AVIF at most maxWidth wide (and twice that tall); sharp drops all EXIF, XMP, IPTC and ICC data unless asked to keep it. */
+export async function cleanPhoto(input: Uint8Array, maxWidth: number): Promise<Uint8Array> {
   const out = await sharp(input, { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS })
     // Applies the EXIF orientation to the pixels first, since the orientation tag is dropped with the rest.
     .rotate()
-    .resize({ width: maxEdge, height: maxEdge, fit: "inside", withoutEnlargement: true })
+    // Pages ask by width, so a tall photo must reach the full width; the height cap only stops absurd panoramas.
+    .resize({ width: maxWidth, height: maxWidth * 2, fit: "inside", withoutEnlargement: true })
     // Measured on real photos: half the size of mozjpeg q80, and effort 2 encodes as fast, which matters since this runs on each cache miss.
     .avif({ quality: 50, effort: 2 })
     .toBuffer();
