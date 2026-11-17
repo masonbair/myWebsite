@@ -1,0 +1,55 @@
+/* Off by default: without scroll timelines or with reduced motion, the spine stays a plain dashed line. */
+.fill {
+  transform: scaleY(0);
+  transform-origin: top;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    /* The 50% insets shrink the scroll window to a line across the middle of the screen, so the spine fills up to where you are reading. */
+    .fill {
+      animation: grow linear both;
+      animation-timeline: view(50% 50%);
+      animation-range: cover 0% cover 100%;
+    }
+
+    .marker {
+      animation: reached linear both;
+      animation-timeline: view(50% 50%);
+      animation-range: cover 0% cover 100%;
+    }
+
+    .media {
+      transform-origin: top left;
+      animation: land linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 70%;
+    }
+  }
+}
+
+@keyframes grow {
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes reached {
+  to {
+    background-color: var(--color-accent);
+    color: var(--color-night);
+  }
+}
+
+/* Same swing as the home board's tiles; never fades, so a photo is never see-through. */
+@keyframes land {
+  from {
+    transform: translateY(32px) rotate(-4deg);
+  }
+  80% {
+    transform: translateY(0) rotate(1deg);
+  }
+  to {
+    transform: none;
+  }
+}
