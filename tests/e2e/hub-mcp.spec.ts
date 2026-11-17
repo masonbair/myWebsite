@@ -27,6 +27,7 @@ test.describe("hub agent connector", () => {
         "find_items",
         "get_item",
         "get_now",
+        "get_place",
         "idea_get",
         "ideas_list",
         "list_comments",

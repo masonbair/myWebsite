@@ -51,6 +51,7 @@ describe("generateExercises", () => {
     ]);
     expect(out.rows[0].date).toBe("2026-11-14");
     expect(create.mock.calls[0][0].tools?.[0]?.name).toBe("web_search");
+    expect(create.mock.calls[0][0].cache_control).toEqual({ type: "ephemeral" });
     expect(create.mock.calls[1][0].output_config.format.type).toBe("json_schema");
     expect(charges).toHaveLength(2);
     // Search plus up to two format calls must end inside the 300 s event function.

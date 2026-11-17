@@ -10,6 +10,7 @@ import type { NowData } from "@/lib/now";
 import { tokenMatches } from "./bearer";
 import { MAX_COMMENT, MAX_DESCRIPTION, MAX_LABEL_LENGTH, MAX_LABELS, MAX_TITLE, parseItemPatch } from "./input";
 import { mergeDuplicate } from "./merge";
+import type { PrivatePlace } from "./place";
 import { run, ToolError } from "./mcp-run";
 import { assertOpenForEdit } from "./rules";
 import { timelineDayInput, type TimelineWriter } from "./timeline";
@@ -25,6 +26,7 @@ export const MCP_TOOL_NAMES = [
   "add_comment",
   "merge_duplicate",
   "get_now",
+  "get_place",
   "news_search",
   "news_trend",
   "news_movers",
@@ -40,6 +42,7 @@ export type McpDeps = {
   token: string | undefined;
   storeFor: (client: string) => HubStore;
   readNow: () => Promise<NowData>;
+  readPlace: () => Promise<PrivatePlace | null>;
   news: NewsReader;
   ideasClient: SupabaseClient;
   now: () => Date;
@@ -134,6 +137,7 @@ export function registerHubTools(
   store: HubStore,
   client: string,
   readNow: () => Promise<NowData>,
+  readPlace: () => Promise<PrivatePlace | null>,
   ideas: { client: SupabaseClient; now: () => Date },
   timeline: TimelineWriter,
   news: NewsReader,
@@ -225,6 +229,17 @@ export function registerHubTools(
   );
 
   server.registerTool(
+    "get_place",
+    {
+      description: toolDescription(
+        "Mason's latest place with his time zone, or null. Private data for Mason's own tools: never publish it. city is null inside a private place.",
+      ),
+      annotations: read,
+    },
+    () => run(readPlace),
+  );
+
+  server.registerTool(
     "ideas_list",
     {
       description: toolDescription("List Mason's ideas with verdict, date, mentions and next return, filtered by status, verdict, created date or title text."),
@@ -278,7 +293,7 @@ export async function handleMcpRequest(request: Request, deps: McpDeps): Promise
   }
   const client = clientNameFrom(request.headers.get("x-client-name"));
   const store = deps.storeFor(client);
-  const handler = createMcpHandler((server) => registerHubTools(server, store, client, deps.readNow, { client: deps.ideasClient, now: deps.now }, deps.timelineFor(client), deps.news), {
+  const handler = createMcpHandler((server) => registerHubTools(server, store, client, deps.readNow, deps.readPlace, { client: deps.ideasClient, now: deps.now }, deps.timelineFor(client), deps.news), {
     serverInfo: { name: "masonbair-hub", version: "1.0.0" },
     instructions: `Mason's private hub. ${DATA_NOT_INSTRUCTIONS} You cannot complete, delete, email, buy, book, deploy or merge anything.`,
   });
