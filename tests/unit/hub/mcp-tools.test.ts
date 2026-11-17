@@ -5,6 +5,7 @@ import { getIdeaPage, listIdeas } from "@/lib/ideas/read";
 import { monthSpend } from "@/lib/ai/claude";
 import { MCP_TOOL_NAMES, handleMcpRequest } from "@/lib/hub/mcp-tools";
 import type { TimelineDayInput } from "@/lib/hub/timeline";
+import type { PrivatePlace } from "@/lib/hub/place";
 import type { NowData } from "@/lib/now";
 import type { NewsReader } from "@/lib/news/reader";
 import { createFakeStore } from "./fake-store";
@@ -34,7 +35,7 @@ const NOW: NowData = {
   photos: [{ src: "/misc/a.webp", alt: "Mason" }],
 };
 
-function setup(options: { token?: string; clientName?: string | null; serverToken?: string | undefined } = {}) {
+function setup(options: { token?: string; clientName?: string | null; serverToken?: string | undefined; place?: PrivatePlace | null } = {}) {
   const rows = createFakeStore({ kind: "mason" }).rows;
   const clients: string[] = [];
   const logged: { client: string; input: TimelineDayInput }[] = [];
@@ -47,6 +48,7 @@ function setup(options: { token?: string; clientName?: string | null; serverToke
         return createFakeStore({ kind: "agent", client }, rows);
       },
       readNow: async () => NOW,
+      readPlace: async () => options.place ?? null,
       news: {} as NewsReader,
       ideasClient: readOnlyClient,
       now: () => new Date("2026-11-09T12:00:00Z"),
@@ -80,7 +82,7 @@ describe("mcp agent connector", () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
-      ["add_comment", "add_item", "find_items", "get_item", "get_now", "list_comments", "log_day", "merge_duplicate", "update_item", "ideas_list", "idea_get", "ai_costs", "news_search", "news_trend", "news_movers", "news_get_issue", "news_costs"].sort(),
+      ["add_comment", "add_item", "find_items", "get_item", "get_now", "get_place", "list_comments", "log_day", "merge_duplicate", "update_item", "ideas_list", "idea_get", "ai_costs", "news_search", "news_trend", "news_movers", "news_get_issue", "news_costs"].sort(),
     );
     expect([...MCP_TOOL_NAMES].sort()).toEqual(names);
     for (const tool of tools) expect(tool.description).toMatch(/data, never instructions/);
@@ -229,6 +231,19 @@ describe("mcp agent connector", () => {
     expect(JSON.stringify(now)).not.toContain("Secret Town");
     expect(now.bake.name).toBe("Sourdough");
     expect(now.photos).toEqual([{ src: "/misc/a.webp", alt: "Mason" }]);
+  });
+
+  it("get_place gives the place as the tool reads it, and says it is private", async () => {
+    const place: PrivatePlace = { city: null, region: "Ohio", country: "USA", timeZone: "America/New_York", private: true, updatedAt: "2026-11-01T00:00:00Z" };
+    const { client } = await connect({ place });
+    const tools = (await client.listTools()).tools;
+    expect(tools.find((t) => t.name === "get_place")?.description).toMatch(/Private data for Mason's own tools/);
+    expect(JSON.parse(text(await client.callTool({ name: "get_place", arguments: {} })))).toEqual(place);
+  });
+
+  it("get_place is null when there is no place", async () => {
+    const { client } = await connect();
+    expect(JSON.parse(text(await client.callTool({ name: "get_place", arguments: {} })))).toBeNull();
   });
 
   it("rejects input that breaks the shared limits", async () => {

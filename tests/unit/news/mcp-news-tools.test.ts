@@ -45,6 +45,7 @@ async function connect() {
       token: TOKEN,
       storeFor: (client) => createFakeStore({ kind: "agent", client }, rows),
       readNow: async () => ({ place: null, countriesVisited: 0, bake: null, photos: [] }),
+      readPlace: async () => null,
       news: reader,
       ideasClient: {} as SupabaseClient,
       now: () => new Date(),

@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { mcpRequestGuard, withCappedBody } from "@/lib/hub/mcp-guard";
 import { handleMcpRequest } from "@/lib/hub/mcp-tools";
+import { readPrivatePlace } from "@/lib/hub/place";
 import { createHubStore } from "@/lib/hub/store";
 import { createNewsReader } from "@/lib/news/reader";
 import { timelineWriter } from "@/lib/hub/timeline";
@@ -19,6 +20,7 @@ async function handle(request: NextRequest, ctx: { params: Promise<{ transport: 
     token: process.env.HUB_AGENT_TOKEN,
     storeFor: (client) => createHubStore(serviceClient(), { kind: "agent", client }),
     readNow: () => loadNow(),
+    readPlace: () => readPrivatePlace(serviceClient()),
     news: createNewsReader(serviceClient()),
     ideasClient: serviceClient(),
     now: () => new Date(),

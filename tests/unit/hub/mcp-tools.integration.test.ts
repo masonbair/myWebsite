@@ -26,6 +26,7 @@ describe.skipIf(!enabled)("mcp tools against local Supabase", () => {
         token,
         storeFor: (client) => createHubStore(db(), { kind: "agent", client }),
         readNow: async () => parseNow(null),
+      readPlace: async () => null,
         news: {} as NewsReader,
         ideasClient: db(),
         now: () => new Date(),
