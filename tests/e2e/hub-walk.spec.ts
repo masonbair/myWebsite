@@ -19,7 +19,7 @@ test.describe("walk page", () => {
     const first = await card.locator("[aria-live]").textContent();
     if (process.env.WALK_SHOT) await page.screenshot({ path: `${process.env.WALK_SHOT}/walk-1.png` });
 
-    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(card).toContainText("2 of 8");
     expect(await card.locator("[aria-live]").textContent()).not.toBe(first);
     if (process.env.WALK_SHOT) await page.screenshot({ path: `${process.env.WALK_SHOT}/walk-2.png` });
