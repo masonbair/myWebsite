@@ -1,4 +1,5 @@
 import { tokenMatches } from "./bearer";
+import { type RoutineConfig, startRoutine } from "./events";
 import type { HubStore, NewMemo } from "./types";
 
 const MAX_BODY = 1_000_000;
@@ -131,4 +132,23 @@ export async function handleMemo(request: Request, deps: MemoDeps): Promise<Resp
     console.error(`memo ${upload.file}: ${(e as Error).message}`);
     return fail(502, "upstream", "could not file the memo; retry later");
   }
+}
+
+/** The run payload for a sync that sent new memos; hub/worker/PROMPT.md treats it as a scheduled run. */
+export const MEMOS_UPLOADED = "memos-uploaded";
+
+export type MemoDoneDeps = { token: string | undefined; routine: RoutineConfig | null; fetchFn: typeof fetch };
+
+/** Called once by an uploader after a sync that sent new memos, so they are split now instead of at the next scheduled run. */
+export async function handleMemoDone(request: Request, deps: MemoDoneDeps): Promise<Response> {
+  const raw = await authorizedBody(request, deps.token, "memo upload");
+  if (typeof raw !== "string") return raw;
+  if (!deps.routine) return fail(503, "misconfigured", "routine start is not configured");
+  try {
+    await startRoutine(MEMOS_UPLOADED, deps.routine, deps.fetchFn);
+  } catch (e) {
+    console.error(`memo done: ${(e as Error).message}`);
+    return fail(502, "upstream", "could not start the routine; the next scheduled run picks the memos up");
+  }
+  return json(202, { fired: true });
 }

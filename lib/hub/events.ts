@@ -128,8 +128,12 @@ export function errorName(e: unknown): string {
   return e instanceof Error ? e.name : "error";
 }
 
-/** Starts the routine through its API trigger, with the same headers todo-hub's relay sends. */
 export async function fireRoutine(itemId: string, routine: RoutineConfig, fetchFn: typeof fetch): Promise<void> {
+  await startRoutine(`hub-item-id: ${itemId}`, routine, fetchFn);
+}
+
+/** Starts the routine through its API trigger, with the same headers todo-hub's relay sends; `text` is the run's payload. */
+export async function startRoutine(text: string, routine: RoutineConfig, fetchFn: typeof fetch): Promise<void> {
   const res = await fetchFn(routine.url, {
     method: "POST",
     headers: {
@@ -138,7 +142,7 @@ export async function fireRoutine(itemId: string, routine: RoutineConfig, fetchF
       "anthropic-version": "2023-06-01",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ text: `hub-item-id: ${itemId}` }),
+    body: JSON.stringify({ text }),
   });
   if (!res.ok) throw new Error(`routine fire ${res.status}`);
 }
