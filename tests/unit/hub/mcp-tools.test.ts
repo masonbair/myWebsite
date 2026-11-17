@@ -35,7 +35,10 @@ const NOW: NowData = {
   photos: [{ src: "/misc/a.webp", alt: "Mason" }],
 };
 
-function setup(options: { token?: string; clientName?: string | null; serverToken?: string | undefined; place?: PrivatePlace | null } = {}) {
+const OAUTH_TOKEN = "oauth-access-token";
+const CHALLENGE = 'Bearer resource_metadata="https://hub.test/.well-known/oauth-protected-resource/api/mcp/mcp", scope="hub"';
+
+function setup(options: { token?: string; clientName?: string | null; serverToken?: string | undefined; place?: PrivatePlace | null; oauth?: boolean } = {}) {
   const rows = createFakeStore({ kind: "mason" }).rows;
   const clients: string[] = [];
   const logged: { client: string; input: TimelineDayInput }[] = [];
@@ -58,6 +61,7 @@ function setup(options: { token?: string; clientName?: string | null; serverToke
           return [];
         },
       }),
+      ...(options.oauth ? { oauth: { accessTokenValid: async (t: string) => t === OAUTH_TOKEN, challenge: CHALLENGE } } : {}),
     })) as typeof fetch;
   const headers: Record<string, string> = { authorization: `Bearer ${options.token ?? TOKEN}` };
   if (options.clientName !== null) headers["x-client-name"] = options.clientName ?? "test-agent";
@@ -75,6 +79,35 @@ async function connect(options: Parameters<typeof setup>[0] = {}) {
 function text(result: { content?: unknown }): string {
   return ((result.content as { type: string; text: string }[]) ?? []).map((c) => c.text).join("\n");
 }
+
+describe("mcp connector sign-in", () => {
+  it("an OAuth token is served as agent:claude-ai and cannot pick another client name", async () => {
+    const { client, rows, clients } = await connect({ oauth: true, token: OAUTH_TOKEN, clientName: "mason" });
+    await client.callTool({ name: "add_item", arguments: { title: "From my phone" } });
+    expect(new Set(clients)).toEqual(new Set(["claude-ai"]));
+    expect([...rows.items.values()][0]).toMatchObject({ source: "agent:claude-ai" });
+  });
+
+  it("an OAuth caller keeps the agent rules: no claude label", async () => {
+    const { client, rows } = await connect({ oauth: true, token: OAUTH_TOKEN });
+    const result = await client.callTool({ name: "add_item", arguments: { title: "x", labels: ["claude"] } });
+    expect(result.isError).toBe(true);
+    expect(rows.items.size).toBe(0);
+  });
+
+  it("the fixed token still works with OAuth turned on", async () => {
+    const { client, clients } = await connect({ oauth: true, clientName: "claude-code" });
+    await client.listTools();
+    expect(clients).toContain("claude-code");
+  });
+
+  it("a wrong token gets a 401 that points to the sign-in metadata", async () => {
+    const { fetchFn } = setup({ oauth: true });
+    const res = await fetchFn(URL_BASE, { method: "POST", headers: { authorization: "Bearer nope", "content-type": "application/json" }, body: "{}" });
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate")).toBe(CHALLENGE);
+  });
+});
 
 describe("mcp agent connector", () => {
   it("registers exactly the agent tools, none that complete, delete, send or deploy", async () => {

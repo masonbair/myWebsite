@@ -47,7 +47,11 @@ export type McpDeps = {
   ideasClient: SupabaseClient;
   now: () => Date;
   timelineFor: (client: string) => TimelineWriter;
+  /** claude.ai's OAuth sign-in; absent means only the fixed token works. */
+  oauth?: { accessTokenValid: (token: string) => Promise<boolean>; challenge: string };
 };
+
+export const OAUTH_CLIENT = "claude-ai";
 
 const CLIENT_NAME = /^[A-Za-z0-9._-]{1,40}$/;
 const MAX_FIND_LIMIT = 200;
@@ -285,13 +289,20 @@ export function registerHubTools(
 
 const json = (body: unknown, status: number, headers: Record<string, string> = {}) => Response.json(body, { status, headers });
 
-/** Checks HUB_AGENT_TOKEN, then serves the MCP tools for one request with the store bound to the calling client. */
+async function callingClient(request: Request, deps: McpDeps): Promise<string | null> {
+  const header = request.headers.get("authorization");
+  if (deps.token && tokenMatches(header, deps.token)) return clientNameFrom(request.headers.get("x-client-name"));
+  const bearer = header?.match(/^Bearer (\S+)$/)?.[1];
+  // OAuth callers cannot pick their client name, so their writes always show as agent:claude-ai.
+  if (bearer && deps.oauth && (await deps.oauth.accessTokenValid(bearer))) return OAUTH_CLIENT;
+  return null;
+}
+
+/** Checks HUB_AGENT_TOKEN or a claude.ai OAuth token, then serves the MCP tools for one request with the store bound to the calling client. */
 export async function handleMcpRequest(request: Request, deps: McpDeps): Promise<Response> {
-  if (!deps.token) return json({ error: "agent connector is not configured" }, 503);
-  if (!tokenMatches(request.headers.get("authorization"), deps.token)) {
-    return json({ error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
-  }
-  const client = clientNameFrom(request.headers.get("x-client-name"));
+  if (!deps.token && !deps.oauth) return json({ error: "agent connector is not configured" }, 503);
+  const client = await callingClient(request, deps);
+  if (!client) return json({ error: "unauthorized" }, 401, { "WWW-Authenticate": deps.oauth?.challenge ?? "Bearer" });
   const store = deps.storeFor(client);
   const handler = createMcpHandler((server) => registerHubTools(server, store, client, deps.readNow, deps.readPlace, { client: deps.ideasClient, now: deps.now }, deps.timelineFor(client), deps.news), {
     serverInfo: { name: "masonbair-hub", version: "1.0.0" },
