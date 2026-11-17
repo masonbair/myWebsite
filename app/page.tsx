@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Board } from "@/components/board/Board";
 import { LazyCatGame } from "@/components/game/LazyGame";
 import { JsonLd } from "@/components/JsonLd";
-import { About } from "@/components/sections/About";
+import { AskMe } from "@/components/sections/about/AskMe";
 import { Achievements } from "@/components/sections/Achievements";
 import { Resume } from "@/components/sections/Resume";
 import { Work } from "@/components/sections/Work";
@@ -23,7 +23,7 @@ export default async function Home() {
         <JsonLd data={homeJsonLd(new Date(siteUpdated))} />
         <JsonLd data={websiteJsonLd()} />
         <Board board={board} />
-        <About />
+        <AskMe />
         <Work />
         <Achievements />
         <Resume />
