@@ -25,7 +25,7 @@ describe("coffee json-ld", () => {
     expect(ld.hasPart.map((part) => part.url)).toEqual(
       coffee.niches.map((niche) => `https://masonbair.com/coffee#${niche.id}`),
     );
-    expect(coffee.niches.map((n) => n.id)).toEqual(["devsecops", "nomad", "kent-state"]);
+    expect(coffee.niches.map((n) => n.id)).toEqual(["open-to-anyone"]);
   });
 
   it("says the chat is free, as a zero-price Offer on a Service Mason provides", () => {

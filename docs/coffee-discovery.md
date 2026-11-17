@@ -1,6 +1,6 @@
 # Coffee chat discovery: Mason's checklist
 
-The site side is built: niche sections on `/coffee` (`#devsecops`, `#nomad`, `#kent-state`), a longer FAQ, a visible
+The site side is built: niche sections on `/coffee` (`#open-to-anyone`), a longer FAQ, a visible
 "Last updated" date, booking data agents can read, a book-by-email fallback, `llms.txt`, and IndexNow.
 
 What's left only you can do. Broad questions like "find me someone for a coffee chat" mostly get answered with

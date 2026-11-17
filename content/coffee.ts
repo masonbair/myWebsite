@@ -5,7 +5,7 @@ import { contact, role, roleLower } from "./site";
 export const bookingUrl = "https://calendar.app.google/suAxGdTVkbEB2GFN6";
 
 // Bump when the coffee page copy changes; feeds the visible "Last updated" line, dateModified, and the sitemap.
-export const coffeeUpdated = "2026-11-13";
+export const coffeeUpdated = "2026-11-17";
 
 const emailSubject = "Coffee chat request";
 const emailBody = [
@@ -81,32 +81,13 @@ export const coffee: {
   nichesHeading: "Some chats I'm hoping for",
   niches: [
     {
-      id: "devsecops",
-      summary: "CI/CD, security checks in pipelines, getting a first DevSecOps role. Mason was a DevSecOps intern at Nationwide.",
-      heading: "DevSecOps coffee chat",
+      id: "open-to-anyone",
+      summary: "Open to anyone with something to share, including people who run businesses, people going all in on AI, and people avoiding it.",
+      heading: "Anyone with something to share",
       body: [
-        "If you're getting into DevSecOps, or you're a developer who keeps getting handed security findings, let's talk. Same if you've been doing this for years and have stories.",
-        "As a DevSecOps intern at Nationwide, I built Python tools that pull SonarQube data to reprioritize issues across 1,000+ apps, and I migrated CI/CD workflows. At Kent State, I kept 20+ research servers in line with security rules using Ansible.",
-        "We can swap notes on which security checks are worth adding to a pipeline, or how to get developers to actually fix what the scanners find.",
-      ],
-    },
-    {
-      id: "nomad",
-      summary: "Working remotely while traveling, across time zones.",
-      heading: "Digital nomad engineer",
-      body: [
-        `I'm a digital nomad. I work remotely while I travel, and I've been to ${now.countriesVisited} countries so far. Before that I spent a full school year studying CS at Tartu University in Estonia.`,
-        "Ask me about working across time zones or staying reliable on the road. If you've done this too, I'd love to hear your tips.",
-      ],
-    },
-    {
-      id: "kent-state",
-      summary: "Classes, campus jobs, internships, HacKSU, industry outreach, and running the Kent Hack Enough hackathon.",
-      heading: "Kent State CS students and alumni",
-      body: [
-        "I graduated from Kent State in May 2026 with a B.S. in Computer Science. I was President of HacKSU, the biggest CS club on campus, and I did industry outreach for the university.",
-        "I also worked at the IT help desk and as an assistant sysadmin on campus, and did undergrad research on a web version of ImageJ.",
-        "Happy to talk about anything Kent State, especially study abroad or running a hackathon.",
+        "Honestly, if you have something to share, I want to hear it. You don't need a reason or a polished pitch.",
+        "I'm especially curious about people who run their own business, people who are AI maxxing and putting it into everything, and people who are avoiding AI on purpose.",
+        "Whatever you're into, bring it. I'll bring questions.",
       ],
     },
   ],
