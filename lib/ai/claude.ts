@@ -5,11 +5,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export type ModelId = "claude-opus-5-5" | "claude-sonnet-5-5" | "claude-haiku-5-5";
 export type AiFeature = "ideas" | "news" | "learn";
 
-/** USD per million tokens. Cache reads bill at 0.1x input, cache writes at 1.25x input; web search $0.01 each. */
-export const PRICES: Record<ModelId, { input: number; output: number }> = {
-  "claude-opus-5-5": { input: 4, output: 20 },
-  "claude-sonnet-5-5": { input: 2, output: 10 },
-  "claude-haiku-5-5": { input: 0.1, output: 0.5 },
+/** USD per million tokens. `cacheRead` is a multiple of input (0.05x Opus/Sonnet 5.5, 0.1x Haiku 5.5); cache writes bill at 1.25x input on all three; web search $0.01 each. */
+export const PRICES: Record<ModelId, { input: number; output: number; cacheRead: number }> = {
+  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.05 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.05 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.1 },
 };
 export const WEB_SEARCH_USD = 0.01;
 
@@ -29,7 +29,7 @@ export function costOf(model: ModelId, usage: ClaudeUsage, opts: { batch?: boole
   const cacheRead = usage.cache_read_input_tokens ?? 0;
   const cacheWrite = usage.cache_creation_input_tokens ?? 0;
   const searches = usage.server_tool_use?.web_search_requests ?? 0;
-  const tokens = ((input + cacheRead * 0.1 + cacheWrite * 1.25) * p.input + output * p.output) / 1_000_000;
+  const tokens = ((input + cacheRead * p.cacheRead + cacheWrite * 1.25) * p.input + output * p.output) / 1_000_000;
   return (opts.batch ? tokens / 2 : tokens) + searches * WEB_SEARCH_USD;
 }
 
