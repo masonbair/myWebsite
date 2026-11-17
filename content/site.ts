@@ -35,10 +35,11 @@ export const work: Work[] = [
     summary: "My first full-time job after graduating. I build software for Fullsend, fully remote, so I can work from wherever I'm traveling.",
     tech: ["Software development", "Remote work"],
     image: {
-      src: "/misc/image_of_code.webp",
-      alt: "A laptop and a monitor showing code in a dark editor in a dim room",
-      width: 3000,
-      height: 4000,
+      // Phone photo from the Website album; hiding it in the hub removes it here too.
+      src: "/photos/26836",
+      alt: "Mason with the Fullsend team, seven people in matching navy polo shirts smiling at sunset",
+      width: 1600,
+      height: 1200,
     },
   },
   {

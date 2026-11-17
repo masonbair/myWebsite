@@ -1,5 +1,7 @@
 import Image from "next/image";
+import { CollectorImage } from "@/components/ui/CollectorImage";
 import { work } from "@/content/site";
+import { isCollectorPhotoSrc } from "@/lib/collector-photos";
 import { Chips, Section } from "./Section";
 
 export function Work() {
@@ -11,7 +13,11 @@ export function Work() {
             <p className="hidden pt-2 text-right text-sm font-medium whitespace-nowrap text-mute lg:block">{w.dates}</p>
             <div className="flex flex-col items-center">
               <div className="relative size-16 shrink-0 overflow-hidden rounded-2xl border-[2.5px] border-line bg-ink/5 shadow-sticker-sm md:size-20">
-                <Image src={w.image.src} alt={w.image.alt} fill sizes="80px" className="object-cover" />
+                {isCollectorPhotoSrc(w.image.src) ? (
+                  <CollectorImage src={w.image.src} alt={w.image.alt} fill sizes="80px" className="object-cover" />
+                ) : (
+                  <Image src={w.image.src} alt={w.image.alt} fill sizes="80px" className="object-cover" />
+                )}
               </div>
               {i < work.length - 1 && <span aria-hidden className="my-3 w-0 flex-1 border-l-2 border-dashed border-line/40" />}
             </div>
