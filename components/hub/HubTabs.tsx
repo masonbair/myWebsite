@@ -13,6 +13,7 @@ const TABS = [
   { href: "/hub/learn", label: "Learn" },
   { href: "/hub/news", label: "News" },
   { href: "/hub/timeline", label: "Timeline" },
+  { href: "/hub/sessions", label: "Sessions" },
 ];
 
 export function HubTabs() {

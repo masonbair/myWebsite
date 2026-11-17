@@ -110,6 +110,7 @@ function hubServer(port: number, name: "hub" | "hub-live", workerLive: boolean) 
       ANTHROPIC_API_KEY_LEARN: "e2e-local-only",
       // The photo labeler also talks only to the stub; hub-now.spec.ts runs it through the events route.
       ANTHROPIC_API_KEY_PHOTOS: "e2e-local-only",
+      ANTHROPIC_API_KEY_SESSIONS: "e2e-local-only",
       HUB_EVENTS_TOKEN: HUB_E2E_EVENTS_TOKEN,
       ANTHROPIC_BASE_URL: `http://127.0.0.1:${HUB_ANTHROPIC_STUB_PORT}`,
       LEARN_E2E_TODAY: process.env.LEARN_E2E_TODAY!,

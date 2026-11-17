@@ -14,7 +14,7 @@ const PUBLIC_HUB_PATHS = new Set([
   // The browser refetches the worker script to update it, and a redirect to login would fail that update.
   "/hub/sw.js",
 ]);
-const MACHINE_API = /^\/api\/hub\/(worker|events|ideas\/recording)(\/|$)/;
+const MACHINE_API = /^\/api\/hub\/(worker|events|sessions|ideas\/recording)(\/|$)/;
 
 function noindex(response: NextResponse): NextResponse {
   response.headers.set("X-Robots-Tag", "noindex, nofollow");
