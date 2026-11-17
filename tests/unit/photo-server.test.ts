@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { describe, expect, it, vi } from "vitest";
-import { MAX_INPUT_PIXELS, cleanJpeg, servePhoto, type PhotoStore } from "@/lib/photo-server";
+import { MAX_INPUT_PIXELS, cleanPhoto, servePhoto, type PhotoStore } from "@/lib/photo-server";
 
 // Paris, a well-known public point, standing in for a location the phone failed to strip.
 const GPS_EXIF = {
@@ -21,20 +21,6 @@ async function jpegWithLocation(width = 64, height = 48): Promise<Uint8Array> {
   return new Uint8Array(buf);
 }
 
-/** The APPn markers (0xE0-0xEF) a JPEG carries before its image data. */
-function appMarkers(bytes: Uint8Array): { marker: number; head: string }[] {
-  const found: { marker: number; head: string }[] = [];
-  let i = 2;
-  while (i + 4 <= bytes.length && bytes[i] === 0xff) {
-    const marker = bytes[i + 1];
-    if (marker === 0xda) break;
-    const length = (bytes[i + 2] << 8) | bytes[i + 3];
-    if (marker >= 0xe0 && marker <= 0xef) found.push({ marker, head: Buffer.from(bytes.subarray(i + 4, i + 4 + 5)).toString("latin1") });
-    i += 2 + length;
-  }
-  return found;
-}
-
 const contains = (bytes: Uint8Array, text: string) => Buffer.from(bytes).includes(Buffer.from(text, "latin1"));
 
 function fakeStore(rows: Record<string, { hidden: boolean; bytes?: Uint8Array }>) {
@@ -53,7 +39,7 @@ function fakeStore(rows: Record<string, { hidden: boolean; bytes?: Uint8Array }>
 const PUBLIC = { includeHidden: false, cacheControl: "public, max-age=300, s-maxage=300" };
 
 describe("servePhoto", () => {
-  it("serves a visible photo with every APPn segment but JFIF removed, so no GPS EXIF, XMP or ICC survives", async () => {
+  it("serves a visible photo as AVIF with no GPS EXIF, XMP or ICC left in it", async () => {
     const input = await jpegWithLocation();
     expect(contains(input, "Exif\0\0")).toBe(true);
     expect(contains(input, "GPS")).toBe(true);
@@ -62,17 +48,17 @@ describe("servePhoto", () => {
     const res = await servePhoto("abc", null, { ...PUBLIC, store: () => store });
 
     expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toBe("image/jpeg");
+    expect(res.headers.get("content-type")).toBe("image/avif");
     expect(res.headers.get("cache-control")).toBe("public, max-age=300, s-maxage=300");
     expect(downloads).toEqual(["collector/abc.jpg"]);
     const out = new Uint8Array(await res.arrayBuffer());
-    expect([out[0], out[1], out[2]]).toEqual([0xff, 0xd8, 0xff]);
+    expect(Buffer.from(out.subarray(4, 12)).toString("latin1")).toBe("ftypavif");
     expect(contains(out, "Exif\0\0")).toBe(false);
     expect(contains(out, "GPS")).toBe(false);
     expect(contains(out, "ICC_PROFILE")).toBe(false);
     expect(contains(out, "ns.adobe.com")).toBe(false);
-    expect(appMarkers(out).every((m) => m.marker === 0xe0 && m.head === "JFIF\0")).toBe(true);
     const meta = await sharp(Buffer.from(out)).metadata();
+    expect(meta.format).toBe("heif");
     expect(meta.exif).toBeUndefined();
     expect(meta.xmp).toBeUndefined();
     expect(meta.icc).toBeUndefined();
@@ -101,7 +87,7 @@ describe("servePhoto", () => {
     expect(MAX_INPUT_PIXELS).toBe(50_000_000);
     // 8000 x 7000 = 56 MP, just over the limit; a flat color keeps the file tiny.
     const huge = new Uint8Array(await sharp({ create: { width: 8000, height: 7000, channels: 3, background: "gray" } }).jpeg().toBuffer());
-    await expect(cleanJpeg(huge, 256)).rejects.toThrow(/pixel limit/i);
+    await expect(cleanPhoto(huge, 256)).rejects.toThrow(/pixel limit/i);
     const { store } = fakeStore({ huge: { hidden: false, bytes: huge } });
     expect((await servePhoto("huge", "256", { ...PUBLIC, store: () => store })).status).toBe(404);
   });

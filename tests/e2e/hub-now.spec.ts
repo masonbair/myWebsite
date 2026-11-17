@@ -95,7 +95,7 @@ test.describe("now page", () => {
       await expect(page.getByRole("group", { name: "Photo slideshow" }).locator(`img[src^="${route}?w="]`)).toHaveAttribute("alt", /^Photo from Mason's phone, /);
       const served = await request.get(route);
       expect(served.status()).toBe(200);
-      expect(served.headers()["content-type"]).toBe("image/jpeg");
+      expect(served.headers()["content-type"]).toBe("image/avif");
 
       await page.goto("/hub/now");
       const card = page.getByRole("region", { name: "Photos from the phone" }).getByRole("listitem").filter({ has: page.locator(`img[src*="${assetId}"]`) });
