@@ -1,6 +1,9 @@
 [project]
 name = "myWebsite"
 tags = []
+# The lighthouse goals measure masonbair.com, so only a push to main (or a tiles edit) makes the last check stale.
+deploy_ref = "origin/main"
+watch = ["components/board/tiles"]
 
 [commands.build]
 run = "npm run build"
