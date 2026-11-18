@@ -9,6 +9,7 @@ import { useReducedMotion } from "@/lib/use-reduced-motion";
 import { Tile } from "../Tile";
 
 const INTERVAL_MS = 6000;
+const SIZES = "(min-width: 1024px) 25vw, (min-width: 768px) 50vw, 100vw";
 
 // Waits for load and then idle time, so the extra photos never compete with the hero photo.
 function useAfterFirstPaint(enabled: boolean) {
@@ -34,6 +35,7 @@ export function PhotoTile({ photos }: { photos: Photo[] }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [wide, setWide] = useState<ReadonlySet<string>>(new Set());
   const reduce = useReducedMotion();
   const rotates = !reduce && photos.length > 1;
   const restLoaded = useAfterFirstPaint(rotates);
@@ -71,23 +73,38 @@ export function PhotoTile({ photos }: { photos: Photo[] }) {
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
       >
-        {shown.map((p, i) => (
-          <Image
-            key={p.src}
-            src={p.src}
-            loader={isCollectorPhotoSrc(p.src) ? collectorPhotoLoader : undefined}
-            alt={p.alt}
-            aria-hidden={i !== active}
-            fill
-            loading={i === 0 ? "eager" : "lazy"}
-            // The first photo is often the largest paint now that the hello tile is text.
-            fetchPriority={i === 0 ? "high" : "low"}
-            sizes="(min-width: 1024px) 25vw, (min-width: 768px) 50vw, 100vw"
-            className={`object-cover transition-opacity duration-[1200ms] ease-spring motion-reduce:transition-none ${
-              i === active ? "opacity-100" : "opacity-0"
-            }`}
-          />
-        ))}
+        {shown.map((p, i) => {
+          const isWide = wide.has(p.src);
+          const loader = isCollectorPhotoSrc(p.src) ? collectorPhotoLoader : undefined;
+          return (
+            <div
+              key={p.src}
+              aria-hidden={i !== active}
+              className={`absolute inset-0 transition-opacity duration-[1200ms] ease-spring motion-reduce:transition-none ${
+                i === active ? "opacity-100" : "opacity-0"
+              }`}
+            >
+              {/* Same URL as the sharp copy, so the backdrop costs no extra download. */}
+              {isWide && <Image src={p.src} loader={loader} alt="" fill sizes={SIZES} className="scale-110 object-cover blur-2xl" />}
+              <Image
+                src={p.src}
+                loader={loader}
+                alt={p.alt}
+                fill
+                loading={i === 0 ? "eager" : "lazy"}
+                // The first photo is often the largest paint now that the hello tile is text.
+                fetchPriority={i === 0 ? "high" : "low"}
+                sizes={SIZES}
+                // A wide photo cropped to this tall tile loses the people at its edges, so it is shown whole.
+                onLoad={(e) => {
+                  const img = e.currentTarget;
+                  if (img.naturalWidth > img.naturalHeight) setWide((w) => new Set(w).add(p.src));
+                }}
+                className={isWide ? "object-contain" : "object-cover"}
+              />
+            </div>
+          );
+        })}
         {rotates && restLoaded && (
           <button
             type="button"

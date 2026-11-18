@@ -118,7 +118,9 @@ test("github count never clips", async ({ page }) => {
 
 test.describe("photo slideshow", () => {
   const slideshow = (page: Page) => page.getByRole("group", { name: "Photo slideshow" });
-  const visiblePhoto = (page: Page) => slideshow(page).locator('img:not([aria-hidden="true"])');
+  // A wide photo also gets a blurred backdrop copy with empty alt, which these leave out.
+  const photos = (page: Page) => slideshow(page).locator('img:not([alt=""])');
+  const visiblePhoto = (page: Page) => slideshow(page).locator('div:not([aria-hidden="true"]) > img:not([alt=""])');
 
   test("pause button stops rotation, and so does keyboard focus", async ({ page }) => {
     await page.clock.install();
@@ -155,9 +157,9 @@ test.describe("photo slideshow", () => {
 
     test("only the first photo is in the server HTML", async ({ page }) => {
       await page.goto("/");
-      await expect(slideshow(page).locator("img")).toHaveCount(1);
-      await expect(slideshow(page).locator("img")).toHaveAttribute("loading", "eager");
-      const src = await slideshow(page).locator("img").getAttribute("src");
+      await expect(photos(page)).toHaveCount(1);
+      await expect(photos(page)).toHaveAttribute("loading", "eager");
+      const src = await photos(page).getAttribute("src");
       const file = new URL(src!, "http://x").searchParams.get("url") ?? src!;
       // The hello tile is text now, so this photo is often the largest paint and earns its one preload.
       await expect(page.locator(`link[rel="preload"][imagesrcset*="${encodeURIComponent(file)}"]`)).toHaveCount(1);
@@ -173,7 +175,7 @@ test.describe("photo slideshow", () => {
       await page.waitForLoadState("load");
       await page.waitForTimeout(500);
       await expect(page.getByRole("button", { name: "Pause photo slideshow" })).toHaveCount(0);
-      await expect(slideshow(page).locator("img")).toHaveCount(1);
+      await expect(photos(page)).toHaveCount(1);
     });
   });
 });
