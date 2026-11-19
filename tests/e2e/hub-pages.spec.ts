@@ -118,6 +118,25 @@ test.describe("hub pages", () => {
     await expect(thread.getByText("The cheaper one leaves at 9am.")).toBeVisible();
   });
 
+  for (const [list, path] of [["todo", "/hub/list/todo"], ["inbox", "/hub"]] as const) {
+    test(`the copy button on a ${list} row copies the item with its comments`, async ({ page, context }) => {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+      const item = await seedItem({ list });
+      const worker = await serviceClient().from("comments").insert({ item_id: item.id, author: "worker", body: "Try web push first." });
+      expect(worker.error).toBeNull();
+      const mason = await (await ownerDbClient()).from("comments").insert({ item_id: item.id, author: "mason", body: "Android only for now." });
+      expect(mason.error).toBeNull();
+
+      await page.goto(path);
+      await page.getByRole("button", { name: `Copy as a task for Claude: ${item.title}` }).click();
+      await expect(page.getByRole("button", { name: `Copied: ${item.title}` })).toBeVisible();
+      const copied = await page.evaluate(() => navigator.clipboard.readText());
+      expect(copied).toContain(`# Task: ${item.title}`);
+      expect(copied).toMatch(/### Hub worker \(AI\), .*\n\nTry web push first\.\n\n### Mason, .*\n\nAndroid only for now\./);
+      await page.screenshot({ path: `test-results/copy-brief-${list}.png` });
+    });
+  }
+
   test("Mason can comment, label, date and move an item", async ({ page }) => {
     const item = await seedItem({ list: "inbox" });
     await page.goto(`/hub/item/${item.id}`);

@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { fireRoutine } from "@/lib/hub/events";
+import { itemBrief } from "@/lib/hub/brief";
+import { fireRoutine, masonTimeZone } from "@/lib/hub/events";
 import { isItemId } from "@/lib/hub/format";
 import { MAX_COMMENT, parseItemPatch } from "@/lib/hub/input";
 import { masonStore } from "@/lib/hub/mason-store";
@@ -82,6 +83,18 @@ export async function addCommentAction(id: string, body: string): Promise<void> 
   if (!text || text.length > MAX_COMMENT) throw new Error("a comment needs text");
   await store.addComment(id, text);
   refreshHub();
+}
+
+/** The item and all its comments as a brief to paste into a Claude session. */
+export async function itemBriefAction(id: string): Promise<string> {
+  const store = await ownerStoreFor(id);
+  const [item, comments, timeZone] = await Promise.all([
+    store.getItem(id),
+    store.listComments(id),
+    sessionClient().then((client) => masonTimeZone(client)),
+  ]);
+  if (!item) throw new Error("no such item");
+  return itemBrief(item, comments, timeZone);
 }
 
 /** Ends only this browser's session, so Mason stays signed in on his other devices. */

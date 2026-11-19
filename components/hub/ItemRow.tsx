@@ -4,6 +4,7 @@ import { completeItem } from "@/app/hub/actions";
 import { formatDue, LIST_NAMES, needsYouReason } from "@/lib/hub/format";
 import { STATUS_LABELS } from "@/lib/hub/rules";
 import type { Item } from "@/lib/hub/types";
+import { CopyBriefButton } from "./CopyBriefButton";
 import { focusRing, sticker } from "./styles";
 import { SubmitButton } from "./SubmitButton";
 
@@ -24,7 +25,7 @@ export function ItemRow({
   return (
     <li
       data-just-saved={justSaved || undefined}
-      className={`${sticker} relative flex items-start gap-1 py-1 pr-4 pl-1 transition-[translate] duration-200 ease-spring hover:-translate-y-px bg-surface ${justSaved ? "ring-4 ring-accent" : ""}`}
+      className={`${sticker} relative flex items-start gap-1 py-1 pr-1 pl-1 transition-[translate] duration-200 ease-spring hover:-translate-y-px bg-surface ${justSaved ? "ring-4 ring-accent" : ""}`}
     >
       {/* Above the row-wide link overlay, so the tap lands on Done and not on the item. */}
       <form action={completeItem.bind(null, item.id)} className="relative z-10">
@@ -57,6 +58,9 @@ export function ItemRow({
             ))}
           </p>
         )}
+      </div>
+      <div className="relative z-10">
+        <CopyBriefButton id={item.id} title={item.title} />
       </div>
     </li>
   );
