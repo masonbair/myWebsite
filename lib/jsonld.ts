@@ -66,7 +66,7 @@ export function coffeeJsonLd() {
       "@type": "Service",
       name: "Coffee chat with Mason Bair",
       serviceType: "Career coffee chat",
-      description: `A free 30 minute video call with anyone who has something interesting to share. Topics often include ${coffee.topics.map((t) => midSentence(t.label)).join(", ")}.`,
+      description: `A 30 minute video call with anyone who has something interesting to share. Topics often include ${coffee.topics.map((t) => midSentence(t.label)).join(", ")}.`,
       provider: { "@id": PERSON_ID },
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD", url: COFFEE_URL },
     },

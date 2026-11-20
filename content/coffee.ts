@@ -51,9 +51,9 @@ export const coffee: {
   faqs: { q: string; a: string }[];
   linksHeading: string;
 } = {
-  title: `Free Coffee Chat with Mason Bair, ${role.title}`,
+  title: `Coffee Chat with Mason Bair, ${role.title}`,
   description:
-    `Book a free 30 minute video coffee chat with Mason Bair, a ${roleLower} and digital nomad. He likes meeting people who have something interesting to share, whatever they do.`,
+    `Book a 30 minute video coffee chat with Mason Bair, a ${roleLower} and digital nomad. He likes meeting people who have something interesting to share, whatever they do.`,
   heading: "Coffee chat with Mason Bair",
   bio: [
     "I like meeting people who have something interesting to share. Doesn't matter what you do or how long you've done it.",
@@ -62,7 +62,6 @@ export const coffee: {
   format: [
     { label: "Length", value: "30 min" },
     { label: "Where", value: "Video call" },
-    { label: "Cost", value: "Free" },
   ],
   bookLabel: "Book a time: 30 minute coffee chat with Mason Bair on Google Calendar, opens in a new tab",
   topicsHeading: "Things I like talking about",
@@ -126,7 +125,6 @@ export const coffee: {
       q: "How do I book a coffee chat with Mason Bair?",
       a: `Press Book a time, pick an open slot, and you'll get a calendar invite with a video link. If the booking page doesn't work for you, just email ${contact.email}.`,
     },
-    { q: "Is it free?", a: "Yes. Coffee chats are always free." },
     { q: "How long is a coffee chat?", a: "Thirty minutes over video. Bring your own coffee." },
     {
       q: "Who is it for?",

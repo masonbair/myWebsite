@@ -143,7 +143,7 @@ test.describe("coffee page", () => {
     expect(questions).toBeGreaterThanOrEqual(3);
     expect(questions).toBeLessThanOrEqual(8);
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://masonbair.com/coffee");
-    await expectTitles(page, "Free Coffee Chat with Mason Bair, Forward Deployed Engineer");
+    await expectTitles(page, "Coffee Chat with Mason Bair, Forward Deployed Engineer");
     await expect(page.getByRole("main").getByRole("link", { name: /GitHub/ })).toHaveAttribute("href", "https://github.com/masonbair");
     await expect(page.getByRole("main").getByRole("link", { name: /LinkedIn/ })).toHaveAttribute(
       "href",
@@ -159,8 +159,7 @@ test.describe("coffee page", () => {
     const email = page.getByRole("link", { name: "Email Mason to request a coffee chat" });
     await expect(email).toHaveAttribute("href", /^mailto:bair\.s\.mason@gmail\.com\?subject=Coffee%20chat%20request&body=/);
     await expect(page.getByRole("link", { name: "Book by email" })).toHaveAttribute("href", "#book-by-email");
-    await expect(page.getByTestId("faq").getByText("Is it free?", { exact: true })).toBeVisible();
-    await expect(page.getByText("Free", { exact: true })).toBeVisible();
+    await expect(page.getByRole("main")).not.toContainText(/\bfree\b/i);
     await expect(page.getByRole("main").getByText(/^Last updated/).locator("time")).toHaveAttribute("datetime", /^\d{4}-\d{2}-\d{2}$/);
   });
 

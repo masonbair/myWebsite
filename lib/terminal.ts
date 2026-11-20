@@ -49,7 +49,7 @@ export function runCommand(input: string, data: TerminalData): string[] {
     case "whoami":
       return whoami(data);
     case "coffee":
-      return ["30 min, video, free. Book one at /coffee"];
+      return ["30 min, video. Book one at /coffee"];
     default:
       return [`command not found: ${command.split(" ")[0].slice(0, MAX_ECHO)}. Try help.`];
   }

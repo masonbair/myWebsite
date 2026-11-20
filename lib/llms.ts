@@ -11,7 +11,7 @@ export function llmsText(): string {
     "",
     "## Coffee chats",
     "",
-    "Mason takes free 30 minute video coffee chats with anyone who has something interesting to share. He likes learning from people, whatever they do and however long they've done it.",
+    "Mason takes 30 minute video coffee chats with anyone who has something interesting to share. He likes learning from people, whatever they do and however long they've done it.",
     "",
     `- [Book a coffee chat](${siteUrl}/coffee): The page explains topics, time zones, and both ways to book.`,
     `- [Booking calendar](${bookingUrl}): Google Calendar booking page that shows open times in the visitor's time zone. Needs JavaScript.`,

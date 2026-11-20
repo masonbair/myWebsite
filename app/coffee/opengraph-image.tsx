@@ -6,5 +6,5 @@ export const size = ogSize;
 export const contentType = "image/png";
 
 export default function Image() {
-  return ogImage({ title: "Coffee chat", line: "A free 30 minute video call with Mason Bair." });
+  return ogImage({ title: "Coffee chat", line: "A 30 minute video call with Mason Bair." });
 }
