@@ -37,7 +37,7 @@ export function toCollectorPhoto(row: CollectorPhotoRow): CollectorPhoto | null 
 }
 
 /** Asset ids Mason chose by hand for a spot, overriding Claude's pick. */
-export type PhotoPins = { coffee?: string };
+export type PhotoPins = { coffee?: string; slideshowFirst?: string };
 export type PlacedPhotos = { slideshow: CollectorPhoto[]; coffee: CollectorPhoto | null };
 export const NO_PLACED_PHOTOS: PlacedPhotos = { slideshow: [], coffee: null };
 
@@ -59,7 +59,9 @@ export function placePhotos(rows: CollectorPhotoRow[], pins: PhotoPins = {}): Pl
   const visible = rows.filter((r) => toCollectorPhoto(r) !== null);
   // A pinned photo wins its spot while it is visible; hidden or gone, Claude's pick takes over.
   const pinned = (place: keyof PhotoPins) => visible.find((r) => r.asset_id === pins[place]) ?? null;
-  const slideshow = visible.filter((r) => !isLabeled(r) || tagged(r, "slideshow")).slice(0, BOARD_PHOTO_LIMIT);
+  const lead = pinned("slideshowFirst");
+  const rest = visible.filter((r) => r !== lead && (!isLabeled(r) || tagged(r, "slideshow")));
+  const slideshow = (lead ? [lead, ...rest] : rest).slice(0, BOARD_PHOTO_LIMIT);
   const pick = (row: CollectorPhotoRow | null) => (row ? toCollectorPhoto(row) : null);
   return {
     slideshow: slideshow.map(toCollectorPhoto).filter((p): p is CollectorPhoto => p !== null),

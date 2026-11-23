@@ -114,6 +114,14 @@ describe("placePhotos", () => {
     expect(placePhotos(hidden, { coffee: "boat" }).coffee?.src).toBe("/photos/top");
   });
 
+  it("leads the slideshow with the pinned first photo while it is visible", () => {
+    const rows = [row({ asset_id: "team" }), labeled("solo", ["slideshow"], 3), labeled("food", [], 8)];
+    expect(placePhotos(rows, { slideshowFirst: "solo" }).slideshow.map((p) => p.src)).toEqual(["/photos/solo", "/photos/team"]);
+    expect(placePhotos(rows, { slideshowFirst: "food" }).slideshow[0].src).toBe("/photos/food");
+    const hidden = [row({ asset_id: "team" }), { ...labeled("solo", ["slideshow"], 3), hidden: true }];
+    expect(placePhotos(hidden, { slideshowFirst: "solo" }).slideshow.map((p) => p.src)).toEqual(["/photos/team"]);
+  });
+
   it("gives coffee the highest-scoring labeled photo tagged for it, newest on a tie", () => {
     const rows = [
       row({ asset_id: "unlabeled", places: ["coffee"], score: 10 }),
