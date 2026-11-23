@@ -33,7 +33,7 @@ test("board renders when github is null", async ({ page }) => {
 
 test("no photos leaves out the photo tile, with no old photo standing in and no hole in the grid", async ({ page }) => {
   await page.goto(fixtureUrl("empty"));
-  await expect(page.getByRole("heading", { name: "Hey! My name is Mason." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hey, I am Mason!" })).toBeVisible();
   await expect(page.locator('[data-tile="photo"]')).toHaveCount(0);
   await expect(page.locator('img[src*="/misc/"]')).toHaveCount(0);
   expect(await boardRowGaps(page)).toBe(0);
@@ -51,13 +51,13 @@ test("no empty grid cells", async ({ page }) => {
 test("mobile has no horizontal scroll", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile", "phone width only");
   await page.goto(fixtureUrl("full"));
-  await expect(page.getByRole("heading", { name: "Hey! My name is Mason." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hey, I am Mason!" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
 });
 
 test("hello visible without scroll", async ({ page }) => {
   await page.goto("/");
-  const heading = page.getByRole("heading", { name: "Hey! My name is Mason." });
+  const heading = page.getByRole("heading", { name: "Hey, I am Mason!" });
   await expect(heading).toBeVisible();
   const box = await heading.boundingBox();
   expect(box).not.toBeNull();
@@ -69,7 +69,7 @@ test.describe("without javascript", () => {
 
   test("hello shows without javascript", async ({ page }) => {
     await page.goto("/");
-    const heading = page.getByRole("heading", { name: "Hey! My name is Mason." });
+    const heading = page.getByRole("heading", { name: "Hey, I am Mason!" });
     await expect(heading).toBeVisible();
     // toBeVisible ignores opacity, so multiply it up the tree to catch a fade that never finishes.
     await expect
@@ -171,7 +171,7 @@ test.describe("photo slideshow", () => {
 
     test("stays on one photo with no control", async ({ page }) => {
       await page.goto("/");
-      await expect(page.getByRole("heading", { name: "Hey! My name is Mason." })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Hey, I am Mason!" })).toBeVisible();
       await page.waitForLoadState("load");
       await page.waitForTimeout(500);
       await expect(page.getByRole("button", { name: "Pause photo slideshow" })).toHaveCount(0);
@@ -191,7 +191,7 @@ test("reading tile shows three rising topics and links to trends", async ({ page
 
 test("reading tile is hidden without rising topics", async ({ page }) => {
   await page.goto(fixtureUrl("empty"));
-  await expect(page.getByRole("heading", { name: "Hey! My name is Mason." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hey, I am Mason!" })).toBeVisible();
   await expect(page.getByRole("region", { name: "What I am reading about" })).toHaveCount(0);
 });
 

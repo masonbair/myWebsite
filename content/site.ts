@@ -258,7 +258,7 @@ export const siteUpdated = "2026-11-20";
 
 export const hello = {
   tag: "Open to coffee chats",
-  heading: "Hey! My name is Mason.",
-  body: `I am a ${roleLower} and a digital nomad. I work from wherever I am at, and I am always up for a coffee chat with someone who has something interesting to share.`,
+  heading: "Hey, I am Mason!",
+  body: `I am fortunate enough to be a ${roleLower} and digital nomad, where I work from all over the world. As well, I love having coffee chats. Feel free to sign up, I would love to chat with you, no matter who you are or what you do!`,
   note: "30 min, video",
 };

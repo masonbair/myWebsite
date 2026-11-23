@@ -13,7 +13,7 @@ const shownOpacity = (locator: Locator) =>
 
 test("home shows its headings and photo tile without JavaScript", async ({ page }) => {
   await page.goto("/");
-  for (const name of ["Hey! My name is Mason.", "About me", "Work and experience", "Résumé", "Contact"]) {
+  for (const name of ["Hey, I am Mason!", "About me", "Work and experience", "Résumé", "Contact"]) {
     const heading = page.getByRole("heading", { name, exact: true });
     await expect(heading).toBeVisible();
     await expect.poll(() => shownOpacity(heading)).toBe(1);
@@ -25,7 +25,7 @@ test("home shows its headings and photo tile without JavaScript", async ({ page 
 
 test("no draw button without JS", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Hey! My name is Mason.", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hey, I am Mason!", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Draw on the board" })).toHaveCount(0);
 });
 

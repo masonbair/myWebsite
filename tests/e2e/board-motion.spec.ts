@@ -48,7 +48,7 @@ test("swing is off with reduced motion", async ({ page }) => {
 test("first-screen tiles never animate", async ({ page }) => {
   await page.goto(fixtureUrl("full"));
   const name = await page
-    .getByRole("heading", { name: "Hey! My name is Mason." })
+    .getByRole("heading", { name: "Hey, I am Mason!" })
     .evaluate((el) => getComputedStyle(el.closest("[data-board-grid] > *")!).animationName);
   expect(name).toBe("none");
 });
