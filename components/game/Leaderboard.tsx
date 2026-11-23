@@ -15,7 +15,7 @@ import { game, useGame } from "./store";
 
 const SHOWN = 10;
 const focusRing = "outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-accent-ink";
-const OFFLINE = "Couldn't reach the leaderboard. Saved on this device.";
+const OFFLINE = "Could not reach the leaderboard. Saved on this device.";
 const FOOTER = { loading: "", shared: "Scores are shared with everyone.", local: "Scores are saved on this device." };
 
 /** Score popover under the nav pill: save the current score and see the shared top scores, or local ones offline. */

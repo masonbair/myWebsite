@@ -99,7 +99,7 @@ export async function AskMe() {
           ))}
         </div>
         <div className="lg:col-span-5">
-          <p className="text-lg text-mute">Got a question that&apos;s not here? Ask me over coffee.</p>
+          <p className="text-lg text-mute">Got a question that is not here? Ask me over coffee.</p>
           <a href={coffeeChat.href} className={`${stickerButton} mt-4`}>
             {coffeeChat.label}
             <span className={buttonBubble}>

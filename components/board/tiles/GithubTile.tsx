@@ -35,7 +35,7 @@ export function GithubTile({ github }: { github: GithubActivity | null }) {
           rel="noopener noreferrer"
           className={`group inline-flex w-fit items-center gap-3 rounded-full border-2 border-line bg-surface py-1.5 pr-1.5 pl-5 text-base font-semibold text-ink transition-transform duration-300 ease-spring active:scale-[0.98] ${focusRing}`}
         >
-          See what I&apos;m building
+          See what I am building
           <span className="flex size-8 items-center justify-center rounded-full bg-accent text-night transition-transform duration-300 ease-spring group-hover:translate-x-0.5 group-hover:-translate-y-px">
             <ArrowUpRight weight="light" size={16} aria-hidden />
           </span>

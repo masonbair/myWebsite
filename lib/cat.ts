@@ -12,10 +12,10 @@ export const CAT_STAGE_LINES: readonly string[] = [
   "Look at my whiskers! 😸",
   "I have a tail now! 🐾",
   "Look at my beautiful spots! ✨",
-  "I'm the king/queen of cats! 👑",
-  "I can fly now! I'm a magical cat! 🦋",
-  "I'm sparkling with magic! ✨🌟",
-  "I'm the ultimate rainbow cat! 🌈😻 Maximum evolution reached!",
+  "I am the king/queen of cats! 👑",
+  "I can fly now! I am a magical cat! 🦋",
+  "I am sparkling with magic! ✨🌟",
+  "I am the ultimate rainbow cat! 🌈😻 Maximum evolution reached!",
 ];
 
 // Brand hues plus soft neutrals; each reads on both the light and dark canvas.

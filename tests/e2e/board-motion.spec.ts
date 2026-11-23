@@ -48,7 +48,7 @@ test("swing is off with reduced motion", async ({ page }) => {
 test("first-screen tiles never animate", async ({ page }) => {
   await page.goto(fixtureUrl("full"));
   const name = await page
-    .getByRole("heading", { name: "Hey! I'm Mason." })
+    .getByRole("heading", { name: "Hey! My name is Mason." })
     .evaluate((el) => getComputedStyle(el.closest("[data-board-grid] > *")!).animationName);
   expect(name).toBe("none");
 });
@@ -235,7 +235,7 @@ test.describe("doodle", () => {
     await draw.click({ timeout: 15_000 });
     await page.keyboard.press("Escape");
     await expect(draw).toHaveAttribute("aria-pressed", "false");
-    const link = page.getByRole("link", { name: "See what I'm building" });
+    const link = page.getByRole("link", { name: "See what I am building" });
     await page.evaluate(() => window.scrollTo(0, 0));
     const box = (await link.boundingBox())!;
     const hit = await page.evaluate(

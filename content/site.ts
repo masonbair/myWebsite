@@ -27,7 +27,7 @@ export const work: Work[] = [
     title: role.title,
     org: role.employerFull,
     dates: "May 2026 to now",
-    summary: "My first full-time job after graduating. I build software for Fullsend, fully remote, so I can work from wherever I'm traveling.",
+    summary: "My first full-time job after graduating. I build software for Fullsend, fully remote, so I can work from wherever I am traveling.",
     tech: ["Software development", "Remote work"],
     image: {
       // Phone photo from the Website album; hiding it in the hub removes it here too.
@@ -165,7 +165,7 @@ export const achievements: Achievement[] = [
   {
     title: "Honors",
     summary:
-      "Distinguished Student Leadership Award, April 2026. Choose Ohio First Scholarship in Computer Science, 2023 to May 2026. Eagle Scout with Scouts BSA, St. Francis Xavier, 2016 to 2022. I'm also pretty active in the MLH hackathon community.",
+      "Distinguished Student Leadership Award, April 2026. Choose Ohio First Scholarship in Computer Science, 2023 to May 2026. Eagle Scout with Scouts BSA, St. Francis Xavier, 2016 to 2022. I am also pretty active in the MLH hackathon community.",
     tech: [],
   },
   {
@@ -188,7 +188,7 @@ export const achievements: Achievement[] = [
   },
   {
     title: "Markov Maze Prediction Calculator",
-    summary: "A C++ calculator that uses linear algebra and Markov chains to predict where you'll end up in a maze.",
+    summary: "A C++ calculator that uses linear algebra and Markov chains to predict where you will end up in a maze.",
     tech: ["C++", "Linear algebra", "Algorithm design"],
   },
 ];
@@ -258,7 +258,7 @@ export const siteUpdated = "2026-11-20";
 
 export const hello = {
   tag: "Open to coffee chats",
-  heading: "Hey! I'm Mason.",
-  body: `I'm a ${roleLower} and a digital nomad. I work from wherever I'm at, and I'm always up for a coffee chat with someone who has something interesting to share.`,
+  heading: "Hey! My name is Mason.",
+  body: `I am a ${roleLower} and a digital nomad. I work from wherever I am at, and I am always up for a coffee chat with someone who has something interesting to share.`,
   note: "30 min, video",
 };

@@ -51,7 +51,7 @@ test("local leaderboard saves", async ({ page }) => {
   await page.getByLabel("Your name").fill("Tester");
   await page.getByRole("button", { name: "Save score" }).click();
   await expect(page.getByRole("list", { name: "Top scores" }).getByText("Tester")).toBeVisible();
-  await expect(page.getByText("Couldn't reach the leaderboard. Saved on this device.")).toBeVisible();
+  await expect(page.getByText("Could not reach the leaderboard. Saved on this device.")).toBeVisible();
 });
 
 test("shared leaderboard shows and saves server scores", async ({ page }) => {
@@ -86,7 +86,7 @@ test("rejected names show a plain message", async ({ page }) => {
   await page.getByRole("button", { name: /leaderboard/i }).click();
   await page.getByLabel("Your name").fill("Rude");
   await page.getByRole("button", { name: "Save score" }).click();
-  await expect(page.getByText("That name isn't allowed. Try another one.")).toBeVisible();
+  await expect(page.getByText("That name is not allowed. Try another one.")).toBeVisible();
 });
 
 test("game can be paused", async ({ page }) => {

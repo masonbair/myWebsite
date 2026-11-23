@@ -13,7 +13,7 @@ export function NewsTile({ rising }: { rising: Mover[] }) {
           <div>
             <Prompt className="text-accent-ink">cat trends.txt</Prompt>
             <h2 id="news-tile-title" className="mt-2 text-xl font-bold tracking-tight text-ink">
-              What I&apos;m reading about
+              What I am reading about
             </h2>
           </div>
           <TrendUp weight="light" size={28} className="shrink-0 text-accent-ink" aria-hidden />

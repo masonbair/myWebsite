@@ -34,7 +34,7 @@ export function TerminalPrompt({ data }: { data: TerminalData }) {
       const { runCommand } = await import("@/lib/terminal");
       output = runCommand(command, data);
     } catch {
-      output = ["Couldn't load the commands. Check your connection and try again."];
+      output = ["Could not load the commands. Check your connection and try again."];
     }
     append([`$ ${command.trim()}`, ...output]);
     requestAnimationFrame(() => log.current?.scrollTo({ top: log.current.scrollHeight }));

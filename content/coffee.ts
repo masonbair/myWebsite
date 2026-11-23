@@ -11,10 +11,10 @@ const emailSubject = "Coffee chat request";
 const emailBody = [
   "Hi Mason,",
   "",
-  "I'd like to book a 30 minute coffee chat.",
+  "I would like to book a 30 minute coffee chat.",
   "",
   "My name:",
-  "What I'd like to talk about:",
+  "What I would like to talk about:",
   "Three times that work for me, with my time zone:",
   "How I found your page:",
 ].join("\r\n");
@@ -56,8 +56,8 @@ export const coffee: {
     `Book a 30 minute video coffee chat with Mason Bair, a ${roleLower} and digital nomad. He likes meeting people who have something interesting to share, whatever they do.`,
   heading: "Coffee chat with Mason Bair",
   bio: [
-    "I like meeting people who have something interesting to share. Doesn't matter what you do or how long you've done it.",
-    `I'm a ${roleLower} at ${role.employer} and I work remotely while I travel. Grab a coffee and pick a time that works for you.`,
+    "I like meeting people who have something interesting to share. Does not matter what you do or how long you have done it.",
+    `I am a ${roleLower} at ${role.employer} and I work remotely while I travel. Grab a coffee and pick a time that works for you.`,
   ],
   format: [
     { label: "Length", value: "30 min" },
@@ -68,8 +68,8 @@ export const coffee: {
   topics: [
     { icon: "handshake", label: "Forward deployed engineering", detail: "Building right next to the customer, and what that job is really like." },
     { icon: "globe", label: "AI around the world", detail: "How people in different countries are building with AI and using it." },
-    { icon: "cpu", label: "Tech", detail: "New tools, side projects, and whatever you're excited about right now." },
-    { icon: "storefront", label: "Running your own business", detail: "I want to learn more here. If you've started something, I'd love to hear how." },
+    { icon: "cpu", label: "Tech", detail: "New tools, side projects, and whatever you are excited about right now." },
+    { icon: "storefront", label: "Running your own business", detail: "I want to learn more here. If you have started something, I would love to hear how." },
     { icon: "plane", label: "Travel", detail: `Working from the road, ${now.countriesVisited} countries in.` },
     { icon: "sneaker", label: "Running and baking", detail: "Favorite routes, races, and recipes worth trying." },
   ],
@@ -77,16 +77,16 @@ export const coffee: {
   timeZoneHeading: "Time zones",
   timeZoneNote:
     "I move around a lot, so my time zone changes. The booking page shows times in yours. If none of them work, just let me know.",
-  nichesHeading: "Some chats I'm hoping for",
+  nichesHeading: "Some chats I am hoping for",
   niches: [
     {
       id: "open-to-anyone",
       summary: "Open to anyone with something to share, including people who run businesses, people going all in on AI, and people avoiding it.",
       heading: "Anyone with something to share",
       body: [
-        "Honestly, if you have something to share, I want to hear it. You don't need a reason or a polished pitch.",
-        "I'm especially curious about people who run their own business, people who are AI maxxing and putting it into everything, and people who are avoiding AI on purpose.",
-        "Whatever you're into, bring it. I'll bring questions.",
+        "Honestly, if you have something to share, I want to hear it. You do not need a reason or a polished pitch.",
+        "I am especially curious about people who run their own business, people who are AI maxxing and putting it into everything, and people who are avoiding AI on purpose.",
+        "Whatever you are into, bring it. I will bring questions.",
       ],
     },
   ],
@@ -97,9 +97,9 @@ export const coffee: {
       id: "past-hostel-friend",
       heading: "Reconnecting with a friend from a hostel",
       body: [
-        "We met at a hostel in Brussels in 2025 and hadn't talked in a year and a half. She found this page and booked a time.",
+        "We met at a hostel in Brussels in 2025 and had not talked in a year and a half. She found this page and booked a time.",
         "She works with data for a city government in Europe and builds AI tools for kindergartens, like a story phone that helps kids practice the local language. I told her about testing nomad life in Europe while working US hours.",
-        "What I took away: some of the most useful AI work I hear about isn't in big tech. It's people inside public services fixing real problems.",
+        "What I took away: some of the most useful AI work I hear about is not in big tech. It is people inside public services fixing real problems.",
       ],
     },
     {
@@ -115,29 +115,29 @@ export const coffee: {
   emailHeading: "Book by email instead",
   emailSteps: [
     `Send an email to ${contact.email} with the subject "Coffee chat request".`,
-    "Include your name, what you'd like to talk about, three times that work for you with your time zone, and how you found this page.",
-    "I'll reply with a calendar invite and a video link.",
+    "Include your name, what you would like to talk about, three times that work for you with your time zone, and how you found this page.",
+    "I will reply with a calendar invite and a video link.",
   ],
   emailLink: "Email Mason to request a coffee chat",
   faqHeading: "Questions",
   faqs: [
     {
       q: "How do I book a coffee chat with Mason Bair?",
-      a: `Press Book a time, pick an open slot, and you'll get a calendar invite with a video link. If the booking page doesn't work for you, just email ${contact.email}.`,
+      a: `Press Book a time, pick an open slot, and you will get a calendar invite with a video link. If the booking page does not work for you, just email ${contact.email}.`,
     },
     { q: "How long is a coffee chat?", a: "Thirty minutes over video. Bring your own coffee." },
     {
       q: "Who is it for?",
-      a: "Anyone with something interesting to share. You don't need to work in tech.",
+      a: "Anyone with something interesting to share. You do not need to work in tech.",
     },
     {
       q: "What time zone are you in?",
-      a: "It changes as I travel. The booking page shows open times in your time zone, so you don't have to do the math.",
+      a: "It changes as I travel. The booking page shows open times in your time zone, so you do not have to do the math.",
     },
     { q: "Do I need to prepare anything?", a: "Nope. Bring a question or a story if you have one." },
     {
       q: "What if none of the times work for me?",
-      a: `Email me at ${contact.email} with a few times that work for you and we'll figure it out.`,
+      a: `Email me at ${contact.email} with a few times that work for you and we will figure it out.`,
     },
   ],
   linksHeading: "Find me elsewhere",

@@ -62,8 +62,8 @@ export type SubmitResult =
 
 const REJECTED: Record<string, string> = {
   bad_name: "Names need 1 to 20 characters.",
-  offensive_name: "That name isn't allowed. Try another one.",
-  bad_score: "That score can't be saved.",
+  offensive_name: "That name is not allowed. Try another one.",
+  bad_score: "That score cannot be saved.",
   rate_limited: "Too many scores from you. Try again in a few minutes.",
 };
 

@@ -36,7 +36,7 @@ test("cat label never covers reading text on phones", async ({ page, isMobile })
 test("coffee chat cards fill the width with no empty cell", async ({ page, isMobile }) => {
   test.skip(isMobile, "desktop layout");
   await page.goto(`${fixtureUrl("full")}coffee`);
-  const section = page.getByRole("region", { name: "Some chats I'm hoping for" });
+  const section = page.getByRole("region", { name: "Some chats I am hoping for" });
   const cards = section.locator("article");
   const main = (await page.locator("main").boundingBox())!;
   const grid = (await cards.first().locator("..").boundingBox())!;
