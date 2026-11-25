@@ -46,7 +46,7 @@ export const COPY = {
   makingOfSteps: [
     { title: 'A brain dump', body: 'It started as a page of notes from Mason: a grey Orb, a world without color, and a game you can sit with.' },
     { title: 'A shared design board', body: 'The agents turned the notes into hundreds of small ideas and mockups. Mason marked each one yes, maybe or no.' },
-    { title: 'A playable prototype', body: 'The yeses became a web version you can play. A simulator plays it too, so each new thing shows up at the right moment.' },
+    { title: 'A playable prototype', body: 'The yeses became a web version you can play.' },
     { title: 'Next: your phone', body: 'Android comes first. A version built in the Godot game engine is on the way.' },
   ],
   footer: 'Made by Mason Bair',
