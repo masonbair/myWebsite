@@ -10,16 +10,17 @@ const now = parseNow({ countriesVisited: 23 });
 const github: GithubActivity = { commits30d: 4, private30d: 0, total30d: 4, repos30d: 2, recent: [], online: [] };
 const trends: PublicTrends = { today: "2026-11-09", rows: [] };
 const noTrends = async () => null;
+const noFilms = async () => [];
 const noZone = () => Promise.reject(new Error("no zone"));
-const sources = { readNow: async () => now, github: async () => github, trends: noTrends };
+const sources = { readNow: async () => now, github: async () => github, trends: noTrends, films: noFilms };
 
 describe("getBoard", () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it("getBoard merges sources", async () => {
     vi.stubEnv("HUB_TIME_ZONE", "");
-    const board = await getBoard({ readNow: async () => now, github: async () => github, trends: async () => trends, zone: noZone });
-    expect(board).toEqual({ now, github, trends, sunOffsetMinutes: null });
+    const board = await getBoard({ readNow: async () => now, github: async () => github, trends: async () => trends, films: noFilms, zone: noZone });
+    expect(board).toEqual({ now, github, trends, films: [], sunOffsetMinutes: null });
   });
 
   it("getBoard survives github throwing", async () => {
@@ -29,9 +30,10 @@ describe("getBoard", () => {
         throw new Error("rate limited");
       },
       trends: noTrends,
+      films: () => Promise.reject(new Error("feed down")),
       zone: async () => "Europe/Lisbon",
     });
-    expect(board).toEqual({ now, github: null, trends: null, sunOffsetMinutes: offsetMinutesAt("Europe/Lisbon", new Date()) });
+    expect(board).toEqual({ now, github: null, trends: null, films: [], sunOffsetMinutes: offsetMinutesAt("Europe/Lisbon", new Date()) });
   });
 
   it("getBoard survives the now source throwing", async () => {
@@ -39,6 +41,7 @@ describe("getBoard", () => {
       readNow: async () => Promise.reject(new Error("down")),
       github: async () => github,
       trends: noTrends,
+      films: noFilms,
     });
     expect(board.now).toEqual(parseNow(null));
     expect(board.github).toEqual(github);
@@ -108,7 +111,7 @@ describe("lowerSpans", () => {
     return rows.filter((r) => r !== width);
   }
 
-  for (const keys of [["projects"], ["news"], ["projects", "news"], ["news", "bake"], ["projects", "bake"], ["projects", "news", "bake"]]) {
+  for (const keys of [["projects"], ["news"], ["projects", "news"], ["news", "films"], ["projects", "films"], ["projects", "news", "films"]]) {
     it(`fills every row for ${keys.join(" + ")}`, () => {
       const spans = [...lowerSpans(keys).values()];
       expect(spans).toHaveLength(keys.length);
@@ -125,25 +128,25 @@ describe("lowerKeys", () => {
     for (const firstScreen of [3, 4, 5, 6])
       for (const projects of flags)
         for (const news of flags)
-          for (const bake of flags)
-            expect(firstScreen + lowerKeys(firstScreen, { projects, news, bake }).length).toBeLessThanOrEqual(MAX_BOARD_TILES);
+          for (const films of flags)
+            expect(firstScreen + lowerKeys(firstScreen, { projects, news, films }).length).toBeLessThanOrEqual(MAX_BOARD_TILES);
   });
 
   it("shows news and the terminal when there is room", () => {
-    expect(lowerKeys(4, { projects: true, news: true, bake: true })).toEqual(["projects", "news", "bake", "terminal"]);
+    expect(lowerKeys(4, { projects: true, news: true, films: true })).toEqual(["projects", "news", "films", "terminal"]);
   });
 
-  it("drops news first, then bake, when the board would pass the cap", () => {
-    expect(lowerKeys(5, { projects: true, news: true, bake: true })).toEqual(["projects", "bake", "terminal"]);
-    expect(lowerKeys(6, { projects: true, news: true, bake: true })).toEqual(["projects", "terminal"]);
+  it("drops news first, then films, when the board would pass the cap", () => {
+    expect(lowerKeys(5, { projects: true, news: true, films: true })).toEqual(["projects", "films", "terminal"]);
+    expect(lowerKeys(6, { projects: true, news: true, films: true })).toEqual(["projects", "terminal"]);
   });
 
   it("leaves news out when it has fewer than three rising topics", () => {
-    expect(lowerKeys(4, { projects: false, news: false, bake: true })).toEqual(["bake", "terminal"]);
+    expect(lowerKeys(4, { projects: false, news: false, films: true })).toEqual(["films", "terminal"]);
   });
 
   it("always keeps the terminal", () => {
-    expect(lowerKeys(4, { projects: false, news: false, bake: false })).toEqual(["terminal"]);
+    expect(lowerKeys(4, { projects: false, news: false, films: false })).toEqual(["terminal"]);
   });
 });
 

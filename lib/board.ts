@@ -1,17 +1,25 @@
 import { getGithubActivity, type GithubActivity, type Repo } from "@/lib/github";
 import { masonTimeZone } from "@/lib/hub/events";
+import { getRecentFilms, type Film } from "@/lib/letterboxd";
 import { offsetMinutesAt } from "@/lib/hub/schedule";
 import { readPublicTrends, type PublicTrends } from "@/lib/news/public";
 import { loadNow, parseNow, type NowData } from "@/lib/now";
 import { serviceClient } from "@/lib/supabase/server";
 
 /** `sunOffsetMinutes` is Mason's UTC offset; only the number reaches the page, never the zone name. */
-export type Board = { now: NowData; github: GithubActivity | null; trends: PublicTrends | null; sunOffsetMinutes: number | null };
+export type Board = {
+  now: NowData;
+  github: GithubActivity | null;
+  trends: PublicTrends | null;
+  films: Film[];
+  sunOffsetMinutes: number | null;
+};
 
 type Deps = {
   readNow?: () => Promise<NowData>;
   github?: () => Promise<GithubActivity | null>;
   trends?: () => Promise<PublicTrends | null>;
+  films?: () => Promise<Film[]>;
   zone?: () => Promise<string>;
 };
 
@@ -29,13 +37,14 @@ export async function readSunOffset(zone: () => Promise<string> = () => masonTim
 
 /** Loads everything the Right Now board shows; a failing source becomes its empty value. */
 export async function getBoard(deps: Deps = {}): Promise<Board> {
-  const [now, github, trends, sunOffsetMinutes] = await Promise.all([
+  const [now, github, trends, films, sunOffsetMinutes] = await Promise.all([
     settle(deps.readNow ?? (() => loadNow()), parseNow(null)),
     settle(deps.github ?? (() => getGithubActivity()), null),
     settle(deps.trends ?? (() => readPublicTrends()), null),
+    settle(deps.films ?? (() => getRecentFilms()), []),
     readSunOffset(deps.zone),
   ]);
-  return { now, github, trends, sunOffsetMinutes };
+  return { now, github, trends, films, sunOffsetMinutes };
 }
 
 const FULL = "md:col-span-6 lg:col-span-12";
@@ -60,11 +69,11 @@ export function liveElsewhere(repos: Repo[]): (Repo & { homepage: string })[] {
   });
 }
 
-const GIVES_WAY_FIRST = ["news", "bake"];
+const GIVES_WAY_FIRST = ["news", "films"];
 
-/** Which tiles below the first screen to show; the terminal always stays, and news then bake give way to keep the cap. */
-export function lowerKeys(firstScreen: number, has: { projects: boolean; news: boolean; bake: boolean }): string[] {
-  let keys: string[] = [...(["projects", "news", "bake"] as const).filter((k) => has[k]), "terminal"];
+/** Which tiles below the first screen to show; the terminal always stays, and news then films give way to keep the cap. */
+export function lowerKeys(firstScreen: number, has: { projects: boolean; news: boolean; films: boolean }): string[] {
+  let keys: string[] = [...(["projects", "news", "films"] as const).filter((k) => has[k]), "terminal"];
   for (const drop of GIVES_WAY_FIRST) if (firstScreen + keys.length > MAX_BOARD_TILES) keys = keys.filter((k) => k !== drop);
   return keys;
 }

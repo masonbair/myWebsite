@@ -202,3 +202,20 @@ test("full board rows stay full with the reading tile", async ({ page }, testInf
   const gaps = await boardRowGaps(page);
   expect(gaps).toBe(0);
 });
+
+test("films tile shows the latest Letterboxd film with its review and links out", async ({ page }) => {
+  await page.goto(fixtureUrl("full"));
+  const tile = page.locator('[data-tile="films"]');
+  await expect(tile.getByText(/^Last watched · /)).toBeVisible();
+  const film = tile.getByRole("link", { name: /The Hunger Games: Sunrise on the Reaping/ });
+  await expect(film).toHaveAttribute("href", "https://letterboxd.com/masonbair/film/the-hunger-games-sunrise-on-the-reaping/");
+  await expect(tile.getByRole("img", { name: "3 out of 5 stars" })).toBeVisible();
+  await expect(tile.getByText(/The story and feels of this movie were great!/)).toBeVisible();
+  await expect(tile.getByRole("link", { name: "masonbair on Letterboxd" })).toHaveAttribute("href", "https://letterboxd.com/masonbair/");
+});
+
+test("films tile is hidden when the feed has no films", async ({ page }) => {
+  await page.goto(fixtureUrl("empty"));
+  await expect(page.getByRole("heading", { name: "Hey, I am Mason!" })).toBeVisible();
+  await expect(page.locator('[data-tile="films"]')).toHaveCount(0);
+});

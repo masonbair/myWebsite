@@ -73,6 +73,8 @@ const fixtureServers = FIXTURES.map((f) => ({
     // Only the full and empty boards read trends, so the other fixture boards keep their tile layouts.
     TRENDS_FIXTURE: f === "full" ? "trends.json" : f === "empty" ? "empty.json" : "",
     GITHUB_TOKEN: "",
+    // Only the full board shows films; the rest get none, so their tile layouts stay put.
+    LETTERBOXD_FIXTURE: f === "full" ? "letterboxd.xml" : "",
     SUPABASE_URL: "",
     // With no database, the board's time-of-day tint falls back to this zone.
     HUB_TIME_ZONE: "Europe/Lisbon",
