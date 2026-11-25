@@ -1,4 +1,4 @@
-# clicker.masonbair.com
+# unfaded.masonbair.com
 
 The page for Unfaded, Mason's grey Orb clicker game. It is a static Astro site with no server code, no trackers, and no scripts or fonts from other sites. It has its own Vercel project, like wamf.masonbair.com.
 
@@ -33,18 +33,20 @@ npm run preview  # serve the built site
 
 ## Deploy (Mason does this; nothing here has been deployed)
 
-1. **Make the Vercel project.** Vercel › Add New › Project › import `masonbair/myWebsite`.
+The code lives in `apps/clicker` (the folder kept its first name); the site's address is unfaded.masonbair.com, set once in `GAME.domain` in `src/content.mjs`.
+
+1. **The Vercel project** is `unfaded` (made 2026-11-25). If it ever needs remaking: Vercel › Add New › Project › import `masonbair/myWebsite`.
    - Root Directory: `apps/clicker`. Framework preset: Astro. `vercel.json` sets the build settings.
    - No environment variables are needed.
    - Ignored Build Step: `git diff --quiet HEAD^ HEAD -- .` (rebuild only when this folder changes).
 2. **Stop the main site rebuilding for clicker-only changes.** In the main masonbair.com project › Settings › Git › Ignored Build Step: `git diff --quiet HEAD^ HEAD -- . ':!apps'`.
-3. **Add the domain.** Clicker project › Settings › Domains › add `clicker.masonbair.com`. Vercel shows a CNAME target.
-4. **Point DNS at it (IONOS).** Domains & SSL › masonbair.com › DNS › Add record: Type `CNAME`, Host `clicker`, Points to: the exact target Vercel showed. Leave the main domain's records and MX records alone. Wait until Vercel shows the domain as valid and the certificate as issued.
+3. **Add the domain.** `unfaded` project › Settings › Domains › add `unfaded.masonbair.com`. Vercel shows a CNAME target.
+4. **Point DNS at it (IONOS).** Domains & SSL › masonbair.com › DNS › Add record: Type `CNAME`, Host `unfaded`, Points to: the exact target Vercel showed. Leave the main domain's records and MX records alone. Wait until Vercel shows the domain as valid and the certificate as issued.
 5. **Check it live:**
    ```bash
-   curl -sI https://clicker.masonbair.com/ | grep -i -E 'content-security-policy|strict-transport'
-   curl -s https://clicker.masonbair.com/llms.txt | head -3
+   curl -sI https://unfaded.masonbair.com/ | grep -i -E 'content-security-policy|strict-transport'
+   curl -s https://unfaded.masonbair.com/llms.txt | head -3
    ```
    Then paste the URL into Google's Rich Results Test and a social card preview.
 6. **Merge the masonbair.com card only after step 5.** The same branch adds the game to masonbair.com's project list, linking here. Bump `siteUpdated` in `content/site.ts` to the merge day.
-7. **Search Console (optional):** add `clicker.masonbair.com` as a property and submit `/sitemap.xml`.
+7. **Search Console (optional):** add `unfaded.masonbair.com` as a property and submit `/sitemap.xml`.

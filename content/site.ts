@@ -149,7 +149,7 @@ export const achievements: Achievement[] = [
     summary:
       "A small, quiet clicker game I am making for phones. You tap a grey Orb for Glow, and bit by bit, color comes back to a grey world. Android first, iPhone after. Not out yet.",
     tech: ["Android", "Game", "Web"],
-    href: "https://clicker.masonbair.com",
+    href: "https://unfaded.masonbair.com",
   },
   {
     title: "NexHacks, 1st and 2nd place",

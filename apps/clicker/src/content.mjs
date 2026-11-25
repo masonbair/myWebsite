@@ -1,7 +1,7 @@
 /** Every word on the site. The game's name lives here only; change GAME.name and it updates everywhere. */
 export const GAME = {
   name: 'Unfaded',
-  domain: 'clicker.masonbair.com',
+  domain: 'unfaded.masonbair.com',
   status: 'Coming soon',
   platforms: 'Android first. iPhone after.',
   firstPlatform: 'Android first',
