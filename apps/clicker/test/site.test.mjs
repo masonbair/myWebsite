@@ -64,7 +64,7 @@ test('the privacy policy is served at /privacy, linked from the home page and li
   const html = await dist('privacy.html');
   assert.match(html, new RegExp(`<link rel="canonical" href="${SITE_URL}/privacy"`));
   assert.doesNotMatch(html, /name="robots" content="noindex"/);
-  for (const phrase of ['collects no personal data', 'no network requests', 'In-app purchases may come', 'masonbair.com']) assert.ok(html.includes(phrase), phrase);
+  for (const phrase of ['collects no personal data', 'no network requests', 'In-app purchases may come', 'Google backup', 'mailto:']) assert.ok(html.includes(phrase), phrase);
   assert.match(html, new RegExp(`<time datetime="${PRIVACY.updated.iso}"`));
   assert.match(await dist('index.html'), /href="\/privacy"/);
   assert.match(await dist('sitemap.xml'), new RegExp(`<loc>${SITE_URL}/privacy</loc>`));

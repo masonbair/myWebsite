@@ -11,6 +11,8 @@ export const LINKS = {
   mason: 'https://masonbair.com',
   /** masonbair.com's Person node, so search engines tie the game to the same Mason Bair. */
   masonPersonId: 'https://masonbair.com/#person',
+  /** The same email masonbair.com lists; Google Play wants a direct contact on the policy. */
+  email: 'bair.s.mason@gmail.com',
 };
 
 export const SITE_URL = `https://${GAME.domain}`;
@@ -64,12 +66,18 @@ export const COPY = {
 /** The privacy policy at /privacy. Google Play links to it, so keep it true to the shipped app. */
 export const PRIVACY = {
   title: `${GAME.name} privacy policy`,
-  description: `${GAME.name} collects no personal data. Saves stay on your device, and the app makes no network requests. No ads, no accounts.`,
+  description: `${GAME.name} collects no personal data. Saves are kept on your device, and the app makes no network requests. No ads, no accounts.`,
   updated: { iso: '2026-11-25', text: 'November 25, 2026' },
   lede: `${GAME.name} is a game by Mason Bair. This policy covers the ${GAME.name} app and this website.`,
   sections: [
     { title: 'The short version', body: [`${GAME.name} collects no personal data. It shares none and sells none.`] },
-    { title: 'What the app keeps', body: ['Your game progress is saved on your device. The game does not send it anywhere.'] },
+    {
+      title: 'What the app keeps',
+      body: [
+        'Your game progress is saved on your device. The game does not send it anywhere.',
+        'If your Android backup is on, Android may copy the save into your own Google backup. The developer never sees it.',
+      ],
+    },
     {
       title: 'What the app sends',
       body: ['Nothing. The app makes no network requests.', 'It has no accounts, no ads, no analytics and no tracking.'],
@@ -91,7 +99,7 @@ export const PRIVACY = {
     },
   ],
   contactTitle: 'Questions',
-  contactBefore: 'Reach Mason through ',
-  contactAfter: ', where his email is listed.',
+  contactBefore: 'Email Mason at ',
+  contactAfter: '.',
   footerLink: 'Privacy',
 };
