@@ -1,0 +1,123 @@
+---
+import Base from '../layouts/Base.astro';
+import { COPY, GAME, LINKS, SHOW_MAKING_OF, SITE_URL } from '../content.mjs';
+
+const person = { '@type': 'Person', '@id': LINKS.masonPersonId, name: 'Mason Bair', url: LINKS.mason };
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    { '@type': 'WebSite', '@id': `${SITE_URL}/#website`, url: `${SITE_URL}/`, name: GAME.name, inLanguage: 'en', publisher: { '@id': LINKS.masonPersonId } },
+    {
+      '@type': 'WebPage', '@id': `${SITE_URL}/#webpage`, url: `${SITE_URL}/`, name: COPY.title, description: COPY.description,
+      isPartOf: { '@id': `${SITE_URL}/#website` }, about: { '@id': `${SITE_URL}/#game` }, primaryImageOfPage: `${SITE_URL}/og.jpg`,
+    },
+    {
+      '@type': 'VideoGame', '@id': `${SITE_URL}/#game`, name: GAME.name, url: `${SITE_URL}/`, description: COPY.faq[0].a,
+      genre: ['Idle game', 'Clicker game', 'Incremental game'], gamePlatform: ['Android', 'iOS'], applicationCategory: 'GameApplication',
+      playMode: 'SinglePlayer', creativeWorkStatus: 'In development', inLanguage: 'en',
+      image: `${SITE_URL}/og.jpg`, screenshot: COPY.shots.map((s) => `${SITE_URL}${s.src}`),
+      author: { '@id': LINKS.masonPersonId }, creator: { '@id': LINKS.masonPersonId },
+    },
+    person,
+    {
+      '@type': 'FAQPage', '@id': `${SITE_URL}/#faq`, isPartOf: { '@id': `${SITE_URL}/#webpage` },
+      mainEntity: COPY.faq.map(({ q, a }) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
+    },
+  ],
+};
+---
+<Base>
+  <script slot="head" type="application/ld+json" set:html={JSON.stringify(structuredData)} />
+  <div class="wrap">
+    <header class="top">
+      <a class="name" href={LINKS.mason}>mason bair</a>
+      <nav aria-label="On this page">
+        <ul class="nav">
+          <li><a href="#game">The game</a></li>
+          <li><a href="#feel">How it feels</a></li>
+          <li><a href="#soon">Updates</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main class="wrap-main">
+      <section class="hero" id="game" aria-labelledby="hero-title">
+        <span class="sticker">{GAME.status}{!GAME.nameIsFinal && <span class="sr-only">. The name is a working title.</span>}</span>
+        <p class="count" aria-hidden="true"><b data-glow>0</b><span>GLOW</span></p>
+        <div class="orbwrap">
+          <span class="halo" aria-hidden="true"></span>
+          <button class="orb" type="button" aria-label={COPY.orbLabel} data-orb></button>
+        </div>
+        <h1 id="hero-title">{COPY.heroTitle} <strong>{COPY.heroTitleStrong}</strong></h1>
+        <p class="lede">{COPY.heroLede}</p>
+        <ul class="pills">
+          <li class="pill"><b data-per-tap>1</b> per tap</li>
+          <li class="pill">{GAME.firstPlatform}</li>
+        </ul>
+      </section>
+
+      <section class="cards" aria-label="About the game" data-cards>
+        {COPY.cards.map((card) => (
+          <article class="card">
+            <p class="label"><i class={`dot dot-${card.dot}`} aria-hidden="true"></i>{card.label}</p>
+            <h2>{card.title}</h2>
+            <p>{card.body}</p>
+          </article>
+        ))}
+      </section>
+
+      <section class="feel" id="feel" aria-labelledby="feel-title">
+        <h2 class="label" id="feel-title">{COPY.feelLabel}</h2>
+        <div class="feel-grid">
+          {COPY.shots.map((shot, i) => (
+            <figure>
+              <img class="shot" src={shot.src} width={shot.width} height={shot.height} alt={shot.alt} loading={i === 0 ? 'eager' : 'lazy'} decoding="async" />
+              <figcaption>{shot.caption}</figcaption>
+            </figure>
+          ))}
+          <blockquote class="quote">
+            <p>“{COPY.quote}”</p>
+            <footer>{COPY.quoteBy}</footer>
+          </blockquote>
+        </div>
+      </section>
+
+      <section class="soon" id="soon" aria-labelledby="soon-title">
+        <p class="label">{GAME.status}</p>
+        <h2 id="soon-title">{COPY.soonTitle}</h2>
+        <p>{COPY.soonBody}</p>
+        <a class="button" href={LINKS.mason}>{COPY.soonCta}
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11 11 5M6 5h5v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        </a>
+      </section>
+
+      <section class="faq" id="faq" aria-labelledby="faq-title">
+        <h2 class="label" id="faq-title">{COPY.faqTitle}</h2>
+        <div class="faq-grid">
+          {COPY.faq.map(({ q, a }) => (
+            <div class="qa">
+              <h3>{q}</h3>
+              <p>{a}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {SHOW_MAKING_OF && (
+        <section class="cards" aria-labelledby="making-title">
+          <article class="card">
+            <p class="label">Behind it</p>
+            <h2 id="making-title">{COPY.makingOfTitle}</h2>
+            <p>{COPY.makingOfBody}</p>
+          </article>
+        </section>
+      )}
+    </main>
+
+    <footer class="foot">
+      <span>{COPY.footer}. <a href={LINKS.mason}>More of his work at masonbair.com</a></span>
+      <span>{GAME.name}{!GAME.nameIsFinal && ' is a working title'}</span>
+    </footer>
+  </div>
+  <script src="../scripts/orb.ts"></script>
+</Base>
