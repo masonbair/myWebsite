@@ -27,11 +27,11 @@ describe.skipIf(!enabled)("now tables against local Supabase", () => {
     const city = `Integrationville${randomUUID().slice(0, 8)}`;
     const name = `integration loaf ${randomUUID().slice(0, 8)}`;
     expect((await service().from("now_place").insert({ city, region: "Ohio", country: "United States", private: true })).error).toBeNull();
-    expect((await service().from("now_bake").insert({ name, photo: "/misc/Mason_traveling.webp", baked_at: new Date().toISOString() })).error).toBeNull();
+    expect((await service().from("now_bake").insert({ name, photo: "/misc/mason-bair-traveling.webp", baked_at: new Date().toISOString() })).error).toBeNull();
 
     const rows = await readNowRows(service());
     expect(rows.place).toMatchObject({ city, region: "Ohio", country: "United States", private: true });
-    expect(rows.bake).toMatchObject({ name, photo: "/misc/Mason_traveling.webp" });
+    expect(rows.bake).toMatchObject({ name, photo: "/misc/mason-bair-traveling.webp" });
 
     const now = await loadNow({ rows: () => readNowRows(service()) });
     expect(now.bake?.name).toBe(name);

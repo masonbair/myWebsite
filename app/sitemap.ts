@@ -1,13 +1,21 @@
 import type { MetadataRoute } from "next";
 import { coffeeUpdated } from "@/content/coffee";
-import { siteUpdated, siteUrl } from "@/content/site";
+import { achievements, siteUpdated, siteUrl } from "@/content/site";
+import { sitePhotos } from "@/lib/seo/site-images";
 import { hasTrendData, readPublicTrends } from "@/lib/news/public";
 
 export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const pages: MetadataRoute.Sitemap = [
-    { url: siteUrl, lastModified: new Date(siteUpdated), changeFrequency: "weekly", priority: 1 },
+    { url: siteUrl, lastModified: new Date(siteUpdated), changeFrequency: "weekly", priority: 1, images: sitePhotos().map((p) => p.url) },
+    {
+      url: `${siteUrl}/projects`,
+      lastModified: new Date(siteUpdated),
+      changeFrequency: "monthly",
+      priority: 0.8,
+      images: achievements.flatMap((a) => (a.image ? [`${siteUrl}${a.image.src}`] : [])),
+    },
     { url: `${siteUrl}/coffee`, lastModified: new Date(coffeeUpdated), changeFrequency: "monthly", priority: 0.8 },
   ];
   const trends = await readPublicTrends();

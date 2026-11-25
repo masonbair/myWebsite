@@ -1,5 +1,7 @@
-import { contact, role, siteUrl } from "@/content/site";
+import { achievements, contact, role, siteUrl } from "@/content/site";
 import { bookingUrl, coffee, coffeeUpdated } from "@/content/coffee";
+import { LETTERBOXD_PROFILE } from "@/lib/letterboxd";
+import { sitePhotos } from "@/lib/seo/site-images";
 
 // "AI around the world" keeps its capitals; "Tech" becomes "tech".
 const midSentence = (label: string) => (/^[A-Z]{2}/.test(label) ? label : label[0].toLowerCase() + label.slice(1));
@@ -15,9 +17,10 @@ const person = {
   jobTitle: role.title,
   description:
     `${role.title} at ${role.employerFull} and digital nomad. Background in DevSecOps, system administration, and software development. Kent State computer science graduate, May 2026.`,
-  image: `${siteUrl}/misc/Mason_web.webp`,
+  // Several photos, profile first, so image search can tie each one to him.
+  image: sitePhotos().map((p) => ({ "@type": "ImageObject", contentUrl: p.url, caption: p.alt })),
   url: siteUrl,
-  sameAs: [contact.github, contact.linkedin],
+  sameAs: [contact.github, contact.linkedin, LETTERBOXD_PROFILE],
   worksFor: { "@type": "Organization", name: role.employerFull },
   alumniOf: {
     "@type": "CollegeOrUniversity",
@@ -83,6 +86,38 @@ export function coffeeJsonLd() {
         urlTemplate: bookingUrl,
         actionPlatform: ["https://schema.org/DesktopWebPlatform", "https://schema.org/MobileWebPlatform"],
       },
+    },
+  };
+}
+
+/** Anchor id for a project on /projects, e.g. "NexHacks, 1st and 2nd place" becomes "nexhacks-1st-and-2nd-place". */
+export function projectSlug(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+export function projectsJsonLd() {
+  const url = `${siteUrl}/projects`;
+  return {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    url,
+    name: "Mason Bair's projects and hackathon wins",
+    about: { "@id": PERSON_ID },
+    mainEntity: {
+      "@type": "ItemList",
+      itemListElement: achievements.map((a, i) => ({
+        "@type": "ListItem",
+        position: i + 1,
+        item: {
+          "@type": "CreativeWork",
+          name: a.title,
+          description: a.summary,
+          url: a.href ?? `${url}#${projectSlug(a.title)}`,
+          ...(a.image && { image: `${siteUrl}${a.image.src}` }),
+          ...(a.tech.length && { keywords: a.tech.join(", ") }),
+          creator: { "@id": PERSON_ID },
+        },
+      })),
     },
   };
 }

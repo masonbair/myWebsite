@@ -73,6 +73,12 @@ export function Achievements() {
         ))}
       </div>
 
+      <p className="mt-8">
+        <a href="/projects" className={`font-bold text-ink underline decoration-2 underline-offset-4 ${focusRing}`}>
+          See every project on one page
+        </a>
+      </p>
+
       <h3 className="mt-20 text-2xl font-semibold tracking-tight text-ink md:mt-24">Photos from events and clubs</h3>
       <div
         role="region"

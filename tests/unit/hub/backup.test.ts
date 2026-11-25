@@ -364,7 +364,7 @@ describe.skipIf(!enabled)("backup round trip against local Supabase", () => {
       { city: "Backupville", region: "Ohio", country: "United States", private: true, time_zone: "America/New_York" },
       { city: null, region: "Ohio", country: "United States", private: true },
     ]);
-    const bake = await client.from("now_bake").insert({ name: "backup loaf", photo: "/misc/Mason_traveling.webp" });
+    const bake = await client.from("now_bake").insert({ name: "backup loaf", photo: "/misc/mason-bair-traveling.webp" });
     const privacy = await client.from("now_place_privacy").insert({ city: "Backupville", region: "Ohio", country: "United States", private: true });
     if (place.error || bake.error || privacy.error) throw place.error ?? bake.error ?? privacy.error;
     const assetId = `backup${randomUUID().slice(0, 8)}`;

@@ -11,7 +11,7 @@ test("anchors exist", async ({ page }) => {
 test("resume download works", async ({ page, request }) => {
   await page.goto("/");
   const link = page.getByRole("link", { name: "Download résumé" });
-  await expect(link).toHaveAttribute("href", "/misc/Mason_Bair_Resume_01_20_2026.pdf");
+  await expect(link).toHaveAttribute("href", "/misc/mason-bair-resume.pdf");
   const res = await request.get((await link.getAttribute("href"))!);
   expect(res.status()).toBe(200);
 });

@@ -52,10 +52,10 @@ describe("email booking fallback", () => {
 });
 
 describe("sitemap", () => {
-  it("lists home and coffee, with coffee dated by its own update, and leaves out /trends with no data", async () => {
+  it("lists home, projects and coffee, with coffee dated by its own update, and leaves out /trends with no data", async () => {
     const entries = await sitemap();
-    expect(entries.map((e) => e.url)).toEqual(["https://masonbair.com", "https://masonbair.com/coffee"]);
-    expect(entries[1].lastModified).toEqual(new Date(coffeeUpdated));
+    expect(entries.map((e) => e.url)).toEqual(["https://masonbair.com", "https://masonbair.com/projects", "https://masonbair.com/coffee"]);
+    expect(entries[2].lastModified).toEqual(new Date(coffeeUpdated));
   });
 });
 

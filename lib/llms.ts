@@ -35,6 +35,7 @@ export function llmsText(): string {
     "## Site",
     "",
     `- [Home](${siteUrl}): About Mason, work, achievements, and résumé.`,
+    `- [Projects](${siteUrl}/projects): Every project and hackathon win, with what each one does.`,
     `- [Coffee chat](${siteUrl}/coffee): Booking page for a 30 minute call.`,
     `- [Résumé (PDF)](${siteUrl}${resumeHref}): Full résumé.`,
     "",

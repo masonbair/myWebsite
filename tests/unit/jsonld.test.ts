@@ -14,7 +14,9 @@ describe("json-ld", () => {
     expect(person["@type"]).toBe("Person");
     expect(person["@id"]).toBe("https://masonbair.com/#person");
     expect(person.url).toBe("https://masonbair.com");
-    expect(person.image).toBe("https://masonbair.com/misc/Mason_web.webp");
+    expect(person.image[0].contentUrl).toBe("https://masonbair.com/misc/mason-bair.webp");
+    expect(person.image.length).toBeGreaterThan(5);
+    expect(person.image.every((i) => i.caption.length > 0)).toBe(true);
     expect(person.sameAs).toEqual(
       expect.arrayContaining(["https://github.com/masonbair", "https://www.linkedin.com/in/masonbair/"]),
     );
