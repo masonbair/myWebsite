@@ -1,6 +1,6 @@
 # clicker.masonbair.com
 
-The page for Mason's grey Orb clicker game. It is a static Astro site with no server code, no trackers, and no scripts or fonts from other sites. It has its own Vercel project, like wamf.masonbair.com.
+The page for Unfaded, Mason's grey Orb clicker game. It is a static Astro site with no server code, no trackers, and no scripts or fonts from other sites. It has its own Vercel project, like wamf.masonbair.com.
 
 The look is direction B, "The Lit Room": the game's own dark room. Mason picked it on 2026-11-25. On purpose, this site is an exception to the Sticker Board Kit.
 
@@ -16,8 +16,8 @@ npm run preview  # serve the built site
 
 | What | File |
 |---|---|
-| The game's name and every word on the page | `src/content.mjs` (the name is a working title; change `GAME.name` there) |
-| "How we made it" card (off until Mason decides) | `SHOW_MAKING_OF` in `src/content.mjs` |
+| The game's name and every word on the page | `src/content.mjs` (the name lives only in `GAME.name`) |
+| "How we made it" section | `SHOW_MAKING_OF` and `makingOfSteps` in `src/content.mjs` |
 | Colors, type, layout | `src/styles/site.css` (colors from the game's style kit) |
 | The tappable Orb | `src/scripts/orb.ts` |
 | Search and social tags, structured data | `src/layouts/Base.astro`, the top of `src/pages/index.astro` |

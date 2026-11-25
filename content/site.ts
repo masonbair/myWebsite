@@ -145,7 +145,7 @@ export const achievements: Achievement[] = [
     href: "https://wamf.masonbair.com",
   },
   {
-    title: "Grey Orb (working title)",
+    title: "Unfaded",
     summary:
       "A small, quiet clicker game I am making for phones. You tap a grey Orb for Glow, and bit by bit, color comes back to a grey world. Android first, iPhone after. Not out yet.",
     tech: ["Android", "Game", "Web"],

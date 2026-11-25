@@ -42,7 +42,7 @@ const structuredData = {
 
     <main class="wrap-main">
       <section class="hero" id="game" aria-labelledby="hero-title">
-        <span class="sticker">{GAME.status}{!GAME.nameIsFinal && <span class="sr-only">. The name is a working title.</span>}</span>
+        <span class="sticker">{GAME.name} · {GAME.status.toLowerCase()}</span>
         <p class="count" aria-hidden="true"><b data-glow>0</b><span>GLOW</span></p>
         <div class="orbwrap">
           <span class="halo" aria-hidden="true"></span>
@@ -104,19 +104,23 @@ const structuredData = {
       </section>
 
       {SHOW_MAKING_OF && (
-        <section class="cards" aria-labelledby="making-title">
-          <article class="card">
-            <p class="label">Behind it</p>
-            <h2 id="making-title">{COPY.makingOfTitle}</h2>
-            <p>{COPY.makingOfBody}</p>
-          </article>
+        <section class="making" id="making" aria-labelledby="making-title">
+          <h2 class="label" id="making-title">{COPY.makingOfTitle}</h2>
+          <p class="making-lede">{COPY.makingOfLede}</p>
+          <ol class="steps">
+            {COPY.makingOfSteps.map((step) => (
+              <li class="card">
+                <h3>{step.title}</h3>
+                <p>{step.body}</p>
+              </li>
+            ))}
+          </ol>
         </section>
       )}
     </main>
 
     <footer class="foot">
       <span>{COPY.footer}. <a href={LINKS.mason}>More of his work at masonbair.com</a></span>
-      <span>{GAME.name}{!GAME.nameIsFinal && ' is a working title'}</span>
     </footer>
   </div>
   <script src="../scripts/orb.ts"></script>

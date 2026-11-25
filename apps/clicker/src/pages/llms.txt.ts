@@ -8,7 +8,6 @@ export const GET: APIRoute = () => {
     '',
     `> ${COPY.faq[0].a}`,
     '',
-    ...(GAME.nameIsFinal ? [] : [`"${GAME.name}" is a working title. The game does not have a final name yet.`, '']),
     '## Quick answers',
     '',
     ...COPY.faq.flatMap(({ q, a }) => [`### ${q}`, '', a, '']),

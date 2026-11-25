@@ -1,7 +1,6 @@
-/** Every word on the site. The game has no public name yet; change GAME.name and it updates everywhere. */
+/** Every word on the site. The game's name lives here only; change GAME.name and it updates everywhere. */
 export const GAME = {
-  name: 'Grey Orb',
-  nameIsFinal: false,
+  name: 'Unfaded',
   domain: 'clicker.masonbair.com',
   status: 'Coming soon',
   platforms: 'Android first. iPhone after.',
@@ -16,8 +15,8 @@ export const LINKS = {
 
 export const SITE_URL = `https://${GAME.domain}`;
 
-/** Set to true to show the "How we made it" card. Mason has not decided yet. */
-export const SHOW_MAKING_OF = false;
+/** Shows the "How we made it" section. Mason said yes, 2026-11-25. */
+export const SHOW_MAKING_OF = true;
 
 export const COPY = {
   title: `${GAME.name}: a quiet clicker game by Mason Bair`,
@@ -43,7 +42,13 @@ export const COPY = {
   soonBody: 'The game is not out yet. Mason shares what he is building on his own site.',
   soonCta: 'Visit masonbair.com',
   makingOfTitle: 'How we made it',
-  makingOfBody: 'Mason plus a crew of Claude agents, from a brain dump to a playable game.',
+  makingOfLede: `${GAME.name} is made by Mason with a small crew of Claude agents. Mason decides; the agents draft, build and test.`,
+  makingOfSteps: [
+    { title: 'A brain dump', body: 'It started as a page of notes from Mason: a grey Orb, a world without color, and a game you can sit with.' },
+    { title: 'A shared design board', body: 'The agents turned the notes into hundreds of small ideas and mockups. Mason marked each one yes, maybe or no.' },
+    { title: 'A playable prototype', body: 'The yeses became a web version you can play. A simulator plays it too, so each new thing shows up at the right moment.' },
+    { title: 'Next: your phone', body: 'Android comes first. A version built in the Godot game engine is on the way.' },
+  ],
   footer: 'Made by Mason Bair',
   ogImageAlt: 'A white Orb glowing in a dark room, with the words: A grey Orb. Tap it.',
   faqTitle: 'Quick answers',
