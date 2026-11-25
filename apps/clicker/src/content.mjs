@@ -35,7 +35,7 @@ export const COPY = {
   feelLabel: 'How it feels',
   shots: [
     { src: '/shots/m1-hush-start.webp', width: 560, height: 1212, caption: 'The first second', alt: 'The first screen of the game: a white Orb glowing in a dark room, with 0 Glow above it.' },
-    { src: '/shots/m1-hush-1h.webp', width: 560, height: 1212, caption: 'About an hour in', alt: 'The game about an hour in: 4.2 million Glow, with small grey orbs circling the big Orb.' },
+    { src: '/shots/hour-one.webp', width: 372, height: 826, caption: 'About an hour in', alt: 'The game about an hour in: 12.6 million Glow, small grey orbs drifting around the big Orb, and the Orb saying "You\'re really good at this. Again!"' },
   ],
   quote: 'Your taps feel like rain on a roof.',
   quoteBy: 'The Orb, about an hour in',
