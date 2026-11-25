@@ -197,3 +197,30 @@ test.describe("coffee page", () => {
     await expect(page.locator("#projects")).toHaveCount(1);
   });
 });
+
+test.describe("projects page", () => {
+  test("has one h1, its own canonical, and a project list credited to the Person", async ({ page }) => {
+    await page.goto("/projects");
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.locator("h1")).toContainText("Mason Bair");
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://masonbair.com/projects");
+    const data = (await page.locator('script[type="application/ld+json"]').allTextContents()).map((t) => JSON.parse(t));
+    const list = data.find((d) => d["@type"] === "CollectionPage");
+    expect(list.about).toEqual({ "@id": PERSON_ID });
+    expect(list.mainEntity.itemListElement.length).toBeGreaterThan(3);
+  });
+
+  test("no sideways scroll", async ({ page }) => {
+    await page.goto("/projects");
+    const vw = page.viewportSize()!.width;
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(vw);
+  });
+
+  test("is in the sitemap with its photos, and the home page links to it", async ({ page, request }) => {
+    const sitemap = await (await request.get("/sitemap.xml")).text();
+    expect(sitemap).toContain("<loc>https://masonbair.com/projects</loc>");
+    expect(sitemap).toContain("/misc/mason-bair-nexhacks-team.webp");
+    await page.goto("/");
+    await expect(page.locator('a[href="/projects"]')).toHaveCount(1);
+  });
+});

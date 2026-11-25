@@ -32,7 +32,7 @@ export const work: Work[] = [
     image: {
       // Phone photo from the Website album; hiding it in the hub removes it here too.
       src: "/photos/26836",
-      alt: "Mason with the Fullsend team, seven people in matching navy polo shirts smiling at sunset",
+      alt: "Mason Bair with the Fullsend team, seven people in matching navy polo shirts smiling at sunset",
       width: 1600,
       height: 1200,
     },
@@ -45,8 +45,8 @@ export const work: Work[] = [
       "I set up Dell R760 GPU servers for faculty research. I used Ansible to automate Tenable agents, updates and compliance on 20+ servers, and I wrote the CS department's VPN guides.",
     tech: ["Ubuntu Server", "Ansible", "SSSD", "LDAP", "Docker", "Lambda AI Stack"],
     image: {
-      src: "/misc/Mason_at_RSM_office.webp",
-      alt: "Mason in a dark coat taking a selfie at an office front desk",
+      src: "/misc/mason-bair-office-front-desk.webp",
+      alt: "Mason Bair in a dark coat taking a selfie at an office front desk",
       width: 3000,
       height: 4000,
     },
@@ -59,8 +59,8 @@ export const work: Work[] = [
       "I built Python apps that pull in SonarQube data to reprioritize security issues across 1,000+ apps. I also migrated CI/CD workflows. It was my first real look at security at a big company.",
     tech: ["Python", "GitHub Actions", "SonarQube", "CI/CD", "Docker"],
     image: {
-      src: "/misc/Mason_at_RSM_office_2.webp",
-      alt: "Mason smiling in a dark coat next to a wood paneled office wall",
+      src: "/misc/mason-bair-office.webp",
+      alt: "Mason Bair smiling in a dark coat next to a wood paneled office wall",
       width: 3000,
       height: 4000,
     },
@@ -73,8 +73,8 @@ export const work: Work[] = [
       "I led Kent State's biggest CS club with a team of 6. We ran weekly meetings for 10 to 30 people and put on the Kent Hack Enough hackathon. I also brought in speakers from industry.",
     tech: ["Leadership", "Event management", "Community building"],
     image: {
-      src: "/misc/Mason_infront_of_hacksu_sign.webp",
-      alt: "Mason crouching with a yellow crown headband in front of a HacKSU table while other students stand behind it",
+      src: "/misc/mason-bair-hacksu-president.webp",
+      alt: "Mason Bair crouching with a yellow crown headband in front of a HacKSU table while other students stand behind it",
       width: 3000,
       height: 4000,
     },
@@ -87,8 +87,8 @@ export const work: Work[] = [
       "I reached out to companies and people in tech to connect them with Kent State CS. Mostly that meant emailing people and setting up coffee chats. I met some really cool people this way.",
     tech: ["Outreach", "Networking", "Coffee chats"],
     image: {
-      src: "/misc/Mason_networking_at_hackathon.webp",
-      alt: "Mason in a red bucket hat and yellow hoodie posing with another student outside at a hackathon",
+      src: "/misc/mason-bair-hackathon-networking.webp",
+      alt: "Mason Bair in a red bucket hat and yellow hoodie posing with another student outside at a hackathon",
       width: 1024,
       height: 1536,
     },
@@ -100,8 +100,8 @@ export const work: Work[] = [
     summary: "A full school year studying CS at Tartu University. I traveled around Europe on the side.",
     tech: ["International perspective", "Cultural adaptation", "Tech diversity"],
     image: {
-      src: "/misc/Mason_traveling.webp",
-      alt: "Mason smiling in a red bucket hat and sunglasses, taking a selfie on a roadside with green mountains behind him",
+      src: "/misc/mason-bair-traveling.webp",
+      alt: "Mason Bair smiling in a red bucket hat and sunglasses, taking a selfie on a roadside with green mountains behind him",
       width: 3000,
       height: 4000,
     },
@@ -114,8 +114,8 @@ export const work: Work[] = [
       "I led the build of a web version of ImageJ so biology students could open huge cell images without using up their own laptops. It runs in Docker with Apache, WSGI and Ray clusters.",
     tech: ["Angular", "Python", "TypeScript", "Docker", "Apache", "Ray"],
     image: {
-      src: "/misc/Mason_at_carnegie_mellon.webp",
-      alt: "Mason in a black puffer jacket and white cap on a snowy campus path under a Carnegie Mellon University banner",
+      src: "/misc/mason-bair-carnegie-mellon.webp",
+      alt: "Mason Bair in a black puffer jacket and white cap on a snowy campus path under a Carnegie Mellon University banner",
       width: 4284,
       height: 5712,
     },
@@ -128,7 +128,7 @@ export const work: Work[] = [
       "I was the first person you talked to when your Windows, Linux or Mac broke. I fixed a lot of weird bugs and worked toward my Apple Repair Certification.",
     tech: ["Technical support", "Multi OS troubleshooting", "Customer service"],
     image: {
-      src: "/misc/image_of_code.webp",
+      src: "/misc/mason-bair-coding-desk.webp",
       alt: "A laptop and a monitor showing code in a dark editor in a dim room",
       width: 3000,
       height: 4000,
@@ -157,8 +157,8 @@ export const achievements: Achievement[] = [
       "1st place with The Token Company and 2nd with DevSwarm. DevSwarm sorts tasks for big teams using n8n workflows with triage, coding and confidence agents.",
     tech: ["Svelte", "Python", "n8n", "AI agents"],
     image: {
-      src: "/misc/Mason_with_nexhacks_team.webp",
-      alt: "Mason and three teammates posing at night around a bronze terrier statue in a brick courtyard",
+      src: "/misc/mason-bair-nexhacks-team.webp",
+      alt: "Mason Bair and three teammates posing at night around a bronze terrier statue in a brick courtyard",
       width: 3024,
       height: 4032,
     },
@@ -181,8 +181,8 @@ export const achievements: Achievement[] = [
       "A Bluetooth mesh that passes messages from device to device with no central server. I built the UI and the API for it.",
     tech: ["Bluetooth mesh", "API development", "Decentralized networks"],
     image: {
-      src: "/misc/Mason_coding_at_hackathon.webp",
-      alt: "Mason in headphones and a gray hoodie working on a laptop at a crowded hackathon table, seen from a low selfie angle",
+      src: "/misc/mason-bair-coding-at-hackathon.webp",
+      alt: "Mason Bair in headphones and a gray hoodie working on a laptop at a crowded hackathon table, seen from a low selfie angle",
       width: 3000,
       height: 4000,
     },
@@ -202,26 +202,26 @@ export const achievements: Achievement[] = [
 
 export const gallery: SiteImage[] = [
   {
-    src: "/misc/Mason_networking_at_hackathon.webp",
-    alt: "Mason in a red bucket hat and yellow hoodie posing with another student outside at a hackathon",
+    src: "/misc/mason-bair-hackathon-networking.webp",
+    alt: "Mason Bair in a red bucket hat and yellow hoodie posing with another student outside at a hackathon",
     width: 1024,
     height: 1536,
   },
   {
-    src: "/misc/Mason_thinking_at_hackathon_horizontal.webp",
-    alt: "Mason in a yellow hoodie sitting cross legged on a window seat, thinking over his laptop",
+    src: "/misc/mason-bair-hackathon-laptop.webp",
+    alt: "Mason Bair in a yellow hoodie sitting cross legged on a window seat, thinking over his laptop",
     width: 2400,
     height: 1600,
   },
   {
-    src: "/misc/MLH_hackcon_solo.webp",
-    alt: "Mason in a red bucket hat and colorful patchwork pants, arms crossed, in front of a wall of MLH logos",
+    src: "/misc/mason-bair-mlh-hackcon.webp",
+    alt: "Mason Bair in a red bucket hat and colorful patchwork pants, arms crossed, in front of a wall of MLH logos",
     width: 2268,
     height: 3024,
   },
   {
-    src: "/misc/Mason_networking_at_hackathon_horizontal.webp",
-    alt: "Mason in a red bucket hat and yellow hoodie standing next to a student in front of a Rocket recruiting banner",
+    src: "/misc/mason-bair-hackathon-recruiting-banner.webp",
+    alt: "Mason Bair in a red bucket hat and yellow hoodie standing next to a student in front of a Rocket recruiting banner",
     width: 1024,
     height: 683,
   },
@@ -256,7 +256,7 @@ export const contact = {
 
 export const coffeeChat = { href: "/coffee", label: "Book a coffee chat" };
 
-export const resumeHref = "/misc/Mason_Bair_Resume_01_20_2026.pdf";
+export const resumeHref = "/misc/mason-bair-resume.pdf";
 
 export const siteUrl = "https://masonbair.com";
 

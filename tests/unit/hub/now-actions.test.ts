@@ -43,11 +43,11 @@ describe("now actions", () => {
   });
 
   it("logs a bake with a photo that exists in public/misc and refreshes the public board at once", async () => {
-    const result = await logBakeAction({ name: "Sourdough", photo: "/misc/Mason_traveling.webp", bakedAt: "2026-11-01T08:00:00Z" });
+    const result = await logBakeAction({ name: "Sourdough", photo: "/misc/mason-bair-traveling.webp", bakedAt: "2026-11-01T08:00:00Z" });
     expect(result).toEqual({ ok: true });
     expect(requireOwner).toHaveBeenCalled();
     expect(inserts).toEqual([
-      { table: "now_bake", row: { name: "Sourdough", photo: "/misc/Mason_traveling.webp", baked_at: "2026-11-01T08:00:00.000Z" } },
+      { table: "now_bake", row: { name: "Sourdough", photo: "/misc/mason-bair-traveling.webp", baked_at: "2026-11-01T08:00:00.000Z" } },
     ]);
     expect(revalidatePath).toHaveBeenCalledWith("/");
   });
