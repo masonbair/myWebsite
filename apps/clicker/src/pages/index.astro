@@ -1,6 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
-import { COPY, GAME, LINKS, SHOW_MAKING_OF, SITE_URL } from '../content.mjs';
+import { COPY, GAME, LINKS, PRIVACY, SHOW_MAKING_OF, SITE_URL } from '../content.mjs';
 
 const person = { '@type': 'Person', '@id': LINKS.masonPersonId, name: 'Mason Bair', url: LINKS.mason };
 const structuredData = {
@@ -121,6 +121,7 @@ const structuredData = {
 
     <footer class="foot">
       <span>{COPY.footer}. <a href={LINKS.mason}>More of his work at masonbair.com</a></span>
+      <a href="/privacy">{PRIVACY.footerLink}</a>
     </footer>
   </div>
   <script src="../scripts/orb.ts"></script>

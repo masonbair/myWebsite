@@ -183,6 +183,12 @@ a { color: inherit; }
 .faq-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px 40px; }
 .qa h3 { margin: 0 0 6px; font-weight: 600; font-size: 1.12rem; letter-spacing: -0.01em; }
 .qa p { margin: 0; color: var(--ink-2); max-width: 60ch; }
+.policy { display: grid; gap: 30px; max-width: 64ch; }
+.policy-head { display: grid; gap: 14px; }
+.policy h1 { margin: 0; font-weight: 200; font-size: clamp(2.2rem, 5vw, 3.2rem); letter-spacing: -0.03em; line-height: 1.05; text-wrap: balance; }
+.policy-lede { margin: 0; color: var(--ink-2); font-size: 1.12rem; line-height: 1.65; }
+.policy .qa h2 { margin: 0 0 6px; font-weight: 600; font-size: 1.12rem; letter-spacing: -0.01em; }
+.policy .qa p + p { margin-top: 6px; }
 
 .making { display: grid; gap: 18px; }
 .making-lede { margin: 0; font-size: clamp(1.3rem, 2.4vw, 1.7rem); font-weight: 200; letter-spacing: -0.02em; line-height: 1.35; max-width: 40ch; }

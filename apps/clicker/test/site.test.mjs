@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
-import { GAME, SITE_URL } from '../src/content.mjs';
+import { GAME, PRIVACY, SITE_URL } from '../src/content.mjs';
 
 const dist = (path) => readFile(new URL(`../dist/${path}`, import.meta.url), 'utf8');
 const pages = async () => (await readdir(new URL('../dist/', import.meta.url))).filter((f) => f.endsWith('.html'));
@@ -56,6 +56,16 @@ test('robots, sitemap and llms.txt are served and point at this site', async () 
 });
 
 test('the game name lives only in src/content.mjs', async () => {
-  const files = ['src/pages/index.astro', 'src/pages/404.astro', 'src/layouts/Base.astro', 'src/pages/llms.txt.ts'];
+  const files = ['src/pages/index.astro', 'src/pages/404.astro', 'src/pages/privacy.astro', 'src/layouts/Base.astro', 'src/pages/llms.txt.ts'];
   for (const file of files) assert.doesNotMatch(await readFile(new URL(`../${file}`, import.meta.url), 'utf8'), new RegExp(GAME.name, 'i'), file);
+});
+
+test('the privacy policy is served at /privacy, linked from the home page and listed in the sitemap', async () => {
+  const html = await dist('privacy.html');
+  assert.match(html, new RegExp(`<link rel="canonical" href="${SITE_URL}/privacy"`));
+  assert.doesNotMatch(html, /name="robots" content="noindex"/);
+  for (const phrase of ['collects no personal data', 'no network requests', 'In-app purchases may come', 'Google backup', 'mailto:']) assert.ok(html.includes(phrase), phrase);
+  assert.match(html, new RegExp(`<time datetime="${PRIVACY.updated.iso}"`));
+  assert.match(await dist('index.html'), /href="\/privacy"/);
+  assert.match(await dist('sitemap.xml'), new RegExp(`<loc>${SITE_URL}/privacy</loc>`));
 });
