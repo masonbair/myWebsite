@@ -1,0 +1,36 @@
+---
+import Base from '../layouts/Base.astro';
+import { COPY, LINKS, PRIVACY } from '../content.mjs';
+---
+<Base title={PRIVACY.title} description={PRIVACY.description}>
+  <div class="wrap">
+    <header class="top">
+      <a class="name" href={LINKS.mason}>mason bair</a>
+      <nav aria-label="Site">
+        <ul class="nav">
+          <li><a href="/">The game</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main class="policy">
+      <div class="policy-head">
+        <h1>{PRIVACY.title}</h1>
+        <p class="label">Updated <time datetime={PRIVACY.updated.iso}>{PRIVACY.updated.text}</time></p>
+        <p class="policy-lede">{PRIVACY.lede}</p>
+      </div>
+      {PRIVACY.sections.map(({ title, body }) => (
+        <section class="qa">
+          <h2>{title}</h2>
+          {body.map((line) => <p>{line}</p>)}
+        </section>
+      ))}
+      <section class="qa">
+        <h2>{PRIVACY.contactTitle}</h2>
+        <p>{PRIVACY.contactBefore}<a href={LINKS.mason}>masonbair.com</a>{PRIVACY.contactAfter}</p>
+      </section>
+    </main>
+    <footer class="foot">
+      <span>{COPY.footer}. <a href={LINKS.mason}>More of his work at masonbair.com</a></span>
+    </footer>
+  </div>
+</Base>

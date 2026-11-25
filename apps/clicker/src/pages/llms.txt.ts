@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { COPY, GAME, LINKS, SITE_URL } from '../content.mjs';
+import { COPY, GAME, LINKS, PRIVACY, SITE_URL } from '../content.mjs';
 
 /** The llms.txt summary for AI tools, built from the same words the page shows. */
 export const GET: APIRoute = () => {
@@ -18,6 +18,7 @@ export const GET: APIRoute = () => {
     '## Links',
     '',
     `- [${GAME.name}](${SITE_URL}/): The game's page, with screenshots.`,
+    `- [${PRIVACY.title}](${SITE_URL}/privacy): ${PRIVACY.description}`,
     `- [Mason Bair](${LINKS.mason}): The person making the game.`,
     '',
   ].join('\n');
