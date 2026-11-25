@@ -140,9 +140,16 @@ export const achievements: Achievement[] = [
   {
     title: "Where Are My Friends",
     summary:
-      "My newest side project: a free iPhone and Android app that shows which city each of your friends is in, and who just landed somewhere new. City only, never an exact dot. Not in the app stores yet.",
+      "Another side project: a free iPhone and Android app that shows which city each of your friends is in, and who just landed somewhere new. City only, never an exact dot. Not in the app stores yet.",
     tech: ["iOS", "Android", "Maps"],
     href: "https://wamf.masonbair.com",
+  },
+  {
+    title: "Unfaded",
+    summary:
+      "A small, quiet clicker game I am making for phones. You tap a grey Orb for Glow, and bit by bit, color comes back to a grey world. Android first, iPhone after. Not out yet.",
+    tech: ["Android", "Game", "Web"],
+    href: "https://unfaded.masonbair.com",
   },
   {
     title: "NexHacks, 1st and 2nd place",
@@ -254,7 +261,7 @@ export const resumeHref = "/misc/Mason_Bair_Resume_01_20_2026.pdf";
 export const siteUrl = "https://masonbair.com";
 
 // Bump when the copy on this site changes; feeds the sitemap and the home page's dateModified.
-export const siteUpdated = "2026-11-20";
+export const siteUpdated = "2026-11-25";
 
 export const hello = {
   tag: "Open to coffee chats",

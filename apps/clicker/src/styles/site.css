@@ -1,0 +1,212 @@
+/* The look: the game's dark room (design/art/style-kit/STYLE.md in color_clicker), lit only by the Orb. Mason picked direction B, 2026-11-25. */
+:root {
+  color-scheme: dark;
+  --room: #08080a;
+  --card: #111114;
+  --card-hi: #1b1b20;
+  --ink: #f2f2f5;
+  --ink-2: #c8c8ce;
+  --mute: #8f8f99;
+  --line: #e4e4e8;
+  --sticker-shadow: #34343c;
+  --dot-off: #2a2a30;
+  --mint: #bfebd9;
+  --pink: #f6c9d4;
+  --blue: #bcd6f2;
+  --orb-core: #ffffff;
+  --orb-body: #e9e9ee;
+  --orb-rim: #a9a9b2;
+  --font: 'Manrope Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-name: 'Space Grotesk', system-ui, sans-serif;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --label: 0.74rem;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { background: var(--room); overflow-x: clip; }
+body { overflow-x: clip; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(ellipse 70% 46% at 50% 24%, rgb(255 255 255 / 0.065), transparent 70%) no-repeat, var(--room);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+img { max-width: 100%; height: auto; display: block; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 22px max(32px, env(safe-area-inset-right)) 72px max(32px, env(safe-area-inset-left));
+  display: grid;
+  gap: 88px;
+}
+.wrap-main { display: grid; gap: inherit; }
+
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.name {
+  font-family: var(--font-name);
+  font-weight: 700;
+  font-size: 1.05rem;
+  text-decoration: none;
+  border: 2.5px solid var(--line);
+  border-radius: 12px;
+  padding: 3px 11px;
+  rotate: -2deg;
+  box-shadow: 3px 3px 0 var(--sticker-shadow);
+  transition: translate 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.name:hover { translate: -1px -1px; box-shadow: 4px 4px 0 var(--sticker-shadow); }
+.nav { display: flex; gap: 22px; margin: 0; padding: 0; list-style: none; }
+.nav a { font-size: var(--label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--mute); font-weight: 600; text-decoration: none; }
+.nav a:hover { color: var(--ink); }
+
+.label { font-size: var(--label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--mute); font-weight: 600; display: flex; align-items: center; gap: 8px; margin: 0; }
+
+.hero { display: grid; justify-items: center; text-align: center; gap: 22px; padding-top: 8px; }
+.sticker {
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  rotate: -3deg;
+  box-shadow: 3px 3px 0 var(--sticker-shadow);
+}
+.count { margin: 0; display: grid; justify-items: center; font-variant-numeric: tabular-nums; }
+.count b { font-weight: 200; font-size: clamp(3rem, 8vw, 4.4rem); line-height: 1; letter-spacing: -0.03em; }
+.count span { font-size: var(--label); letter-spacing: 0.18em; color: var(--mute); font-weight: 600; }
+
+.orbwrap { position: relative; display: grid; place-items: center; margin-block: 12px; }
+.halo {
+  position: absolute;
+  inset: -32%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(255 255 255 / 0.32) 0, rgb(255 255 255 / 0.08) 42%, transparent 66%);
+  pointer-events: none;
+}
+.orb {
+  position: relative;
+  width: min(300px, 64vw);
+  aspect-ratio: 1;
+  border: 0;
+  padding: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  background: radial-gradient(circle at 42% 38%, var(--orb-core) 0, #f7f7f9 34%, var(--orb-body) 64%, #c7c7cf 88%, var(--orb-rim) 100%);
+  box-shadow: 0 34px 26px -26px rgb(0 0 0 / 0.85);
+  transition: scale 0.18s var(--ease);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.orb:active, .orb.is-pressed { scale: 0.94; }
+.orb:focus-visible { outline-offset: 10px; }
+.speck { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; border-radius: 50%; background: rgb(255 255 255 / 0.75); pointer-events: none; animation: fly 0.9s var(--ease) forwards; }
+.hint { margin: 0; font-size: var(--label); letter-spacing: 0.18em; color: var(--mute); font-weight: 600; text-transform: uppercase; }
+
+.hero h1 { margin: 0; font-weight: 200; font-size: clamp(2.5rem, 6.4vw, 4.4rem); letter-spacing: -0.035em; line-height: 1.02; text-wrap: balance; }
+.hero h1 strong { font-weight: 800; }
+.lede { margin: 0; color: var(--ink-2); max-width: 44ch; font-size: 1.12rem; line-height: 1.65; }
+.pills { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 0; padding: 0; list-style: none; }
+.pill { border-radius: 999px; background: var(--card); padding: 7px 14px; font-size: 0.92rem; color: var(--ink-2); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.09); }
+.pill b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+/* Two plus one (Mason, 2026-11-25): the last card runs full width, title on the left and text on the right so it is not half empty. */
+.cards .card:last-child:nth-child(odd) { grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); column-gap: 40px; align-items: start; }
+.cards .card:last-child:nth-child(odd) > p:last-child { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+.card {
+  position: relative;
+  background: linear-gradient(var(--card-hi), var(--card));
+  border-radius: 22px;
+  padding: 28px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  box-shadow: 0 22px 30px -18px rgb(0 0 0 / 0.9);
+  min-width: 0;
+}
+/* The Orb is the only lamp, so a card shows light only on its top edge. */
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding-top: 1.2px;
+  background: linear-gradient(rgb(255 255 255 / 0.5), transparent 45%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.card h2, .card h3 { margin: 0; font-weight: 600; font-size: 1.32rem; letter-spacing: -0.02em; line-height: 1.25; }
+.card p { margin: 0; color: var(--ink-2); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dot-off); transition: background 0.6s var(--ease), box-shadow 0.6s var(--ease); }
+.lit .dot-mint { background: var(--mint); box-shadow: 0 0 8px var(--mint); }
+.lit .dot-pink { background: var(--pink); box-shadow: 0 0 8px var(--pink); }
+.lit .dot-blue { background: var(--blue); box-shadow: 0 0 8px var(--blue); }
+
+.feel { display: grid; gap: 22px; }
+.feel-grid { display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 26px; align-items: center; }
+.feel figure { margin: 0; display: grid; gap: 10px; }
+.feel figcaption { font-size: var(--label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mute); font-weight: 600; }
+.shot { border-radius: 22px; box-shadow: 0 30px 40px -24px rgb(0 0 0 / 0.95), 0 0 0 1px rgb(255 255 255 / 0.07); }
+.quote { margin: 0; display: grid; gap: 10px; }
+.quote p { margin: 0; font-size: clamp(1.5rem, 2.8vw, 2.1rem); font-weight: 200; line-height: 1.3; letter-spacing: -0.02em; }
+.quote footer { color: var(--mute); font-size: 0.95rem; }
+
+.soon { display: grid; justify-items: center; text-align: center; gap: 14px; }
+.soon h2 { margin: 0; font-weight: 200; font-size: clamp(2rem, 4.6vw, 2.8rem); letter-spacing: -0.03em; line-height: 1.1; text-wrap: balance; }
+.soon p { margin: 0; color: var(--ink-2); max-width: 46ch; }
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--room);
+  font-weight: 700;
+  text-decoration: none;
+  padding: 11px 20px;
+  transition: translate 0.2s var(--ease), background 0.3s var(--ease);
+}
+.button:hover { translate: 0 -2px; background: #ffffff; }
+.button svg { width: 16px; height: 16px; }
+
+.faq { display: grid; gap: 22px; }
+.faq-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px 40px; }
+.qa h3 { margin: 0 0 6px; font-weight: 600; font-size: 1.12rem; letter-spacing: -0.01em; }
+.qa p { margin: 0; color: var(--ink-2); max-width: 60ch; }
+
+.making { display: grid; gap: 18px; }
+.making-lede { margin: 0; font-size: clamp(1.3rem, 2.4vw, 1.7rem); font-weight: 200; letter-spacing: -0.02em; line-height: 1.35; max-width: 40ch; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; counter-reset: step; }
+.steps .card { counter-increment: step; padding: 22px; }
+.steps .card::after { content: counter(step); position: absolute; top: 18px; right: 20px; font-size: var(--label); color: var(--mute); font-weight: 600; font-variant-numeric: tabular-nums; }
+.steps h3 { margin: 0; font-weight: 600; font-size: 1.08rem; letter-spacing: -0.01em; padding-right: 18px; }
+.steps p { margin: 0; color: var(--ink-2); font-size: 0.98rem; }
+
+.foot { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--mute); font-size: 0.9rem; border-top: 1px solid rgb(255 255 255 / 0.07); padding-top: 22px; }
+
+@keyframes fly { from { translate: -50% -50%; opacity: 1; } to { translate: calc(-50% + var(--dx)) calc(-50% + var(--dy)); opacity: 0; } }
+@keyframes breathe { 0%, 100% { scale: 0.94; opacity: 0.6; } 50% { scale: 1.06; opacity: 1; } }
+@media (prefers-reduced-motion: no-preference) { .halo { animation: breathe 4s ease-in-out infinite; } }
+@media (prefers-reduced-motion: reduce) { .speck { display: none; } .orb, .name, .button, .dot { transition: none; } }
+
+@media (max-width: 860px) {
+  .wrap { padding: 16px max(16px, env(safe-area-inset-right)) 52px max(16px, env(safe-area-inset-left)); gap: 64px; }
+  .cards, .faq-grid { grid-template-columns: 1fr; }
+  .cards .card:last-child:nth-child(odd) { grid-template-columns: 1fr; }
+  .cards .card:last-child:nth-child(odd) > p:last-child { grid-column: auto; grid-row: auto; }
+  .steps { grid-template-columns: 1fr 1fr; }
+  .feel-grid { grid-template-columns: 1fr 1fr; }
+  .quote { grid-column: 1 / -1; }
+  .nav { gap: 14px; }
+}
+@media (max-width: 420px) { .nav { display: none; } .steps { grid-template-columns: 1fr; } }

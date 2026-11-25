@@ -1,0 +1,15 @@
+---
+import Base from '../layouts/Base.astro';
+import { LINKS } from '../content.mjs';
+---
+<Base title="Page not found" description="This page does not exist." noindex>
+  <div class="wrap">
+    <main class="soon">
+      <p class="label">404</p>
+      <h1 class="soon-title">Nothing here but grey.</h1>
+      <p>This page does not exist.</p>
+      <a class="button" href="/">Back to the Orb</a>
+      <a href={LINKS.mason}>masonbair.com</a>
+    </main>
+  </div>
+</Base>

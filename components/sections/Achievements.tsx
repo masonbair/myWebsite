@@ -8,7 +8,8 @@ type Cell = { span: string; tone: "surface" | "accent" | "tea"; sizes: string; t
 
 // One entry per achievement, in order; spans fill the 6 and 12 column grids with no holes.
 const cells: Cell[] = [
-  { span: "md:col-span-6 lg:col-span-12", tone: "surface", sizes: "" },
+  { span: "md:col-span-3 lg:col-span-6", tone: "surface", sizes: "" },
+  { span: "md:col-span-3 lg:col-span-6", tone: "surface", sizes: "" },
   {
     span: "md:col-span-6 lg:col-span-7 lg:row-span-2",
     tone: "surface",
